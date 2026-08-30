@@ -7,6 +7,8 @@ import '../features/match/screens/custom_match_config_screen.dart';
 import '../features/match/widgets/standard_gameplay_screen.dart';
 import '../features/match/widgets/unlimited_gameplay_screen.dart';
 import '../features/match/screens/local_setup_screen.dart';
+import '../features/match/screens/local_match_flow_screen.dart';
+import '../features/match/domain/match_format.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
@@ -60,6 +62,13 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/local-setup',
       builder: (context, state) => const LocalSetupScreen(),
+    ),
+    GoRoute(
+      path: '/local-match',
+      builder: (context, state) {
+        final format = state.extra as MatchFormatConfig? ?? MatchFormatConfig.bestOf3();
+        return LocalMatchFlowScreen(format: format);
+      },
     ),
   ],
 );

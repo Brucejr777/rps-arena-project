@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../domain/match_format.dart';
-import 'match_format_select_screen.dart';
-import 'custom_match_config_screen.dart';
+
 
 class LocalSetupScreen extends StatefulWidget {
   const LocalSetupScreen({super.key});
@@ -34,11 +33,13 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
 
   Future<void> _openMatchLengthSelect() async {
     final result = await context.push<MatchFormatConfig>('/match-format-select');
+    if (!mounted) return; // add this line
     if (result == null) return;
 
     if (result.format == MatchFormat.custom) {
       final customResult =
           await context.push<MatchFormatConfig>('/custom-match-config');
+      if (!mounted) return; // add this line too
       if (customResult != null) {
         setState(() => selectedFormat = customResult);
       }
@@ -103,8 +104,7 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    // TODO T40: navigate to Player 1 selection screen,
-                    // passing selectedFormat along.
+                    context.push('/local-match', extra: selectedFormat);
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.defaultAccent,

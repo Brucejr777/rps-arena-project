@@ -65,7 +65,7 @@ class MatchFormatSelectScreen extends StatelessWidget {
               Expanded(
                 child: ListView.separated(
                   itemCount: _options.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (context, index) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final (label, format) = _options[index];
                     return GestureDetector(

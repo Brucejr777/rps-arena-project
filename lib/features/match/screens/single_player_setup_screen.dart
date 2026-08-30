@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../domain/match_format.dart';
 import '../domain/ai_service.dart';
-import 'match_format_select_screen.dart';
-import 'custom_match_config_screen.dart';
 import 'package:go_router/go_router.dart';
 
 class SinglePlayerSetupScreen extends StatefulWidget {
@@ -37,12 +35,13 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
 
   Future<void> _openMatchLengthSelect() async {
     final result = await context.push<MatchFormatConfig>('/match-format-select');
-
+    if (!mounted) return; // add this line
     if (result == null) return;
 
     if (result.format == MatchFormat.custom) {
       final customResult =
           await context.push<MatchFormatConfig>('/custom-match-config');
+      if (!mounted) return; // add this line too
       if (customResult != null) {
         setState(() => selectedFormat = customResult);
       }
