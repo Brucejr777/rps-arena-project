@@ -11,6 +11,11 @@ import '../features/match/screens/local_match_flow_screen.dart';
 import '../features/match/domain/match_format.dart';
 import '../features/match/screens/single_player_match_flow_screen.dart';
 import '../features/match/domain/ai_service.dart';
+import '../features/settings/screens/settings_home_screen.dart';
+import '../features/settings/screens/appearance_screen.dart';
+import '../features/settings/screens/data_screen.dart';
+import '../features/stats/screens/view_statistics_screen.dart';
+import 'package:flutter/material.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
@@ -33,9 +38,7 @@ final GoRouter appRouter = GoRouter(
         onLeaderboard: () {
           // TODO T114: navigate to LeaderboardScreen once it exists
         },
-        onSettings: () {
-          // TODO T55/T66/T72: navigate to Settings once it exists
-        },
+        onSettings: () => context.push('/settings'),
         onProfile: () {
           // TODO T116: navigate to Player Profile once it exists
         },
@@ -78,6 +81,43 @@ final GoRouter appRouter = GoRouter(
         final args = state.extra as (MatchFormatConfig, AiDifficulty);
         return SinglePlayerMatchFlowScreen(format: args.$1, difficulty: args.$2);
       },
+    ),
+    GoRoute(
+      path: '/settings',
+      builder: (context, state) => SettingsHomeScreen(
+        onAppearance: () => context.push('/settings/appearance'),
+        onAudio: () {
+          // TODO T72: navigate to Audio settings once it exists
+        },
+        onGameplay: () {
+          // TODO T66: navigate to Gameplay settings once it exists
+        },
+        onData: () => context.push('/settings/data'),
+      ),
+    ),
+    GoRoute(
+      path: '/settings/appearance',
+      builder: (context, state) => const AppearanceScreen(),
+    ),
+    GoRoute(
+      path: '/settings/data',
+      builder: (context, state) => DataScreen(
+        onViewStatistics: () => context.push('/settings/data/statistics'),
+        onResetLocalStatistics: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Local statistics reset')),
+          );
+        },
+        onResetSettings: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Settings reset to defaults')),
+          );
+        },
+      ),
+    ),
+    GoRoute(
+      path: '/settings/data/statistics',
+      builder: (context, state) => const ViewStatisticsScreen(),
     ),
   ],
 );

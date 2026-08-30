@@ -9,10 +9,13 @@ import 'local_player_move_screen.dart';
 import 'standard_result_screen.dart';
 import 'unlimited_result_screen.dart';
 import '../widgets/countdown_animation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/game_theme_controller.dart';
+import '../widgets/theme_background.dart';
 
 enum _SpFlowStage { countdown, playerMove, aiThinking, revealing, roundComplete }
 
-class SinglePlayerMatchFlowScreen extends StatefulWidget {
+class SinglePlayerMatchFlowScreen extends ConsumerStatefulWidget {
   final MatchFormatConfig format;
   final AiDifficulty difficulty;
 
@@ -23,12 +26,12 @@ class SinglePlayerMatchFlowScreen extends StatefulWidget {
   });
 
   @override
-  State<SinglePlayerMatchFlowScreen> createState() =>
+  ConsumerState<SinglePlayerMatchFlowScreen> createState() =>
       _SinglePlayerMatchFlowScreenState();
 }
 
 class _SinglePlayerMatchFlowScreenState
-    extends State<SinglePlayerMatchFlowScreen> {
+    extends ConsumerState<SinglePlayerMatchFlowScreen> {
   late final MatchEngine _engine;
   final AiService _ai = AiService();
   final LocalStatsRepository _statsRepo = LocalStatsRepository();
@@ -177,8 +180,10 @@ class _SinglePlayerMatchFlowScreenState
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Stack(
+Widget build(BuildContext context) {
+  return ThemeBackground(
+    theme: ref.watch(gameThemeProvider),
+    child: Stack(
       children: [
         _buildStageContent(),
         if (_canEndMatchNow)
@@ -200,8 +205,9 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
       ],
-    );
-  }
+    ),
+  );
+}
   
   Widget _buildStageContent() {
     switch (_stage) {
@@ -209,7 +215,10 @@ class _SinglePlayerMatchFlowScreenState
         return Scaffold(
           backgroundColor: AppColors.background,
           body: Center(
-            child: CountdownAnimation(value: _engine.countdownValue),
+            child: CountdownAnimation(
+              value: _engine.countdownValue,
+              theme: ref.watch(gameThemeProvider),
+            ),
           ),
         );
 

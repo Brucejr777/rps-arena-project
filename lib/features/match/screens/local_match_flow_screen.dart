@@ -9,6 +9,9 @@ import 'standard_result_screen.dart';
 import 'unlimited_result_screen.dart';
 import '../../stats/local_stats_repository.dart';
 import '../widgets/countdown_animation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/game_theme_controller.dart';
+import '../widgets/theme_background.dart';
 
 enum _LocalFlowStage {
   countdown,
@@ -19,18 +22,18 @@ enum _LocalFlowStage {
   roundComplete,
 }
 
-class LocalMatchFlowScreen extends StatefulWidget {
+class LocalMatchFlowScreen extends ConsumerStatefulWidget {
   final MatchFormatConfig format;
-  
 
   const LocalMatchFlowScreen({super.key, required this.format});
-  
 
   @override
-  State<LocalMatchFlowScreen> createState() => _LocalMatchFlowScreenState();
+  ConsumerState<LocalMatchFlowScreen> createState() =>
+      _LocalMatchFlowScreenState();
 }
 
-class _LocalMatchFlowScreenState extends State<LocalMatchFlowScreen> {
+class _LocalMatchFlowScreenState
+    extends ConsumerState<LocalMatchFlowScreen> {
   late final MatchEngine _engine;
   final LocalStatsRepository _statsRepo = LocalStatsRepository();
   _LocalFlowStage _stage = _LocalFlowStage.countdown;
@@ -126,40 +129,45 @@ class _LocalMatchFlowScreenState extends State<LocalMatchFlowScreen> {
 }
 
   @override
-Widget build(BuildContext context) {
-  return Stack(
-    children: [
-      _buildStageContent(),
-      if (_canEndMatchNow)
-        Positioned(
-          top: 48,
-          right: 16,
-          child: SafeArea(
-            child: TextButton(
-              onPressed: _onEndMatchPressed,
-              child: const Text(
-                'END MATCH',
-                style: TextStyle(
-                  color: AppColors.red,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
+  Widget build(BuildContext context) {
+    return ThemeBackground(
+      theme: ref.watch(gameThemeProvider),
+      child: Stack(
+        children: [
+          _buildStageContent(),
+          if (_canEndMatchNow)
+            Positioned(
+              top: 48,
+              right: 16,
+              child: SafeArea(
+                child: TextButton(
+                  onPressed: _onEndMatchPressed,
+                  child: const Text(
+                    'END MATCH',
+                    style: TextStyle(
+                      color: AppColors.red,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-    ],
-  );
-}
+        ],
+      ),
+    );
+  }
 
 Widget _buildStageContent() {
   switch (_stage) {
-    case _LocalFlowStage.countdown: // or _SpFlowStage.countdown
+    case _LocalFlowStage.countdown:
       return Scaffold(
         backgroundColor: AppColors.background,
         body: Center(
-          child: CountdownAnimation(value: _engine.countdownValue),
-          // theme param will connect once gameThemeProvider is read here (T60A note below)
+          child: CountdownAnimation(
+            value: _engine.countdownValue,
+            theme: ref.watch(gameThemeProvider),
+          ),
         ),
       );
 
