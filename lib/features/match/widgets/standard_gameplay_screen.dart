@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import 'pause_exit_overlay.dart';
 
 class StandardGameplayScreen extends StatefulWidget {
   const StandardGameplayScreen({super.key});
@@ -16,6 +17,7 @@ class _StandardGameplayScreenState extends State<StandardGameplayScreen> {
   int currentRound = 1;
   int selectionTimer = 10;
   String? selectedMove;
+  bool isPaused = false;
 
   void _selectMove(String move) {
     setState(() {
@@ -83,91 +85,106 @@ class _StandardGameplayScreenState extends State<StandardGameplayScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              // Top row: exit control + round indicator
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: () {
-                      // Pause-exit overlay comes in T10A
-                    },
-                  ),
-                  Text(
-                    'ROUND $currentRound',
-                    style: const TextStyle(
-                      color: AppColors.primaryText,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+      child: Stack(
+        children: [
+          // Main gameplay layout
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                // Top row: exit control + round indicator
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () {
+                        setState(() => isPaused = true);
+                      },
                     ),
-                  ),
-                  const SizedBox(width: 48), // balance the row
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Player names + scores
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _playerScoreCard('Player 1', player1Score),
-                  Column(
-                    children: [
-                      Text(
-                        '$selectionTimer',
-                        style: TextStyle(
-                          color: selectionTimer <= 5
-                              ? AppColors.red
-                              : AppColors.primaryText,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    Text(
+                      'ROUND $currentRound',
+                      style: const TextStyle(
+                        color: AppColors.primaryText,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
                       ),
-                    ],
-                  ),
-                  _playerScoreCard('Player 2', player2Score),
-                ],
-              ),
-
-              const Spacer(),
-
-              // Hands
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _handImage(selectedMove, isPlayer: true),
-                  Text(
-                    'VS',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.4),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
                     ),
-                  ),
-                  _handImage(null, isPlayer: false), // hidden until reveal
-                ],
-              ),
+                    const SizedBox(width: 48), // balance the row
+                  ],
+                ),
+                const SizedBox(height: 12),
 
-              const Spacer(),
+                // Player names + scores
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _playerScoreCard('Player 1', player1Score),
+                    Column(
+                      children: [
+                        Text(
+                          '$selectionTimer',
+                          style: TextStyle(
+                            color: selectionTimer <= 5
+                                ? AppColors.red
+                                : AppColors.primaryText,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    _playerScoreCard('Player 2', player2Score),
+                  ],
+                ),
 
-              // Move buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _moveButton('rock', Icons.circle),
-                  _moveButton('paper', Icons.square),
-                  _moveButton('scissors', Icons.content_cut),
-                ],
-              ),
-              const SizedBox(height: 24),
-            ],
+                const Spacer(),
+
+                // Hands
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _handImage(selectedMove, isPlayer: true),
+                    Text(
+                      'VS',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.4),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                    _handImage(null, isPlayer: false), // hidden until reveal
+                  ],
+                ),
+
+                const Spacer(),
+
+                // Move buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _moveButton('rock', Icons.circle),
+                    _moveButton('paper', Icons.square),
+                    _moveButton('scissors', Icons.content_cut),
+                  ],
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
           ),
-        ),
+
+          // Pause Overlay rendered conditionally on top
+          if (isPaused)
+            PauseExitOverlay(
+              onResume: () => setState(() => isPaused = false),
+              onExit: () {
+                setState(() => isPaused = false);
+                Navigator.of(context).maybePop();
+              },
+            ),
+        ],
       ),
+    ),
     );
   }
 
