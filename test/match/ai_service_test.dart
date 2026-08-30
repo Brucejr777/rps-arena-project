@@ -28,5 +28,24 @@ void main() {
   final paperRate = paperCount / trials;
   // Expect roughly 50% (counter probability), allow generous tolerance
   expect(paperRate, closeTo(0.5, 0.05));
-});
+  });
+
+  test('Hard AI counters the weighted-predicted move most of the time', () {
+  final ai = AiService();
+
+  // Player's most recent moves are all 'scissors' — weighted prediction
+  // should favor scissors, so AI should counter with rock ~60% of the time.
+  for (var i = 0; i < 5; i++) {
+    ai.recordPlayerMove('scissors');
+  }
+
+  var rockCount = 0;
+  const trials = 2000;
+  for (var i = 0; i < trials; i++) {
+    if (ai.getMove(AiDifficulty.hard) == 'rock') rockCount++;
+  }
+
+  final rockRate = rockCount / trials;
+  expect(rockRate, closeTo(0.6, 0.05));
+  });
 }
