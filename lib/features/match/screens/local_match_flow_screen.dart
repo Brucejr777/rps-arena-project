@@ -1,12 +1,21 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../domain/match_engine.dart';
 import '../domain/match_format.dart';
-import '../domain/resolution.dart';
 import 'local_player_move_screen.dart';
 import 'pass_device_screen.dart';
+import 'standard_result_screen.dart';
+import 'unlimited_result_screen.dart';
 
-enum _LocalFlowStage { playerOneMove, passDevice, playerTwoMove, revealing }
+enum _LocalFlowStage {
+  countdown,
+  playerOneMove,
+  passDevice,
+  playerTwoMove,
+  revealing,
+  roundComplete,
+}
 
 class LocalMatchFlowScreen extends StatefulWidget {
   final MatchFormatConfig format;
@@ -19,13 +28,37 @@ class LocalMatchFlowScreen extends StatefulWidget {
 
 class _LocalMatchFlowScreenState extends State<LocalMatchFlowScreen> {
   late final MatchEngine _engine;
-  _LocalFlowStage _stage = _LocalFlowStage.playerOneMove;
+  _LocalFlowStage _stage = _LocalFlowStage.countdown;
+  Timer? _countdownTimer;
 
   @override
   void initState() {
     super.initState();
     _engine = MatchEngine(widget.format);
+    _startRound();
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startRound() {
     _engine.startRound();
+    _engine.beginCountdown();
+    setState(() => _stage = _LocalFlowStage.countdown);
+
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      final finished = _engine.tickCountdown();
+      setState(() {}); // refresh countdown number on screen
+      if (finished) {
+        timer.cancel();
+        _engine.beginSelection();
+        setState(() => _stage = _LocalFlowStage.playerOneMove);
+      }
+    });
   }
 
   void _onPlayerOneMove(String move) {
@@ -39,35 +72,66 @@ class _LocalMatchFlowScreenState extends State<LocalMatchFlowScreen> {
 
   void _onPlayerTwoMove(String move) {
     _engine.submitPlayerBMove(move);
-    setState(() => _stage = _LocalFlowStage.revealing);
     _reveal();
   }
 
   void _reveal() {
-    // "after Player 2 selection, display BOTH PLAYERS READY,
-    // reveal both selections simultaneously, calculate result
-    // using core resolution"
+    _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
-    // Result is now available via _engine.lastResult, playerAScore, etc.
-    // T45/T46/T48/T49 wire this into full match progression + result screens.
+    setState(() => _stage = _LocalFlowStage.revealing);
+
+    // Brief pause on the result before advancing (T63/T65 add real
+    // themed animations here later — this is the functional placeholder).
+    Future.delayed(const Duration(seconds: 2), _advanceAfterReveal);
+  }
+
+  void _advanceAfterReveal() {
+    if (!mounted) return;
+    _engine.checkMatchCondition();
+
+    if (_engine.matchFinished) {
+      setState(() => _stage = _LocalFlowStage.roundComplete);
+    } else {
+      _startRound(); // draw replay or next round
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     switch (_stage) {
+      case _LocalFlowStage.countdown:
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Center(
+            child: Text(
+              _engine.countdownValue == 0 ? 'GO!' : '${_engine.countdownValue}',
+              style: TextStyle(
+                color: _engine.countdownValue == 0
+                    ? AppColors.green
+                    : AppColors.primaryText,
+                fontSize: 72,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        );
+
       case _LocalFlowStage.playerOneMove:
         return LocalPlayerMoveScreen(
           playerNumber: 1,
           onMoveSelected: _onPlayerOneMove,
         );
+
       case _LocalFlowStage.passDevice:
         return PassDeviceScreen(onReady: _onReady);
+
       case _LocalFlowStage.playerTwoMove:
         return LocalPlayerMoveScreen(
           playerNumber: 2,
           onMoveSelected: _onPlayerTwoMove,
         );
+
       case _LocalFlowStage.revealing:
         return Scaffold(
           backgroundColor: AppColors.background,
@@ -83,18 +147,51 @@ class _LocalMatchFlowScreenState extends State<LocalMatchFlowScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                Text(
+                  '${_engine.playerAScore} - ${_engine.playerBScore}',
+                  style: const TextStyle(
+                    color: AppColors.primaryText,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Text(
                   _resultLabel(),
                   style: const TextStyle(
                     color: AppColors.defaultAccent,
-                    fontSize: 22,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ],
             ),
           ),
+        );
+
+      case _LocalFlowStage.roundComplete:
+        if (widget.format.isUnlimited) {
+          return UnlimitedResultScreen(
+            player1Wins: _engine.playerAScore,
+            player2Wins: _engine.playerBScore,
+            draws: _engine.drawCount,
+            totalRounds: _engine.totalRounds,
+            player1WinRate: _engine.playerAWinRate,
+            player2WinRate: _engine.playerBWinRate,
+            onPlayAgain: () => Navigator.of(context).maybePop(),
+            onMainMenu: () => Navigator.of(context)
+                .popUntil((route) => route.isFirst),
+          );
+        }
+        final playerWon = _engine.matchWinner == 'A';
+        return StandardResultScreen(
+          playerWon: playerWon,
+          playerScore: _engine.playerAScore,
+          opponentScore: _engine.playerBScore,
+          onPlayAgain: () => Navigator.of(context).maybePop(),
+          onMainMenu: () =>
+              Navigator.of(context).popUntil((route) => route.isFirst),
         );
     }
   }
@@ -106,7 +203,7 @@ class _LocalMatchFlowScreenState extends State<LocalMatchFlowScreen> {
       case RoundResult.playerBWin:
         return 'PLAYER 2 WINS THE ROUND';
       case RoundResult.draw:
-        return 'DRAW';
+        return 'DRAW — REPLAYING' + (widget.format.isUnlimited ? '' : ' ROUND');
       case null:
         return '';
     }
