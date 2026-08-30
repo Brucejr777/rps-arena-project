@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../stats/local_stats_repository.dart';
 import '../widgets/confirm_reset_dialog.dart';
+import '../settings_repository.dart';
 
 class DataScreen extends StatelessWidget {
   final VoidCallback onViewStatistics;
@@ -89,7 +90,20 @@ class DataScreen extends StatelessWidget {
                 ),
                 danger: true,
               ),
-              _dataOption('RESET SETTINGS', onResetSettings, danger: true),
+              _dataOption(
+                'RESET SETTINGS',
+                () => ConfirmResetDialog.show(
+                  context,
+                  title: 'RESET SETTINGS?',
+                  message:
+                      'This restores all appearance, audio, and gameplay settings to their defaults.',
+                  onConfirm: () async {
+                    await SettingsRepository().resetToDefaults();
+                    onResetSettings(); // notify parent (e.g. show a snackbar, refresh UI)
+                  },
+                ),
+                danger: true,
+              ),
             ],
           ),
         ),
