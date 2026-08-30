@@ -4,6 +4,7 @@ import '../../../core/theme/app_colors.dart';
 import '../controllers/match_controller.dart';
 import '../../online/screens/connection_lost_screen.dart';
 import 'pause_exit_overlay.dart';
+import 'move_button.dart';
 
 class UnlimitedGameplayScreen extends ConsumerStatefulWidget {
   const UnlimitedGameplayScreen({super.key});
@@ -232,9 +233,27 @@ class _UnlimitedGameplayScreenState
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _moveButton('rock', Icons.circle),
-                      _moveButton('paper', Icons.square),
-                      _moveButton('scissors', Icons.content_cut),
+                      MoveButton(
+                        move: 'rock',
+                        icon: Icons.circle,
+                        isSelected: selectedMove == 'rock',
+                        isDisabled: selectedMove != null,
+                        onSelected: () => _selectMove('rock'),
+                      ),
+                      MoveButton(
+                        move: 'paper',
+                        icon: Icons.square,
+                        isSelected: selectedMove == 'paper',
+                        isDisabled: selectedMove != null,
+                        onSelected: () => _selectMove('paper'),
+                      ),
+                      MoveButton(
+                        move: 'scissors',
+                        icon: Icons.content_cut,
+                        isSelected: selectedMove == 'scissors',
+                        isDisabled: selectedMove != null,
+                        onSelected: () => _selectMove('scissors'),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 24),
