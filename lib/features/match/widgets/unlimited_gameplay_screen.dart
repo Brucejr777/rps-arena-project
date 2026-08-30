@@ -5,6 +5,8 @@ import '../controllers/match_controller.dart';
 import '../../online/screens/connection_lost_screen.dart';
 import 'pause_exit_overlay.dart';
 import 'move_button.dart';
+import '../domain/match_engine.dart';
+import '../domain/match_format.dart';
 
 class UnlimitedGameplayScreen extends ConsumerStatefulWidget {
   const UnlimitedGameplayScreen({super.key});
@@ -15,13 +17,10 @@ class UnlimitedGameplayScreen extends ConsumerStatefulWidget {
 }
 
 class _UnlimitedGameplayScreenState
-    extends ConsumerState<UnlimitedGameplayScreen> {
+  extends ConsumerState<UnlimitedGameplayScreen> {
   final MatchMode mode = MatchMode.offline; // TODO: pass in from setup screen
 
-  int player1Score = 0;
-  int player2Score = 0;
-  int roundsPlayed = 0;
-  int draws = 0;
+  late final MatchEngine _engine;
   int selectionTimer = 10;
   String? selectedMove;
   bool isPaused = false;
@@ -29,6 +28,7 @@ class _UnlimitedGameplayScreenState
   @override
   void initState() {
     super.initState();
+    _engine = MatchEngine(MatchFormatConfig.unlimited());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(matchControllerProvider.notifier).setMode(mode);
     });
@@ -129,13 +129,16 @@ class _UnlimitedGameplayScreenState
     showDialog(
       context: context,
       builder: (_) => _EndMatchDialog(
-        player1Score: player1Score,
-        player2Score: player2Score,
-        onCancel: () => Navigator.of(context).pop(),
+        player1Score: _engine.playerAScore,
+        player2Score: _engine.playerBScore,
+        onCancel: () => Navigator.of(context).pop(), // CANCEL returns to match
         onConfirm: () {
           Navigator.of(context).pop(); // close dialog
-          // TODO T27/T28: finalize Unlimited result and navigate to
-          // UnlimitedResultScreen once it exists (T30).
+          setState(() {
+            _engine.endUnlimitedMatch();
+          });
+          // TODO T30: navigate to UnlimitedResultScreen with _engine's
+          // final playerAScore, playerBScore, drawCount, totalRounds, matchWinner.
         },
       ),
     );
@@ -162,7 +165,7 @@ class _UnlimitedGameplayScreenState
                       Column(
                         children: [
                           Text(
-                            'ROUNDS PLAYED: $roundsPlayed',
+                            'ROUNDS PLAYED: ${_engine.totalRounds}',
                             style: const TextStyle(
                               color: AppColors.primaryText,
                               fontWeight: FontWeight.bold,
@@ -171,7 +174,7 @@ class _UnlimitedGameplayScreenState
                             ),
                           ),
                           Text(
-                            'DRAWS: $draws',
+                            'DRAWS: ${_engine.drawCount}',
                             style: const TextStyle(
                               color: Colors.white54,
                               fontSize: 11,
@@ -180,12 +183,11 @@ class _UnlimitedGameplayScreenState
                         ],
                       ),
                       TextButton(
-                        onPressed:
-                            roundsPlayed > 0 ? _onEndMatchPressed : null,
+                        onPressed: _engine.totalRounds > 0 ? _onEndMatchPressed : null,
                         child: Text(
                           'END MATCH',
                           style: TextStyle(
-                            color: roundsPlayed > 0
+                            color: _engine.totalRounds > 0
                                 ? AppColors.red
                                 : Colors.white24,
                             fontWeight: FontWeight.bold,
@@ -199,7 +201,7 @@ class _UnlimitedGameplayScreenState
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _playerScoreCard('Player 1', player1Score),
+                      _playerScoreCard('Player 1', _engine.playerAScore),
                       Text(
                         '$selectionTimer',
                         style: TextStyle(
@@ -210,7 +212,7 @@ class _UnlimitedGameplayScreenState
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      _playerScoreCard('Player 2', player2Score),
+                      _playerScoreCard('Player 2', _engine.playerBScore),
                     ],
                   ),
                   const Spacer(),

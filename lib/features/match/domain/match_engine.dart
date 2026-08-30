@@ -32,6 +32,10 @@ class MatchEngine {
   bool playerBAutoSelected = false;
   RoundPhase phase = RoundPhase.scoreDisplay;
 
+  /// Total rounds played so far (wins + losses + draws) — used for
+  /// Unlimited match summaries.
+  int get totalRounds => playerAScore + playerBScore + drawCount;
+
   String? playerAMove;
   String? playerBMove;
   RoundResult? lastResult;

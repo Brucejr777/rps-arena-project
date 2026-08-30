@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:rps_arena/features/match/screens/single_player_setup_screen.dart';
+import 'package:rps_arena/features/match/widgets/unlimited_gameplay_screen.dart';
 import 'features/match/widgets/standard_gameplay_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // import 'features/match/widgets/unlimited_gameplay_screen.dart';
@@ -43,7 +44,7 @@ class MyApp extends StatelessWidget {
         // tested with just a hot reload.
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const SinglePlayerSetupScreen(),
+      home: const UnlimitedGameplayScreen(),
     );
   }
 }
