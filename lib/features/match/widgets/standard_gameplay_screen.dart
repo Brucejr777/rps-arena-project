@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:rps_arena/features/match/widgets/theme_background.dart';
 import '../../../core/theme/app_colors.dart';
 import '../controllers/match_controller.dart';
 import '../../online/screens/connection_lost_screen.dart';
 import 'pause_exit_overlay.dart';
 import 'move_button.dart';
+import '../../../core/theme/game_theme_controller.dart';
 
 class StandardGameplayScreen extends ConsumerStatefulWidget {
   const StandardGameplayScreen({super.key});
@@ -40,9 +42,10 @@ void initState() {
   }
 
   Widget _handImage(String? move, {required bool isPlayer}) {
+    final themeController = ref.read(gameThemeProvider.notifier);
     final asset = move == null
-        ? 'assets/images/placeholders/placeholder_rock.png'
-        : 'assets/images/placeholders/placeholder_$move.png';
+      ? themeController.handAssetFor('rock') // neutral placeholder while hidden
+      : themeController.handAssetFor(move);
     return Container(
       width: 100,
       height: 100,
@@ -62,37 +65,6 @@ void initState() {
     );
   }
 
-  Widget _moveButton(String move, IconData icon) {
-    final isSelected = selectedMove == move;
-    return GestureDetector(
-      onTap: selectedMove == null ? () => _selectMove(move) : null,
-      child: AnimatedScale(
-        scale: isSelected ? 1.1 : 1.0,
-        duration: const Duration(milliseconds: 150),
-        child: Container(
-          width: 72,
-          height: 72,
-          decoration: BoxDecoration(
-            gradient: isSelected
-                ? AppColors.accentGradient(AppColors.defaultAccent)
-                : null,
-            color: isSelected ? null : AppColors.surface,
-            shape: BoxShape.circle,
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: AppColors.defaultAccent.withValues(alpha: 0.5),
-                      blurRadius: 16,
-                      spreadRadius: 2,
-                    ),
-                  ]
-                : [],
-          ),
-          child: Icon(icon, color: Colors.white, size: 32),
-        ),
-      ),
-    );
-  }
 
   void _onExitPressed() {
   ref.read(matchControllerProvider.notifier).pause();
@@ -129,7 +101,9 @@ void initState() {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
+      body: ThemeBackground(
+        theme: ref.watch(gameThemeProvider),
+        child: SafeArea(
         child: Stack(
           children: [
             Padding(
@@ -231,6 +205,7 @@ void initState() {
           ],
         ),
       ),
+    )
     );
   }
 

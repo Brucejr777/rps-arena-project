@@ -3,6 +3,7 @@ import '../../../core/theme/app_colors.dart';
 import '../settings_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme_controller.dart';
+import '../../../core/theme/game_theme_controller.dart';
 
 
 class AppearanceScreen extends ConsumerStatefulWidget {
@@ -152,10 +153,12 @@ class _AppearanceScreenState extends ConsumerState<AppearanceScreen> {
                             final isSelected = settings.theme == name;
                             return Expanded(
                               child: GestureDetector(
-                                onTap: () => setState(() {
-                                  _settings =
-                                      settings.copyWith(theme: name);
-                                }),
+                                onTap: () {
+                                  setState(() {
+                                    _settings = settings.copyWith(theme: name);
+                                  });
+                                  ref.read(gameThemeProvider.notifier).setTheme(name);
+                                },
                                 child: Container(
                                   margin: const EdgeInsets.only(right: 12),
                                   padding: const EdgeInsets.symmetric(
