@@ -7,6 +7,7 @@ import 'local_player_move_screen.dart';
 import 'pass_device_screen.dart';
 import 'standard_result_screen.dart';
 import 'unlimited_result_screen.dart';
+import '../../stats/local_stats_repository.dart';
 
 enum _LocalFlowStage {
   countdown,
@@ -19,8 +20,10 @@ enum _LocalFlowStage {
 
 class LocalMatchFlowScreen extends StatefulWidget {
   final MatchFormatConfig format;
+  
 
   const LocalMatchFlowScreen({super.key, required this.format});
+  
 
   @override
   State<LocalMatchFlowScreen> createState() => _LocalMatchFlowScreenState();
@@ -28,6 +31,7 @@ class LocalMatchFlowScreen extends StatefulWidget {
 
 class _LocalMatchFlowScreenState extends State<LocalMatchFlowScreen> {
   late final MatchEngine _engine;
+  final LocalStatsRepository _statsRepo = LocalStatsRepository();
   _LocalFlowStage _stage = _LocalFlowStage.countdown;
   Timer? _countdownTimer;
 
@@ -76,26 +80,49 @@ class _LocalMatchFlowScreenState extends State<LocalMatchFlowScreen> {
   }
 
   void _reveal() {
-    _engine.lockSelections();
-    _engine.reveal();
-    _engine.resolveRound();
-    setState(() => _stage = _LocalFlowStage.revealing);
+  _engine.lockSelections();
+  _engine.reveal();
+  _engine.resolveRound();
+  setState(() => _stage = _LocalFlowStage.revealing);
 
-    // Brief pause on the result before advancing (T63/T65 add real
-    // themed animations here later — this is the functional placeholder).
-    Future.delayed(const Duration(seconds: 2), _advanceAfterReveal);
+  // Record round-level stats for Player 1 (the "local player" perspective —
+  // local pass-and-play tracks Player 1's stats as "the player's" stats).
+  if (_engine.playerAMove != null) {
+    _statsRepo.recordMoveSelection(_engine.playerAMove!);
   }
+  switch (_engine.lastResult) {
+    case RoundResult.playerAWin:
+      _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
+      break;
+    case RoundResult.playerBWin:
+      _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
+      break;
+    case RoundResult.draw:
+      _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
+      break;
+    case null:
+      break;
+  }
+
+  Future.delayed(const Duration(seconds: 2), _advanceAfterReveal);
+}
 
   void _advanceAfterReveal() {
-    if (!mounted) return;
-    _engine.checkMatchCondition();
+  if (!mounted) return;
+  _engine.checkMatchCondition();
 
-    if (_engine.matchFinished) {
-      setState(() => _stage = _LocalFlowStage.roundComplete);
+  if (_engine.matchFinished) {
+    if (widget.format.isUnlimited) {
+      _statsRepo.recordUnlimitedMatchResult(winner: _engine.matchWinner);
     } else {
-      _startRound(); // draw replay or next round
+      _statsRepo.recordStandardMatchResult(
+          playerWon: _engine.matchWinner == 'A');
     }
+    setState(() => _stage = _LocalFlowStage.roundComplete);
+  } else {
+    _startRound();
   }
+}
 
   @override
 Widget build(BuildContext context) {
@@ -254,9 +281,10 @@ Widget _buildStageContent() {
           ),
           TextButton(
             onPressed: () {
-              Navigator.of(context).pop(); // close dialog
+              Navigator.of(context).pop();
               _countdownTimer?.cancel();
               _engine.endUnlimitedMatch();
+              _statsRepo.recordUnlimitedMatchResult(winner: _engine.matchWinner);
               setState(() => _stage = _LocalFlowStage.roundComplete);
             },
             child: const Text('END MATCH',
