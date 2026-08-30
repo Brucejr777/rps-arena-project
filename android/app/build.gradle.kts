@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.rpsarena.rps_arena"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
