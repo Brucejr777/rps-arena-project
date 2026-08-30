@@ -23,6 +23,8 @@ class MatchEngine {
   int currentRoundNumber = 1;
   int drawCount = 0;
   int countdownValue = 3; // 3, 2, 1, then 0 represents "GO!"
+  bool playerASelectionLocked = false;
+  bool playerBSelectionLocked = false;
   RoundPhase phase = RoundPhase.scoreDisplay;
 
   String? playerAMove;
@@ -38,11 +40,13 @@ class MatchEngine {
   /// Countdown/timer durations (T14/T16) and draw handling (T13)
   /// get layered onto this in the next tasks.
   void startRound() {
-    phase = RoundPhase.scoreDisplay;
-    playerAMove = null;
-    playerBMove = null;
-    lastResult = null;
-  }
+  phase = RoundPhase.scoreDisplay;
+  playerAMove = null;
+  playerBMove = null;
+  playerASelectionLocked = false;
+  playerBSelectionLocked = false;
+  lastResult = null;
+}
 
   void beginCountdown() {
   phase = RoundPhase.countdown;
@@ -78,12 +82,16 @@ bool tickCountdown() {
   
 
   void submitPlayerAMove(String move) {
-    playerAMove = move;
-  }
+  if (playerASelectionLocked) return; // selection cannot change
+  playerAMove = move;
+  playerASelectionLocked = true;
+}
 
-  void submitPlayerBMove(String move) {
-    playerBMove = move;
-  }
+void submitPlayerBMove(String move) {
+  if (playerBSelectionLocked) return;
+  playerBMove = move;
+  playerBSelectionLocked = true;
+}
 
   void lockSelections() {
     phase = RoundPhase.locked;
