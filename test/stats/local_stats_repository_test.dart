@@ -59,4 +59,21 @@ void main() {
     expect(stats.paperSelections, 1);
     expect(stats.scissorsSelections, 0);
   });
+
+  test('resetLocalStatistics clears all local stats fields', () async {
+  final repo = LocalStatsRepository();
+  await repo.recordStandardMatchResult(playerWon: true);
+  await repo.recordMoveSelection('rock');
+
+  var stats = await repo.load();
+  expect(stats.matchesPlayed, 1);
+
+  await repo.resetLocalStatistics();
+  stats = await repo.load();
+
+  expect(stats.matchesPlayed, 0);
+  expect(stats.matchesWon, 0);
+  expect(stats.rockSelections, 0);
+  expect(stats.winRate, 0.0);
+});
 }

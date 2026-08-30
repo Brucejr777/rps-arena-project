@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../stats/local_stats_repository.dart';
+import '../widgets/confirm_reset_dialog.dart';
 
 class DataScreen extends StatelessWidget {
   final VoidCallback onViewStatistics;
@@ -73,8 +75,20 @@ class DataScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               _dataOption('VIEW STATISTICS', onViewStatistics),
-              _dataOption('RESET LOCAL STATISTICS', onResetLocalStatistics,
-                  danger: true),
+              _dataOption(
+                'RESET LOCAL STATISTICS',
+                () => ConfirmResetDialog.show(
+                  context,
+                  title: 'RESET LOCAL STATISTICS?',
+                  message:
+                      'This clears your offline gameplay statistics. Online competitive statistics are not affected.',
+                  onConfirm: () async {
+                    await LocalStatsRepository().resetLocalStatistics();
+                    onResetLocalStatistics(); // notify parent (e.g. show a snackbar, refresh UI)
+                  },
+                ),
+                danger: true,
+              ),
               _dataOption('RESET SETTINGS', onResetSettings, danger: true),
             ],
           ),
