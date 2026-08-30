@@ -9,6 +9,8 @@ import '../features/match/widgets/unlimited_gameplay_screen.dart';
 import '../features/match/screens/local_setup_screen.dart';
 import '../features/match/screens/local_match_flow_screen.dart';
 import '../features/match/domain/match_format.dart';
+import '../features/match/screens/single_player_match_flow_screen.dart';
+import '../features/match/domain/ai_service.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
@@ -68,6 +70,13 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) {
         final format = state.extra as MatchFormatConfig? ?? MatchFormatConfig.bestOf3();
         return LocalMatchFlowScreen(format: format);
+      },
+    ),
+    GoRoute(
+      path: '/single-player-match',
+      builder: (context, state) {
+        final args = state.extra as (MatchFormatConfig, AiDifficulty);
+        return SinglePlayerMatchFlowScreen(format: args.$1, difficulty: args.$2);
       },
     ),
   ],

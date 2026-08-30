@@ -1,0 +1,292 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../stats/local_stats_repository.dart';
+import '../domain/ai_service.dart';
+import '../domain/match_engine.dart';
+import '../domain/match_format.dart';
+import 'local_player_move_screen.dart';
+import 'standard_result_screen.dart';
+import 'unlimited_result_screen.dart';
+
+enum _SpFlowStage { countdown, playerMove, aiThinking, revealing, roundComplete }
+
+class SinglePlayerMatchFlowScreen extends StatefulWidget {
+  final MatchFormatConfig format;
+  final AiDifficulty difficulty;
+
+  const SinglePlayerMatchFlowScreen({
+    super.key,
+    required this.format,
+    required this.difficulty,
+  });
+
+  @override
+  State<SinglePlayerMatchFlowScreen> createState() =>
+      _SinglePlayerMatchFlowScreenState();
+}
+
+class _SinglePlayerMatchFlowScreenState
+    extends State<SinglePlayerMatchFlowScreen> {
+  late final MatchEngine _engine;
+  final AiService _ai = AiService();
+  final LocalStatsRepository _statsRepo = LocalStatsRepository();
+  _SpFlowStage _stage = _SpFlowStage.countdown;
+  Timer? _countdownTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _engine = MatchEngine(widget.format);
+    _ai.resetForNewMatch();
+    _startRound();
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startRound() {
+    _engine.startRound();
+    _engine.beginCountdown();
+    setState(() => _stage = _SpFlowStage.countdown);
+
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      final finished = _engine.tickCountdown();
+      setState(() {});
+      if (finished) {
+        timer.cancel();
+        _engine.beginSelection();
+        setState(() => _stage = _SpFlowStage.playerMove);
+      }
+    });
+  }
+
+  void _onPlayerMove(String move) {
+    _engine.submitPlayerAMove(move);
+    setState(() => _stage = _SpFlowStage.aiThinking);
+
+    // Small delay so the AI's move doesn't feel instantaneous/robotic.
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+      final aiMove = _ai.getMove(widget.difficulty);
+      _engine.submitPlayerBMove(aiMove);
+      _ai.recordPlayerMove(move); // AI learns from the player's move for next round
+      _reveal();
+    });
+  }
+
+  void _reveal() {
+    _engine.lockSelections();
+    _engine.reveal();
+    _engine.resolveRound();
+    setState(() => _stage = _SpFlowStage.revealing);
+
+    if (_engine.playerAMove != null) {
+      _statsRepo.recordMoveSelection(_engine.playerAMove!);
+    }
+    switch (_engine.lastResult) {
+      case RoundResult.playerAWin:
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
+        break;
+      case RoundResult.playerBWin:
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
+        break;
+      case RoundResult.draw:
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
+        break;
+      case null:
+        break;
+    }
+
+    Future.delayed(const Duration(seconds: 2), _advanceAfterReveal);
+  }
+
+  void _advanceAfterReveal() {
+    if (!mounted) return;
+    _engine.checkMatchCondition();
+
+    if (_engine.matchFinished) {
+      if (widget.format.isUnlimited) {
+        _statsRepo.recordUnlimitedMatchResult(winner: _engine.matchWinner);
+      } else {
+        _statsRepo.recordStandardMatchResult(
+            playerWon: _engine.matchWinner == 'A');
+      }
+      setState(() => _stage = _SpFlowStage.roundComplete);
+    } else {
+      _startRound();
+    }
+  }
+
+  String _resultLabel() {
+    switch (_engine.lastResult) {
+      case RoundResult.playerAWin:
+        return 'YOU WIN THE ROUND';
+      case RoundResult.playerBWin:
+        return 'OPPONENT WINS THE ROUND';
+      case RoundResult.draw:
+        return 'DRAW';
+      case null:
+        return '';
+    }
+  }
+
+  void _onEndMatchPressed() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('END MATCH?',
+            style: TextStyle(color: AppColors.primaryText)),
+        content: Text(
+          'Current Score: ${_engine.playerAScore} - ${_engine.playerBScore}',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('CANCEL',
+                style: TextStyle(color: Colors.white70)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _countdownTimer?.cancel();
+              _engine.endUnlimitedMatch();
+              _statsRepo.recordUnlimitedMatchResult(winner: _engine.matchWinner);
+              setState(() => _stage = _SpFlowStage.roundComplete);
+            },
+            child: const Text('END MATCH',
+                style: TextStyle(color: AppColors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool get _canEndMatchNow {
+    if (!widget.format.isUnlimited) return false;
+    if (_engine.totalRounds == 0) return false;
+    return _stage == _SpFlowStage.countdown || _stage == _SpFlowStage.playerMove;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        _buildStageContent(),
+        if (_canEndMatchNow)
+          Positioned(
+            top: 48,
+            right: 16,
+            child: SafeArea(
+              child: TextButton(
+                onPressed: _onEndMatchPressed,
+                child: const Text(
+                  'END MATCH',
+                  style: TextStyle(
+                    color: AppColors.red,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+  
+  Widget _buildStageContent() {
+    switch (_stage) {
+      case _SpFlowStage.countdown:
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Center(
+            child: Text(
+              _engine.countdownValue == 0 ? 'GO!' : '${_engine.countdownValue}',
+              style: TextStyle(
+                color: _engine.countdownValue == 0
+                    ? AppColors.green
+                    : AppColors.primaryText,
+                fontSize: 72,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        );
+
+      case _SpFlowStage.playerMove:
+        return LocalPlayerMoveScreen(
+          playerNumber: 1,
+          onMoveSelected: _onPlayerMove,
+        );
+
+      case _SpFlowStage.aiThinking:
+        return const Scaffold(
+          backgroundColor: AppColors.background,
+          body: Center(
+            child: CircularProgressIndicator(color: AppColors.defaultAccent),
+          ),
+        );
+
+      case _SpFlowStage.revealing:
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '${_engine.playerAScore} - ${_engine.playerBScore}',
+                  style: const TextStyle(
+                    color: AppColors.primaryText,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _resultLabel(),
+                  style: const TextStyle(
+                    color: AppColors.defaultAccent,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+      case _SpFlowStage.roundComplete:
+        if (widget.format.isUnlimited) {
+          return UnlimitedResultScreen(
+            player1Wins: _engine.playerAScore,
+            player2Wins: _engine.playerBScore,
+            draws: _engine.drawCount,
+            totalRounds: _engine.totalRounds,
+            player1WinRate: _engine.playerAWinRate,
+            player2WinRate: _engine.playerBWinRate,
+            onPlayAgain: () => Navigator.of(context).maybePop(),
+            onMainMenu: () =>
+                Navigator.of(context).popUntil((route) => route.isFirst),
+          );
+        }
+        final playerWon = _engine.matchWinner == 'A';
+        return StandardResultScreen(
+          playerWon: playerWon,
+          playerScore: _engine.playerAScore,
+          opponentScore: _engine.playerBScore,
+          onPlayAgain: () => Navigator.of(context).maybePop(),
+          onMainMenu: () =>
+              Navigator.of(context).popUntil((route) => route.isFirst),
+        );
+    }
+  }
+}

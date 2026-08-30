@@ -146,11 +146,10 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    if (selectedFormat.isUnlimited) {
-                      context.push('/unlimited-gameplay');
-                    } else {
-                      context.push('/standard-gameplay');
-                    }
+                    context.push(
+                      '/single-player-match',
+                      extra: (selectedFormat, selectedDifficulty),
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.defaultAccent,
