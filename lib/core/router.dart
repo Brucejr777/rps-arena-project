@@ -6,6 +6,7 @@ import '../features/match/screens/match_format_select_screen.dart';
 import '../features/match/screens/custom_match_config_screen.dart';
 import '../features/match/widgets/standard_gameplay_screen.dart';
 import '../features/match/widgets/unlimited_gameplay_screen.dart';
+import '../features/match/screens/local_setup_screen.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
@@ -21,9 +22,7 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => MainMenuScreen(
         isSignedIn: false, // TODO: replace with real auth state (T84 etc.)
         onSinglePlayer: () => context.push('/single-player-setup'),
-        onTwoPlayers: () {
-          // TODO T39: navigate to LocalSetupScreen once it exists
-        },
+        onTwoPlayers: () => context.push('/local-setup'),
         onMultiplayer: () {
           // TODO T85: navigate to MultiplayerScreen once it exists
         },
@@ -57,6 +56,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/unlimited-gameplay',
       builder: (context, state) => const UnlimitedGameplayScreen(),
+    ),
+    GoRoute(
+      path: '/local-setup',
+      builder: (context, state) => const LocalSetupScreen(),
     ),
   ],
 );
