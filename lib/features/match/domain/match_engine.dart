@@ -1,4 +1,5 @@
 import 'match_format.dart';
+import 'dart:math';
 // no new import needed yet — dart:core covers int/bool
 
 enum RoundPhase {
@@ -25,6 +26,9 @@ class MatchEngine {
   int countdownValue = 3; // 3, 2, 1, then 0 represents "GO!"
   bool playerASelectionLocked = false;
   bool playerBSelectionLocked = false;
+  int selectionSecondsRemaining = 10;
+  bool playerAAutoSelected = false;
+  bool playerBAutoSelected = false;
   RoundPhase phase = RoundPhase.scoreDisplay;
 
   String? playerAMove;
@@ -53,31 +57,67 @@ class MatchEngine {
   countdownValue = 3;
 }
 
-/// Call once per second while phase == RoundPhase.countdown.
-/// Returns true when the countdown has finished (i.e. GO! has been shown
-/// and it's time to move to selection).
-bool tickCountdown() {
-  if (phase != RoundPhase.countdown) return false;
+  /// Call once per second while phase == RoundPhase.countdown.
+  /// Returns true when the countdown has finished (i.e. GO! has been shown
+  /// and it's time to move to selection).
+  bool tickCountdown() {
+    if (phase != RoundPhase.countdown) return false;
 
-  if (countdownValue > 1) {
-    countdownValue--; // 3 -> 2 -> 1
-    return false;
+    if (countdownValue > 1) {
+      countdownValue--; // 3 -> 2 -> 1
+      return false;
+    }
+
+    if (countdownValue == 1) {
+      countdownValue = 0; // 0 represents "GO!" being shown
+      return false;
+    }
+
+    // countdownValue == 0 means GO! has already been displayed for its
+    // one second — countdown is complete.
+    return true;
   }
 
-  if (countdownValue == 1) {
-    countdownValue = 0; // 0 represents "GO!" being shown
-    return false;
+  /// Call once per second while phase == RoundPhase.selecting.
+  /// Returns true when the timer has hit zero and auto-selection should occur.
+  bool tickSelectionTimer() {
+  if (phase != RoundPhase.selecting) return false;
+
+  if (selectionSecondsRemaining > 0) {
+    selectionSecondsRemaining--;
   }
 
-  // countdownValue == 0 means GO! has already been displayed for its
-  // one second — countdown is complete.
-  return true;
+  if (selectionSecondsRemaining <= 0) {
+    _autoSelectIfNeeded();
+    return true;
+  }
+  return false;
+}
+
+bool get isTimerWarning => selectionSecondsRemaining <= 5;
+
+void _autoSelectIfNeeded() {
+  const moves = ['rock', 'paper', 'scissors'];
+  final rand = Random();
+
+  if (playerAMove == null) {
+    playerAMove = moves[rand.nextInt(3)];
+    playerAAutoSelected = true;
+    playerASelectionLocked = true;
+  }
+  if (playerBMove == null) {
+    playerBMove = moves[rand.nextInt(3)];
+    playerBAutoSelected = true;
+    playerBSelectionLocked = true;
+  }
 }
 
   void beginSelection() {
-    phase = RoundPhase.go;
-    phase = RoundPhase.selecting;
-  }
+  phase = RoundPhase.selecting;
+  selectionSecondsRemaining = 10;
+  playerAAutoSelected = false;
+  playerBAutoSelected = false;
+}
 
   
 
