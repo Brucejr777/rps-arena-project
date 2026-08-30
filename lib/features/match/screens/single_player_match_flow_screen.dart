@@ -8,6 +8,7 @@ import '../domain/match_format.dart';
 import 'local_player_move_screen.dart';
 import 'standard_result_screen.dart';
 import 'unlimited_result_screen.dart';
+import '../widgets/countdown_animation.dart';
 
 enum _SpFlowStage { countdown, playerMove, aiThinking, revealing, roundComplete }
 
@@ -208,16 +209,7 @@ class _SinglePlayerMatchFlowScreenState
         return Scaffold(
           backgroundColor: AppColors.background,
           body: Center(
-            child: Text(
-              _engine.countdownValue == 0 ? 'GO!' : '${_engine.countdownValue}',
-              style: TextStyle(
-                color: _engine.countdownValue == 0
-                    ? AppColors.green
-                    : AppColors.primaryText,
-                fontSize: 72,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+            child: CountdownAnimation(value: _engine.countdownValue),
           ),
         );
 

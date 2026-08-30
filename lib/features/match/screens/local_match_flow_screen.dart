@@ -8,6 +8,7 @@ import 'pass_device_screen.dart';
 import 'standard_result_screen.dart';
 import 'unlimited_result_screen.dart';
 import '../../stats/local_stats_repository.dart';
+import '../widgets/countdown_animation.dart';
 
 enum _LocalFlowStage {
   countdown,
@@ -153,20 +154,12 @@ Widget build(BuildContext context) {
 
 Widget _buildStageContent() {
   switch (_stage) {
-    case _LocalFlowStage.countdown:
+    case _LocalFlowStage.countdown: // or _SpFlowStage.countdown
       return Scaffold(
         backgroundColor: AppColors.background,
         body: Center(
-          child: Text(
-            _engine.countdownValue == 0 ? 'GO!' : '${_engine.countdownValue}',
-            style: TextStyle(
-              color: _engine.countdownValue == 0
-                  ? AppColors.green
-                  : AppColors.primaryText,
-              fontSize: 72,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
+          child: CountdownAnimation(value: _engine.countdownValue),
+          // theme param will connect once gameThemeProvider is read here (T60A note below)
         ),
       );
 
@@ -256,7 +249,7 @@ Widget _buildStageContent() {
       case RoundResult.playerBWin:
         return 'PLAYER 2 WINS THE ROUND';
       case RoundResult.draw:
-        return 'DRAW — REPLAYING' + (widget.format.isUnlimited ? '' : ' ROUND');
+        return 'DRAW — REPLAYING${widget.format.isUnlimited ? '' : ' ROUND'}';
       case null:
         return '';
     }

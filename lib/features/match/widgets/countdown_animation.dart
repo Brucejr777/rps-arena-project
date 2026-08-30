@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import 'theme_background.dart';
 
 class CountdownAnimation extends StatefulWidget {
-  /// 3, 2, 1, or 0 (0 means "GO!")
-  final int value;
+  final int value; // 3, 2, 1, or 0 (0 means "GO!")
+  final GameTheme theme;
 
-  const CountdownAnimation({super.key, required this.value});
+  const CountdownAnimation({
+    super.key,
+    required this.value,
+    this.theme = GameTheme.normal,
+  });
 
   @override
   State<CountdownAnimation> createState() => _CountdownAnimationState();
@@ -29,7 +34,6 @@ class _CountdownAnimationState extends State<CountdownAnimation>
   }
 
   void _setupAnimation() {
-    // scale 80% -> 120% -> 0% across the one-second duration
     _scaleAnimation = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween(begin: 0.8, end: 1.2)
@@ -53,7 +57,6 @@ class _CountdownAnimationState extends State<CountdownAnimation>
   void didUpdateWidget(covariant CountdownAnimation oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value) {
-      // Restart the animation for the new number/GO!
       _controller.reset();
       _controller.forward();
     }
@@ -67,6 +70,19 @@ class _CountdownAnimationState extends State<CountdownAnimation>
 
   String get _displayText => widget.value == 0 ? 'GO!' : '${widget.value}';
 
+  Color get _accentColor {
+    if (widget.value == 0) return AppColors.green;
+    return widget.theme == GameTheme.space
+        ? AppColors.secondaryAccent // purple, matches Space theme
+        : AppColors.primaryText; // Normal theme stays clean white
+  }
+
+  Color get _glowColor {
+    return widget.theme == GameTheme.space
+        ? AppColors.secondaryAccent
+        : AppColors.defaultAccent;
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -79,16 +95,14 @@ class _CountdownAnimationState extends State<CountdownAnimation>
             child: Text(
               _displayText,
               style: TextStyle(
-                color: widget.value == 0
-                    ? AppColors.green
-                    : AppColors.primaryText,
+                color: _accentColor,
                 fontSize: 72,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 2,
                 shadows: [
                   Shadow(
-                    color: AppColors.defaultAccent.withValues(alpha: 0.6),
-                    blurRadius: 24,
+                    color: _glowColor.withValues(alpha: 0.6),
+                    blurRadius: widget.theme == GameTheme.space ? 32 : 24,
                   ),
                 ],
               ),
