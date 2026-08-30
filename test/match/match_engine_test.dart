@@ -55,4 +55,40 @@ void main() {
     expect(engine.playerBWinRate, 0.0);
   });
 });
+    group('Local privacy requirement', () {
+      test(
+          'playerAMove is set internally but MatchEngine exposes no way to '
+          'reveal it before both moves are submitted', () {
+        final engine = MatchEngine(MatchFormatConfig.bestOf3());
+        engine.startRound();
+        engine.beginSelection(); // <-- add this line
+        engine.submitPlayerAMove('rock');
+
+        expect(engine.phase, RoundPhase.selecting);
+        expect(engine.playerBMove, isNull);
+      });
+
+      test('reveal only happens after both players have submitted moves', () {
+        final engine = MatchEngine(MatchFormatConfig.bestOf3());
+        engine.startRound();
+        engine.submitPlayerAMove('rock');
+        engine.submitPlayerBMove('scissors');
+        engine.lockSelections();
+        engine.reveal();
+
+        expect(engine.phase, RoundPhase.revealing);
+        expect(engine.playerAMove, isNotNull);
+        expect(engine.playerBMove, isNotNull);
+      });
+
+      test('selections lock and cannot change after being set, preventing '
+          'a player from seeing and reacting to the opponent mid-round', () {
+        final engine = MatchEngine(MatchFormatConfig.bestOf3());
+        engine.startRound();
+        engine.submitPlayerAMove('rock');
+        engine.submitPlayerAMove('paper'); // attempt to change — should be ignored
+
+        expect(engine.playerAMove, 'rock'); // unchanged
+      });
+    });
 }
