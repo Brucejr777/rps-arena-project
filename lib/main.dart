@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // import 'features/match/widgets/unlimited_gameplay_screen.dart';
 // import 'core/theme/app_colors.dart';
 // import 'features/match/widgets/countdown_animation.dart';
+// import 'features/match/screens/standard_result_screen.dart';
 
 
 void main() {
@@ -44,7 +45,7 @@ class MyApp extends StatelessWidget {
         // tested with just a hot reload.
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const UnlimitedGameplayScreen(),
+      home: const StandardGameplayScreen(),
     );
   }
 }
