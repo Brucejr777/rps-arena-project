@@ -36,6 +36,22 @@ class MatchEngine {
   /// Unlimited match summaries.
   int get totalRounds => playerAScore + playerBScore + drawCount;
 
+  /// Total Rounds = Player A wins + Player B wins + Draws (already exists
+  /// as `totalRounds` from T27).
+
+  /// Player 1 Win Rate = Player 1 wins ÷ Total Rounds × 100
+  /// Returns 0.0 when totalRounds is 0 (no division by zero).
+  double get playerAWinRate {
+    if (totalRounds == 0) return 0.0;
+    return (playerAScore / totalRounds) * 100;
+  }
+
+  /// Player 2 Win Rate = Player 2 wins ÷ Total Rounds × 100
+  double get playerBWinRate {
+    if (totalRounds == 0) return 0.0;
+    return (playerBScore / totalRounds) * 100;
+  }
+
   String? playerAMove;
   String? playerBMove;
   RoundResult? lastResult;

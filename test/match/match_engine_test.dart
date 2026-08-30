@@ -33,4 +33,26 @@ void main() {
       expect(engine.totalRounds, 9);
     });
   });
+
+  group('Unlimited result calculation', () {
+  test('win rates calculate correctly with rounds played', () {
+    final engine = MatchEngine(MatchFormatConfig.unlimited());
+    engine.playerAScore = 6;
+    engine.playerBScore = 3;
+    engine.drawCount = 1;
+    // totalRounds = 6 + 3 + 1 = 10
+
+    expect(engine.totalRounds, 10);
+    expect(engine.playerAWinRate, 60.0);
+    expect(engine.playerBWinRate, 30.0);
+  });
+
+  test('win rates are 0.0% when no rounds have been played', () {
+    final engine = MatchEngine(MatchFormatConfig.unlimited());
+
+    expect(engine.totalRounds, 0);
+    expect(engine.playerAWinRate, 0.0);
+    expect(engine.playerBWinRate, 0.0);
+  });
+});
 }
