@@ -24,20 +24,78 @@ class AiService {
   }
 
   String getMove(AiDifficulty difficulty) {
-    switch (difficulty) {
-      case AiDifficulty.easy:
-        return _easyMove();
-      case AiDifficulty.normal:
-        // Implemented in T20
-        return _easyMove();
-      case AiDifficulty.hard:
-        // Implemented in T21
-        return _easyMove();
-    }
+  switch (difficulty) {
+    case AiDifficulty.easy:
+      return _easyMove();
+    case AiDifficulty.normal:
+      return _normalMove();
+    case AiDifficulty.hard:
+      // Implemented in T21
+      return _easyMove();
   }
+}
 
   /// Easy AI: ROCK/PAPER/SCISSORS each at 33.33%, no history, no adaptation.
   String _easyMove() {
     return _moves[_random.nextInt(3)];
   }
+
+  /// Normal AI: counters the player's most frequent move.
+/// - No recorded moves yet -> equal random (33.33% each).
+/// - Tied frequency -> uses the latest move among the tied ones.
+/// - Counter probability: 50%, remaining two moves: 25% each.
+  String _normalMove() {
+    if (_playerMoveHistory.isEmpty) {
+      return _easyMove(); // no record uses equal random
+    }
+
+    final mostFrequent = _mostFrequentMove(_playerMoveHistory);
+    final counter = _counterTo(mostFrequent);
+
+    final roll = _random.nextDouble(); // [0.0, 1.0)
+    if (roll < 0.5) {
+      return counter;
+    }
+
+    // remaining two moves at 25% each
+    final others = _moves.where((m) => m != counter).toList();
+    return others[_random.nextInt(others.length)];
+  }
+
+  /// Returns the move with the highest count in [history].
+  /// On a tie, returns the latest (most recently played) move among
+  /// the tied moves.
+  String _mostFrequentMove(List<String> history) {
+    final counts = <String, int>{for (final m in _moves) m: 0};
+    for (final move in history) {
+      counts[move] = (counts[move] ?? 0) + 1;
+    }
+
+    final maxCount = counts.values.reduce(max);
+    final tiedMoves =
+        counts.entries.where((e) => e.value == maxCount).map((e) => e.key).toSet();
+
+    if (tiedMoves.length == 1) {
+      return tiedMoves.first;
+    }
+
+    // Tie: scan history from the end, return the first move that's
+    // among the tied set — i.e. the latest-played tied move.
+    for (var i = history.length - 1; i >= 0; i--) {
+      if (tiedMoves.contains(history[i])) {
+        return history[i];
+      }
+    }
+    return tiedMoves.first; // fallback, shouldn't be reached
+  }
+
+  /// Returns the move that beats [move] (i.e. the counter to it).
+  String _counterTo(String move) {
+    const counters = {
+      'rock': 'paper',
+      'paper': 'scissors',
+      'scissors': 'rock',
+    };
+    return counters[move]!;
+}
 }
