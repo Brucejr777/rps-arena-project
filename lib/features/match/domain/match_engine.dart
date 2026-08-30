@@ -20,6 +20,7 @@ class MatchEngine {
   int playerAScore = 0;
   int playerBScore = 0;
   int currentRoundNumber = 1;
+  int drawCount = 0;
   RoundPhase phase = RoundPhase.scoreDisplay;
 
   String? playerAMove;
@@ -91,35 +92,50 @@ class MatchEngine {
   }
 
   void _applyScore() {
-    if (lastResult == RoundResult.playerAWin) {
-      playerAScore++;
-    } else if (lastResult == RoundResult.playerBWin) {
-      playerBScore++;
-    }
-    // Draws award no point (T13 formalizes replay/draw-count behavior).
+  if (lastResult == RoundResult.playerAWin) {
+    playerAScore++;
+  } else if (lastResult == RoundResult.playerBWin) {
+    playerBScore++;
+  } else if (lastResult == RoundResult.draw) {
+    drawCount++;
   }
+}
 
   /// Checks whether the match is complete after this round, and advances
   /// to the next round otherwise.
   void checkMatchCondition() {
-    phase = RoundPhase.roundComplete;
+  phase = RoundPhase.roundComplete;
 
+  // A draw never ends the match and never counts toward winsRequired —
+  // it just replays (standard) or accumulates (Unlimited) at the same
+  // round number logic below.
+  if (lastResult == RoundResult.draw) {
     if (config.isUnlimited) {
-      // Unlimited: update accumulated stats, continue automatically.
+      // Unlimited: draw count already incremented, next round begins
+      // automatically — no cap on draw count.
       currentRoundNumber++;
-      return;
-    }
-
-    if (config.isMatchWon(playerAScore)) {
-      matchFinished = true;
-      matchWinner = 'A';
-    } else if (config.isMatchWon(playerBScore)) {
-      matchFinished = true;
-      matchWinner = 'B';
     } else {
-      currentRoundNumber++;
+      // Standard formats: drawn round replays immediately.
+      // We don't increment currentRoundNumber, so the same round replays.
     }
+    return;
   }
+
+  if (config.isUnlimited) {
+    currentRoundNumber++;
+    return;
+  }
+
+  if (config.isMatchWon(playerAScore)) {
+    matchFinished = true;
+    matchWinner = 'A';
+  } else if (config.isMatchWon(playerBScore)) {
+    matchFinished = true;
+    matchWinner = 'B';
+  } else {
+    currentRoundNumber++;
+  }
+}
 
   /// Manual end for Unlimited matches (T27 wires this to the UI).
   void endUnlimitedMatch() {
