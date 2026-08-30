@@ -3,13 +3,14 @@ import 'dart:math';
 enum AiDifficulty { easy, normal, hard }
 
 class AiService {
-  final Random _random = Random();
+  final Random _random;
 
   /// Move history for the current match, used by Normal/Hard AI.
   /// Easy AI ignores this entirely (no history, no pattern tracking).
   final List<String> _playerMoveHistory = [];
 
   static const List<String> _moves = ['rock', 'paper', 'scissors'];
+  AiService({Random? random}) : _random = random ?? Random();
 
   /// Call after each round to record what the player actually played,
   /// so Normal/Hard AI (T20/T21) can use it. Easy AI never reads this.
