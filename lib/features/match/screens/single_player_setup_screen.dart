@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../domain/match_format.dart';
 import '../domain/ai_service.dart';
+import 'match_format_select_screen.dart';
 
 class SinglePlayerSetupScreen extends StatefulWidget {
   const SinglePlayerSetupScreen({super.key});
@@ -33,9 +34,18 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
   }
 
   Future<void> _openMatchLengthSelect() async {
-    // TODO T24: navigate to MatchFormatSelectScreen and await the
-    // selected MatchFormatConfig, then setState(() => selectedFormat = result).
+  final result = await Navigator.of(context).push<MatchFormatConfig>(
+    MaterialPageRoute(builder: (_) => const MatchFormatSelectScreen()),
+  );
+  if (result != null) {
+    if (result.format == MatchFormat.custom) {
+      // TODO T25: navigate to CustomMatchConfigScreen instead, then
+      // setState with the real winsRequired the player enters.
+    } else {
+      setState(() => selectedFormat = result);
+    }
   }
+}
 
   Widget _difficultyOption(String label, AiDifficulty value) {
     final isSelected = selectedDifficulty == value;
