@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../settings_repository.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/app_theme_controller.dart';
 
-class AppearanceScreen extends StatefulWidget {
+
+class AppearanceScreen extends ConsumerStatefulWidget {
   const AppearanceScreen({super.key});
 
   @override
-  State<AppearanceScreen> createState() => _AppearanceScreenState();
+  ConsumerState<AppearanceScreen> createState() => _AppearanceScreenState();
 }
 
-class _AppearanceScreenState extends State<AppearanceScreen> {
+class _AppearanceScreenState extends ConsumerState<AppearanceScreen> {
   final SettingsRepository _repository = SettingsRepository();
   AppSettings? _settings;
 
@@ -108,9 +111,12 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                           children: _appColors.map((name) {
                             final isSelected = settings.appColor == name;
                             return GestureDetector(
-                              onTap: () => setState(() {
-                                _settings = settings.copyWith(appColor: name);
-                              }),
+                              onTap: () {
+                                setState(() {
+                                  _settings = settings.copyWith(appColor: name);
+                                });
+                                ref.read(appAccentColorProvider.notifier).setAppColor(name);
+                              },
                               child: Container(
                                 width: 48,
                                 height: 48,

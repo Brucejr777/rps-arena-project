@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_theme_controller.dart';
 import '../../../core/services/audio_service.dart';
 
-class MoveButton extends StatelessWidget {
+class MoveButton extends ConsumerWidget {
   final String move; // 'rock', 'paper', 'scissors'
   final IconData icon;
   final bool isSelected;
@@ -25,30 +27,27 @@ class MoveButton extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final accent = ref.watch(appAccentColorProvider);
+
     return GestureDetector(
       onTap: _handleTap,
       child: AnimatedScale(
-        // selected button scales to 110%
         scale: isSelected ? 1.1 : 1.0,
         duration: const Duration(milliseconds: 150),
         child: Opacity(
-          // other two buttons disable (visually dimmed when disabled)
           opacity: isDisabled && !isSelected ? 0.35 : 1.0,
           child: Container(
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              // selected button receives current app accent
-              gradient: isSelected
-                  ? AppColors.accentGradient(AppColors.defaultAccent)
-                  : null,
+              gradient: isSelected ? AppColors.accentGradient(accent) : null,
               color: isSelected ? null : AppColors.surface,
               shape: BoxShape.circle,
               boxShadow: isSelected
                   ? [
                       BoxShadow(
-                        color: AppColors.defaultAccent.withValues(alpha: 0.5),
+                        color: accent.withValues(alpha: 0.5),
                         blurRadius: 16,
                         spreadRadius: 2,
                       ),
