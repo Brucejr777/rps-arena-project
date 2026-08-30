@@ -1,6 +1,8 @@
 enum MatchFormat { bestOf3, bestOf5, bestOf7, bestOf9, custom, unlimited }
 
 class MatchFormatConfig {
+  static const int minCustomWins = 2;
+  static const int maxCustomWins = 99;
   final MatchFormat format;
   final int winsRequired;
 
@@ -31,6 +33,15 @@ class MatchFormatConfig {
 
   factory MatchFormatConfig.unlimited() =>
       const MatchFormatConfig(format: MatchFormat.unlimited, winsRequired: 0);
+
+  /// Validates a custom wins-required value.
+  /// Returns null if valid, or an error message ('INVALID VALUE') if not.
+  static String? validateCustomWins(int? value) {
+    if (value == null || value < minCustomWins || value > maxCustomWins) {
+      return 'INVALID VALUE';
+    }
+    return null;
+  }
 
   /// Standard match ends when any player reaches winsRequired.
   /// Unlimited has no automatic win threshold — always false.

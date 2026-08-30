@@ -14,8 +14,6 @@ class _CustomMatchConfigScreenState extends State<CustomMatchConfigScreen> {
   final TextEditingController _controller = TextEditingController();
   String? _errorText;
 
-  static const int _minWins = 2;
-  static const int _maxWins = 99;
 
   @override
   void dispose() {
@@ -27,12 +25,13 @@ class _CustomMatchConfigScreenState extends State<CustomMatchConfigScreen> {
     final input = _controller.text.trim();
     final value = int.tryParse(input);
 
-    if (value == null || value < _minWins || value > _maxWins) {
-      setState(() => _errorText = 'INVALID VALUE');
+    final error = MatchFormatConfig.validateCustomWins(value);
+    if (error != null) {
+      setState(() => _errorText = error);
       return;
     }
 
-    Navigator.of(context).pop(MatchFormatConfig.custom(value));
+    Navigator.of(context).pop(MatchFormatConfig.custom(value!));
   }
 
   @override
