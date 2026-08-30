@@ -47,4 +47,11 @@ void main() {
     expect(settings.victoryAnimationsEnabled, true);
     expect(settings.vibrationEnabled, true);
   });
+  test('theme selection persists after being saved', () async {
+  final repo = SettingsRepository();
+  await repo.save(const AppSettings(theme: 'Space'));
+
+  final reloaded = await repo.load();
+  expect(reloaded.theme, 'Space');
+});
 }
