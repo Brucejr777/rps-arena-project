@@ -7,6 +7,7 @@ import 'pause_exit_overlay.dart';
 import 'move_button.dart';
 import '../domain/match_engine.dart';
 import '../domain/match_format.dart';
+import '../screens/unlimited_result_screen.dart';
 
 class UnlimitedGameplayScreen extends ConsumerStatefulWidget {
   const UnlimitedGameplayScreen({super.key});
@@ -137,8 +138,26 @@ class _UnlimitedGameplayScreenState
           setState(() {
             _engine.endUnlimitedMatch();
           });
-          // TODO T30: navigate to UnlimitedResultScreen with _engine's
-          // final playerAScore, playerBScore, drawCount, totalRounds, matchWinner.
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => UnlimitedResultScreen(
+                player1Wins: _engine.playerAScore,
+                player2Wins: _engine.playerBScore,
+                draws: _engine.drawCount,
+                totalRounds: _engine.totalRounds,
+                player1WinRate: _engine.playerAWinRate,
+                player2WinRate: _engine.playerBWinRate,
+                onPlayAgain: () {
+                  // TODO: reset engine and pop back to gameplay
+                  Navigator.of(context).maybePop();
+                },
+                onMainMenu: () {
+                  // TODO: navigate to MainMenuScreen once it exists (T32)
+                  Navigator.of(context).maybePop();
+                },
+              ),
+            ),
+          );
         },
       ),
     );
