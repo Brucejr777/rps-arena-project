@@ -1,5 +1,6 @@
 import 'match_format.dart';
 import 'dart:math';
+import 'resolution.dart';
 // no new import needed yet — dart:core covers int/bool
 
 enum RoundPhase {
@@ -145,25 +146,22 @@ void submitPlayerBMove(String move) {
   /// Placeholder resolution logic here — T17 formalizes this into a
   /// dedicated resolution.dart table; this will be swapped to call that.
   void resolveRound() {
-    phase = RoundPhase.result;
+  phase = RoundPhase.result;
 
-    final a = playerAMove;
-    final b = playerBMove;
-    if (a == null || b == null) return;
+  final a = playerAMove;
+  final b = playerBMove;
+  if (a == null || b == null) return;
 
-    if (a == b) {
-      lastResult = RoundResult.draw;
-    } else if ((a == 'rock' && b == 'scissors') ||
-        (a == 'paper' && b == 'rock') ||
-        (a == 'scissors' && b == 'paper')) {
-      lastResult = RoundResult.playerAWin;
-    } else {
-      lastResult = RoundResult.playerBWin;
-    }
+  final outcome = Resolution.resolve(a, b);
+  lastResult = switch (outcome) {
+    RoundOutcome.draw => RoundResult.draw,
+    RoundOutcome.playerAWins => RoundResult.playerAWin,
+    RoundOutcome.playerBWins => RoundResult.playerBWin,
+  };
 
-    _applyScore();
-    phase = RoundPhase.resultAnimation;
-  }
+  _applyScore();
+  phase = RoundPhase.resultAnimation;
+}
 
   void _applyScore() {
   if (lastResult == RoundResult.playerAWin) {
