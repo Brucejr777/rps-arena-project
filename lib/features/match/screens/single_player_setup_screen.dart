@@ -4,6 +4,7 @@ import '../domain/match_format.dart';
 import '../domain/ai_service.dart';
 import 'match_format_select_screen.dart';
 import 'custom_match_config_screen.dart';
+import 'package:go_router/go_router.dart';
 
 class SinglePlayerSetupScreen extends StatefulWidget {
   const SinglePlayerSetupScreen({super.key});
@@ -35,23 +36,20 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
   }
 
   Future<void> _openMatchLengthSelect() async {
-  final result = await Navigator.of(context).push<MatchFormatConfig>(
-    MaterialPageRoute(builder: (_) => const MatchFormatSelectScreen()),
-  );
+    final result = await context.push<MatchFormatConfig>('/match-format-select');
 
-  if (result == null) return;
+    if (result == null) return;
 
-  if (result.format == MatchFormat.custom) {
-    final customResult = await Navigator.of(context).push<MatchFormatConfig>(
-      MaterialPageRoute(builder: (_) => const CustomMatchConfigScreen()),
-    );
-    if (customResult != null) {
-      setState(() => selectedFormat = customResult);
+    if (result.format == MatchFormat.custom) {
+      final customResult =
+          await context.push<MatchFormatConfig>('/custom-match-config');
+      if (customResult != null) {
+        setState(() => selectedFormat = customResult);
+      }
+    } else {
+      setState(() => selectedFormat = result);
     }
-  } else {
-    setState(() => selectedFormat = result);
   }
-}
 
   Widget _difficultyOption(String label, AiDifficulty value) {
     final isSelected = selectedDifficulty == value;
@@ -149,9 +147,11 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    // TODO: navigate to StandardGameplayScreen or
-                    // UnlimitedGameplayScreen based on selectedFormat,
-                    // passing selectedDifficulty into the AI service.
+                    if (selectedFormat.isUnlimited) {
+                      context.push('/unlimited-gameplay');
+                    } else {
+                      context.push('/standard-gameplay');
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.defaultAccent,
