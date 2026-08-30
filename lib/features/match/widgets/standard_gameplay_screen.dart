@@ -1,23 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
+import '../controllers/match_controller.dart';
+import '../../online/screens/connection_lost_screen.dart';
 import 'pause_exit_overlay.dart';
 
-class StandardGameplayScreen extends StatefulWidget {
+class StandardGameplayScreen extends ConsumerStatefulWidget {
   const StandardGameplayScreen({super.key});
 
   @override
-  State<StandardGameplayScreen> createState() =>
+  ConsumerState<StandardGameplayScreen> createState() =>
       _StandardGameplayScreenState();
 }
 
-class _StandardGameplayScreenState extends State<StandardGameplayScreen> {
-  // Placeholder state — will be replaced by MatchEngine/Riverpod in T11-T18
+class _StandardGameplayScreenState
+    extends ConsumerState<StandardGameplayScreen> {
+  final MatchMode mode = MatchMode.offline; // TODO: pass in from setup screen
+
   int player1Score = 0;
   int player2Score = 0;
   int currentRound = 1;
   int selectionTimer = 10;
   String? selectedMove;
   bool isPaused = false;
+
+  @override
+void initState() {
+  super.initState();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    ref.read(matchControllerProvider.notifier).setMode(mode);
+  });
+}
 
   void _selectMove(String move) {
     setState(() {
@@ -27,7 +40,7 @@ class _StandardGameplayScreenState extends State<StandardGameplayScreen> {
 
   Widget _handImage(String? move, {required bool isPlayer}) {
     final asset = move == null
-        ? 'assets/images/placeholders/placeholder_rock.png' // neutral placeholder
+        ? 'assets/images/placeholders/placeholder_rock.png'
         : 'assets/images/placeholders/placeholder_$move.png';
     return Container(
       width: 100,
@@ -80,111 +93,125 @@ class _StandardGameplayScreenState extends State<StandardGameplayScreen> {
     );
   }
 
+  void _onExitPressed() {
+  ref.read(matchControllerProvider.notifier).pause();
+  setState(() => isPaused = true);
+}
+
+  void _onResume() {
+  ref.read(matchControllerProvider.notifier).resume();
+  setState(() => isPaused = false);
+}
+
+  void _onExitConfirmed() {
+    final outcome = ref.read(matchControllerProvider.notifier).attemptExit();
+    setState(() => isPaused = false);
+
+    switch (outcome) {
+      case ExitOutcome.connectionLost:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ConnectionLostScreen()),
+        );
+        break;
+      case ExitOutcome.rankedQuitLoss:
+        // TODO: send quit-loss result to server once online matches exist (T106)
+        Navigator.of(context).maybePop();
+        break;
+      case ExitOutcome.exitedCleanly:
+      case ExitOutcome.resumed:
+        Navigator.of(context).maybePop();
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-      child: Stack(
-        children: [
-          // Main gameplay layout
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                // Top row: exit control + round indicator
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: () {
-                        setState(() => isPaused = true);
-                      },
-                    ),
-                    Text(
-                      'ROUND $currentRound',
-                      style: const TextStyle(
-                        color: AppColors.primaryText,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white70),
+                        onPressed: _onExitPressed,
                       ),
-                    ),
-                    const SizedBox(width: 48), // balance the row
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Player names + scores
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _playerScoreCard('Player 1', player1Score),
-                    Column(
-                      children: [
-                        Text(
-                          '$selectionTimer',
-                          style: TextStyle(
-                            color: selectionTimer <= 5
-                                ? AppColors.red
-                                : AppColors.primaryText,
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      Text(
+                        'ROUND $currentRound',
+                        style: const TextStyle(
+                          color: AppColors.primaryText,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
                         ),
-                      ],
-                    ),
-                    _playerScoreCard('Player 2', player2Score),
-                  ],
-                ),
-
-                const Spacer(),
-
-                // Hands
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _handImage(selectedMove, isPlayer: true),
-                    Text(
-                      'VS',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.4),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
                       ),
-                    ),
-                    _handImage(null, isPlayer: false), // hidden until reveal
-                  ],
-                ),
-
-                const Spacer(),
-
-                // Move buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _moveButton('rock', Icons.circle),
-                    _moveButton('paper', Icons.square),
-                    _moveButton('scissors', Icons.content_cut),
-                  ],
-                ),
-                const SizedBox(height: 24),
-              ],
+                      const SizedBox(width: 48),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _playerScoreCard('Player 1', player1Score),
+                      Column(
+                        children: [
+                          Text(
+                            '$selectionTimer',
+                            style: TextStyle(
+                              color: selectionTimer <= 5
+                                  ? AppColors.red
+                                  : AppColors.primaryText,
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      _playerScoreCard('Player 2', player2Score),
+                    ],
+                  ),
+                  const Spacer(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _handImage(selectedMove, isPlayer: true),
+                      Text(
+                        'VS',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.4),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                      _handImage(null, isPlayer: false),
+                    ],
+                  ),
+                  const Spacer(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _moveButton('rock', Icons.circle),
+                      _moveButton('paper', Icons.square),
+                      _moveButton('scissors', Icons.content_cut),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
-          ),
-
-          // Pause Overlay rendered conditionally on top
-          if (isPaused)
-            PauseExitOverlay(
-              onResume: () => setState(() => isPaused = false),
-              onExit: () {
-                setState(() => isPaused = false);
-                Navigator.of(context).maybePop();
-              },
-            ),
-        ],
+            if (isPaused)
+              PauseExitOverlay(
+                onResume: _onResume,
+                onExit: _onExitConfirmed,
+              ),
+          ],
+        ),
       ),
-    ),
     );
   }
 
