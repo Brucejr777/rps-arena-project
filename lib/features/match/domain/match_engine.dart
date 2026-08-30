@@ -1,4 +1,5 @@
 import 'match_format.dart';
+// no new import needed yet — dart:core covers int/bool
 
 enum RoundPhase {
   scoreDisplay,
@@ -21,6 +22,7 @@ class MatchEngine {
   int playerBScore = 0;
   int currentRoundNumber = 1;
   int drawCount = 0;
+  int countdownValue = 3; // 3, 2, 1, then 0 represents "GO!"
   RoundPhase phase = RoundPhase.scoreDisplay;
 
   String? playerAMove;
@@ -43,13 +45,37 @@ class MatchEngine {
   }
 
   void beginCountdown() {
-    phase = RoundPhase.countdown;
+  phase = RoundPhase.countdown;
+  countdownValue = 3;
+}
+
+/// Call once per second while phase == RoundPhase.countdown.
+/// Returns true when the countdown has finished (i.e. GO! has been shown
+/// and it's time to move to selection).
+bool tickCountdown() {
+  if (phase != RoundPhase.countdown) return false;
+
+  if (countdownValue > 1) {
+    countdownValue--; // 3 -> 2 -> 1
+    return false;
   }
+
+  if (countdownValue == 1) {
+    countdownValue = 0; // 0 represents "GO!" being shown
+    return false;
+  }
+
+  // countdownValue == 0 means GO! has already been displayed for its
+  // one second — countdown is complete.
+  return true;
+}
 
   void beginSelection() {
     phase = RoundPhase.go;
     phase = RoundPhase.selecting;
   }
+
+  
 
   void submitPlayerAMove(String move) {
     playerAMove = move;
