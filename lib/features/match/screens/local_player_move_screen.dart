@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/game_theme_controller.dart';
 import '../widgets/move_button.dart';
 
-class LocalPlayerMoveScreen extends StatefulWidget {
-  final int playerNumber; // 1 or 2
+class LocalPlayerMoveScreen extends ConsumerStatefulWidget {
+  final int playerNumber;
   final void Function(String move) onMoveSelected;
 
   const LocalPlayerMoveScreen({
@@ -13,20 +15,28 @@ class LocalPlayerMoveScreen extends StatefulWidget {
   });
 
   @override
-  State<LocalPlayerMoveScreen> createState() => _LocalPlayerMoveScreenState();
+  ConsumerState<LocalPlayerMoveScreen> createState() =>
+      _LocalPlayerMoveScreenState();
 }
 
-class _LocalPlayerMoveScreenState extends State<LocalPlayerMoveScreen> {
+class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
   String? _selectedMove;
 
   void _select(String move) {
-    if (_selectedMove != null) return; // T41: selection cannot change
+    if (_selectedMove != null) return;
     setState(() => _selectedMove = move);
-    widget.onMoveSelected(move);
+
+    // Brief pause so the lock/scale animation and hand image are
+    // actually visible before advancing to the next stage.
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) widget.onMoveSelected(move);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeController = ref.watch(gameThemeProvider.notifier);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -45,11 +55,37 @@ class _LocalPlayerMoveScreenState extends State<LocalPlayerMoveScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Make your choice.',
-                style: TextStyle(color: Colors.white54, fontSize: 14),
+              Text(
+                _selectedMove == null ? 'Make your choice.' : 'LOCKED',
+                style: TextStyle(
+                  color: _selectedMove == null
+                      ? Colors.white54
+                      : AppColors.green,
+                  fontSize: 14,
+                  fontWeight:
+                      _selectedMove == null ? FontWeight.normal : FontWeight.bold,
+                ),
               ),
-              const SizedBox(height: 48),
+              const SizedBox(height: 24),
+              // Shows the selected hand once locked
+              SizedBox(
+                height: 100,
+                child: _selectedMove == null
+                    ? null
+                    : Container(
+                        width: 100,
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        padding: const EdgeInsets.all(12),
+                        child: Image.asset(
+                          themeController.handAssetFor(_selectedMove!),
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
