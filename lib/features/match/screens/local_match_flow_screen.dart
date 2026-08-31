@@ -15,6 +15,7 @@ import '../widgets/theme_background.dart';
 import '../widgets/reveal_animation.dart';
 import '../widgets/round_victory_animation.dart';
 import '../widgets/final_finish_animation.dart';
+import '../widgets/draw_animation.dart';
 
 enum _LocalFlowStage {
   countdown,
@@ -239,17 +240,12 @@ class _LocalMatchFlowScreenState
                       theme: ref.watch(gameThemeProvider),
                       handAssetFor: themeController.handAssetFor,
                     )
-                  else if (_engine.lastResult == RoundResult.playerAWin ||
-                      _engine.lastResult == RoundResult.playerBWin)
-                    RoundVictoryAnimation(
-                      winningMove: _engine.lastResult == RoundResult.playerAWin
-                          ? _engine.playerAMove!
-                          : _engine.playerBMove!,
-                      losingMove: _engine.lastResult == RoundResult.playerAWin
-                          ? _engine.playerBMove!
-                          : _engine.playerAMove!,
+                  else if (_engine.lastResult == RoundResult.draw &&
+                      _engine.playerAMove != null && _engine.playerBMove != null)
+                    DrawAnimation(
+                      playerAMove: _engine.playerAMove!,
+                      playerBMove: _engine.playerBMove!,
                       theme: ref.watch(gameThemeProvider),
-                      handAssetFor: themeController.handAssetFor,
                     )
                   else
                     Text(
