@@ -17,6 +17,7 @@ import '../widgets/round_victory_animation.dart';
 import '../widgets/final_finish_animation.dart';
 import '../widgets/draw_animation.dart';
 import '../../settings/settings_repository.dart';
+import '../../../core/services/vibration_service.dart';
 
 enum _SpFlowStage { 
   countdown,
@@ -108,6 +109,7 @@ class _SinglePlayerMatchFlowScreenState
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
+    VibrationService.instance.reveal();
     setState(() => _stage = _SpFlowStage.revealing);
 
     if (_engine.playerAMove != null) {
@@ -116,12 +118,15 @@ class _SinglePlayerMatchFlowScreenState
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
+        VibrationService.instance.victory();
         break;
       case RoundResult.playerBWin:
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
+        VibrationService.instance.defeat();
         break;
       case RoundResult.draw:
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
+        VibrationService.instance.draw();
         break;
       case null:
         break;

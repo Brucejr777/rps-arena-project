@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme_controller.dart';
 import '../../../core/services/audio_service.dart';
+import '../../../core/services/vibration_service.dart';
 
 class MoveButton extends ConsumerWidget {
   final String move; // 'rock', 'paper', 'scissors'
@@ -23,6 +24,7 @@ class MoveButton extends ConsumerWidget {
   void _handleTap() {
     if (isDisabled) return;
     AudioService.instance.playSound('select');
+    VibrationService.instance.selection();
     onSelected();
   }
 

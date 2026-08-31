@@ -3,6 +3,7 @@ import '../../../core/theme/app_colors.dart';
 import '../settings_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/animation_speed_controller.dart';
+import '../../../core/services/vibration_service.dart';
 
 class GameplaySettingsScreen extends ConsumerStatefulWidget {
   const GameplaySettingsScreen({super.key});
@@ -31,6 +32,7 @@ class _GameplaySettingsScreenState extends ConsumerState<GameplaySettingsScreen>
     setState(() => _settings = updated);
     await _repository.save(updated);
     ref.read(animationSpeedProvider.notifier).refreshFrom(updated);
+    await VibrationService.instance.refreshFromSettings();
   }
 
   Widget _sectionLabel(String text) {

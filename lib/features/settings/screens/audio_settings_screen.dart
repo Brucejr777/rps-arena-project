@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../settings_repository.dart';
 import '../../../core/services/audio_service.dart';
+import '../../../core/services/vibration_service.dart';
 
 class AudioSettingsScreen extends StatefulWidget {
   const AudioSettingsScreen({super.key});
@@ -29,6 +30,7 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
     setState(() => _settings = updated);
     await _repository.save(updated);
     await AudioService.instance.refreshVolumesFromSettings();
+    await VibrationService.instance.refreshFromSettings();
   }
 
   Widget _volumeSlider(String label, double value, ValueChanged<double> onChanged) {

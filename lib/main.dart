@@ -10,6 +10,7 @@ import 'core/router.dart';
 // import 'features/home/splash_screen.dart';
 // import 'features/home/main_menu_screen.dart';
 import 'core/services/audio_service.dart';
+import 'core/services/vibration_service.dart';
 
 
 void main() async {
@@ -19,6 +20,7 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
   await AudioService.instance.refreshVolumesFromSettings();
+  await VibrationService.instance.refreshFromSettings();
   runApp(const ProviderScope(child: MyApp()));
 }
 
