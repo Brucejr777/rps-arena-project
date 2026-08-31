@@ -34,7 +34,7 @@ class MatchSocketClient {
   int _matchId = 0;
   String _baseUrl;
 
-  MatchSocketClient({String baseUrl = 'wss://api.rpsarena.staging'})
+  MatchSocketClient({String baseUrl = 'wss://rps-arena-api.onrender.com'})
       : _baseUrl = baseUrl;
 
   /// Stream of parsed socket events.
