@@ -12,6 +12,7 @@ import '../widgets/countdown_animation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/game_theme_controller.dart';
 import '../widgets/theme_background.dart';
+import '../widgets/reveal_animation.dart';
 
 enum _LocalFlowStage {
   countdown,
@@ -187,42 +188,50 @@ Widget _buildStageContent() {
       );
 
     case _LocalFlowStage.revealing:
-      return Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'BOTH PLAYERS READY',
-                style: TextStyle(
-                  color: AppColors.primaryText,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+        final themeController = ref.read(gameThemeProvider.notifier);
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  'BOTH PLAYERS READY',
+                  style: TextStyle(
+                    color: AppColors.primaryText,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '${_engine.playerAScore} - ${_engine.playerBScore}',
-                style: const TextStyle(
-                  color: AppColors.primaryText,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
+                const SizedBox(height: 24),
+                if (_engine.playerAMove != null && _engine.playerBMove != null)
+                  RevealAnimation(
+                    playerAMove: _engine.playerAMove!,
+                    playerBMove: _engine.playerBMove!,
+                    handAssetFor: themeController.handAssetFor,
+                  ),
+                const SizedBox(height: 24),
+                Text(
+                  '${_engine.playerAScore} - ${_engine.playerBScore}',
+                  style: const TextStyle(
+                    color: AppColors.primaryText,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _resultLabel(),
-                style: const TextStyle(
-                  color: AppColors.defaultAccent,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                const SizedBox(height: 12),
+                Text(
+                  _resultLabel(),
+                  style: const TextStyle(
+                    color: AppColors.defaultAccent,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      );
+        );
 
     case _LocalFlowStage.roundComplete:
       if (widget.format.isUnlimited) {

@@ -12,6 +12,7 @@ import '../widgets/countdown_animation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/game_theme_controller.dart';
 import '../widgets/theme_background.dart';
+import '../widgets/reveal_animation.dart';
 
 enum _SpFlowStage { countdown, playerMove, aiThinking, revealing, roundComplete }
 
@@ -237,12 +238,20 @@ Widget build(BuildContext context) {
         );
 
       case _SpFlowStage.revealing:
+        final themeController = ref.read(gameThemeProvider.notifier);
         return Scaffold(
           backgroundColor: AppColors.background,
           body: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                if (_engine.playerAMove != null && _engine.playerBMove != null)
+                  RevealAnimation(
+                    playerAMove: _engine.playerAMove!,
+                    playerBMove: _engine.playerBMove!,
+                    handAssetFor: themeController.handAssetFor,
+                  ),
+                const SizedBox(height: 24),
                 Text(
                   '${_engine.playerAScore} - ${_engine.playerBScore}',
                   style: const TextStyle(
