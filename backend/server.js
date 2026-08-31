@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const { createAuthRouter } = require('./routes/auth');
+const { createQuickMatchRouter } = require('./routes/quick_match');
 
 const app = express();
 app.use(express.json());
@@ -13,6 +14,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/auth', createAuthRouter(pool));
+app.use('/quick-match', createQuickMatchRouter(pool));
 
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
