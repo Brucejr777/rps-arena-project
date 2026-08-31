@@ -74,6 +74,7 @@ flutter:
     - assets/images/placeholders/
     - assets/images/normal/
     - assets/images/space/
+    - assets/images/online/
     - assets/audio/normal/
     - assets/audio/space/
 

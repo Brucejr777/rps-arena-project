@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <!-- Background circle -->
+  <circle cx="60" cy="60" r="54" fill="#1E293B" stroke="#DC2626" stroke-width="3"/>
+  <!-- Broken wifi arcs -->
+  <path d="M60 38 C72 38 83 43 90 52" stroke="#DC2626" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.4"/>
+  <path d="M60 48 C68 48 75 51 80 57" stroke="#DC2626" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.6"/>
+  <path d="M60 58 C64 58 67 59 70 62" stroke="#DC2626" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.8"/>
+  <!-- Center dot -->
+  <circle cx="60" cy="68" r="4" fill="#DC2626"/>
+  <!-- X mark -->
+  <line x1="42" y1="82" x2="52" y2="92" stroke="#DC2626" stroke-width="4" stroke-linecap="round"/>
+  <line x1="52" y1="82" x2="42" y2="92" stroke="#DC2626" stroke-width="4" stroke-linecap="round"/>
+  <line x1="68" y1="82" x2="78" y2="92" stroke="#DC2626" stroke-width="4" stroke-linecap="round"/>
+  <line x1="78" y1="82" x2="68" y2="92" stroke="#DC2626" stroke-width="4" stroke-linecap="round"/>
+</svg>

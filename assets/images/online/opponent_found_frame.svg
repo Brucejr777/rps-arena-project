@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 160" width="280" height="160">
+  <!-- Outer glow -->
+  <rect x="4" y="4" width="272" height="152" rx="20" ry="20"
+        fill="none" stroke="#16A34A" stroke-width="2" opacity="0.3"/>
+  <!-- Main card -->
+  <rect x="8" y="8" width="264" height="144" rx="18" ry="18"
+        fill="#1E293B" stroke="#16A34A" stroke-width="2"/>
+  <!-- Top accent bar -->
+  <rect x="30" y="8" width="220" height="3" rx="1.5" fill="#16A34A" opacity="0.6"/>
+  <!-- Corner accents -->
+  <circle cx="28" cy="28" r="4" fill="#16A34A" opacity="0.8"/>
+  <circle cx="252" cy="28" r="4" fill="#16A34A" opacity="0.8"/>
+  <circle cx="28" cy="132" r="4" fill="#16A34A" opacity="0.8"/>
+  <circle cx="252" cy="132" r="4" fill="#16A34A" opacity="0.8"/>
+  <!-- Placeholder avatar circle -->
+  <circle cx="70" cy="80" r="28" fill="#0F172A" stroke="#16A34A" stroke-width="1.5"/>
+  <text x="70" y="85" text-anchor="middle" fill="#16A34A" font-size="12" font-family="sans-serif" opacity="0.6">?</text>
+</svg>
