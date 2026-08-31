@@ -70,6 +70,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       ? true
       : widget.playerId < widget.opponentId;
 
+  bool get _isUnlimited => widget.formatType == 'unlimited';
+  bool get _canEndMatch => _isUnlimited && _drawCount + _playerScore + _opponentScore > 0;
+
   @override
   void initState() {
     super.initState();
@@ -155,8 +158,17 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   void _handleMatchCompleted(Map<String, dynamic> data) {
-    setState(() => _matchFinished = true);
-    // TODO: navigate to result screen
+    setState(() {
+      _matchFinished = true;
+      _playerScore = _isPlayerA
+          ? (data['playerAScore'] as int? ?? 0)
+          : (data['playerBScore'] as int? ?? 0);
+      _opponentScore = _isPlayerA
+          ? (data['playerBScore'] as int? ?? 0)
+          : (data['playerAScore'] as int? ?? 0);
+      _drawCount = data['drawCount'] as int? ?? 0;
+    });
+    // TODO T103: navigate to UnlimitedResultScreen
   }
 
   void _startRound() {
@@ -239,6 +251,48 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     }
   }
 
+  // ── Unlimited END MATCH (T103) ──────────────────────────────
+  void _onEndMatchPressed() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('END MATCH?',
+            style: TextStyle(color: AppColors.primaryText)),
+        content: Text(
+          'Current Score: $_playerScore - $_opponentScore',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('CANCEL', style: TextStyle(color: Colors.white70)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _submitEndMatch();
+            },
+            child: const Text('END MATCH', style: TextStyle(color: AppColors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitEndMatch() async {
+    try {
+      setState(() => _isWaitingForServer = true);
+      _timer?.cancel();
+      await _authClient.post('/matches/${widget.matchId}/end');
+      // Result arrives via WebSocket match_completed event
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isWaitingForServer = false);
+    }
+  }
+
   Widget _handImage(String? move, {required bool isPlayer}) {
     final themeController = ref.read(gameThemeProvider.notifier);
     final asset = move == null
@@ -294,7 +348,21 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                             letterSpacing: 1.2,
                           ),
                         ),
-                        const SizedBox(width: 48),
+                        // END MATCH button (Unlimited only, after first round)
+                        if (_canEndMatch && !_isWaitingForServer)
+                          TextButton(
+                            onPressed: _onEndMatchPressed,
+                            child: const Text(
+                              'END MATCH',
+                              style: TextStyle(
+                                color: AppColors.red,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          )
+                        else
+                          const SizedBox(width: 48),
                       ],
                     ),
                     const SizedBox(height: 12),
