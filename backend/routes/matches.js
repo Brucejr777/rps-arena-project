@@ -213,6 +213,27 @@ function createMatchesRouter(pool, wss) {
             client.send(message);
           }
         });
+
+        // T101: send dedicated match_completed event when match finishes
+        if (matchFinished) {
+          const completedPayload = {
+            type: 'match_completed',
+            matchId: parseInt(matchId),
+            winnerId: matchWinner,
+            playerAScore,
+            playerBScore,
+            drawCount: newDrawCount,
+            totalRounds: newTotalRounds,
+            formatType: match.format_type,
+            winsRequired: match.wins_required,
+          };
+          const completedMsg = JSON.stringify(completedPayload);
+          wss.clients.forEach((client) => {
+            if (client.readyState === 1) {
+              client.send(completedMsg);
+            }
+          });
+        }
       }
 
       res.json(eventPayload);
