@@ -69,7 +69,7 @@ class _ConnectionLostScreenState extends State<ConnectionLostScreen>
   String get _countdownDisplay {
     final minutes = _remainingSeconds ~/ 60;
     final seconds = _remainingSeconds % 60;
-    return '\${minutes.toString().padLeft(2, '0')}:\${seconds.toString().padLeft(2, '0')}';
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   @override
