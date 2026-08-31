@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/match/widgets/theme_background.dart';
 import '../../features/settings/settings_repository.dart';
+import '../services/audio_service.dart';
+
 
 class GameThemeController extends Notifier<GameTheme> {
   @override
@@ -8,14 +10,17 @@ class GameThemeController extends Notifier<GameTheme> {
     _loadInitial();
     return GameTheme.normal;
   }
+  
 
   Future<void> _loadInitial() async {
     final settings = await SettingsRepository().load();
     state = settings.theme == 'Space' ? GameTheme.space : GameTheme.normal;
+    AudioService.instance.setTheme(audioFolder);
   }
 
   Future<void> setTheme(String name) async {
     state = name == 'Space' ? GameTheme.space : GameTheme.normal;
+    AudioService.instance.setTheme(audioFolder); // keep AudioService in sync
     final repo = SettingsRepository();
     final current = await repo.load();
     await repo.save(current.copyWith(theme: name));

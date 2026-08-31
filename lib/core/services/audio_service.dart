@@ -11,32 +11,41 @@ class AudioService {
   double _masterVolume = 1.0;
   double _musicVolume = 0.7;
   double _sfxVolume = 0.9;
+  String _themeFolder = 'normal'; // 'normal' or 'space'
 
-  /// Call this once at app startup (and whenever settings change) to
-  /// keep AudioService's volume levels in sync with saved preferences.
   Future<void> refreshVolumesFromSettings() async {
     final settings = await SettingsRepository().load();
     _masterVolume = settings.masterVolume;
     _musicVolume = settings.musicVolume;
     _sfxVolume = settings.soundEffectsVolume;
+    _themeFolder = settings.theme == 'Space' ? 'space' : 'normal';
     await _musicPlayer.setVolume(_masterVolume * _musicVolume);
+  }
+
+  /// Call this whenever the active Game Theme changes so subsequent
+  /// sound effects and music use the correct theme's audio files.
+  void setTheme(String themeFolder) {
+    _themeFolder = themeFolder;
   }
 
   Future<void> playSound(String assetName) async {
     try {
       await _sfxPlayer.setVolume(_masterVolume * _sfxVolume);
-      await _sfxPlayer.play(AssetSource('audio/normal/normal_$assetName.mp3'));
+      await _sfxPlayer.play(
+        AssetSource('audio/$_themeFolder/${_themeFolder}_$assetName.mp3'),
+      );
     } catch (_) {
       // Asset not yet available — ignore silently.
     }
   }
 
-  Future<void> playMusic(String themeFolder) async {
+  Future<void> playMusic([String? themeFolder]) async {
+    final folder = themeFolder ?? _themeFolder;
     try {
       await _musicPlayer.setReleaseMode(ReleaseMode.loop);
       await _musicPlayer.setVolume(_masterVolume * _musicVolume);
       await _musicPlayer.play(
-        AssetSource('audio/$themeFolder/${themeFolder}_music.mp3'),
+        AssetSource('audio/$folder/${folder}_music.mp3'),
       );
     } catch (_) {
       // Asset not yet available — ignore silently.
