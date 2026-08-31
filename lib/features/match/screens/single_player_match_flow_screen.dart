@@ -18,6 +18,7 @@ import '../widgets/final_finish_animation.dart';
 import '../widgets/draw_animation.dart';
 import '../../settings/settings_repository.dart';
 import '../../../core/services/vibration_service.dart';
+import '../../../core/services/audio_service.dart';
 
 enum _SpFlowStage { 
   countdown,
@@ -56,6 +57,7 @@ class _SinglePlayerMatchFlowScreenState
   @override
   void initState() {
     super.initState();
+    AudioService.instance.stopMusic();
     _engine = MatchEngine(widget.format);
     _startRound();
     _loadVictoryAnimationSetting();
@@ -72,6 +74,8 @@ class _SinglePlayerMatchFlowScreenState
   void dispose() {
     _countdownTimer?.cancel();
     super.dispose();
+    AudioService.instance.playMusic(); // resume menu music when leaving a match
+
   }
 
   void _startRound() {

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/services/audio_service.dart';
 
-class MainMenuScreen extends StatelessWidget {
-  final bool isSignedIn; // guest vs signed-in — drives PROFILE visibility
+class MainMenuScreen extends StatefulWidget {
+  final bool isSignedIn;
   final VoidCallback onSinglePlayer;
   final VoidCallback onTwoPlayers;
   final VoidCallback onMultiplayer;
@@ -21,8 +22,18 @@ class MainMenuScreen extends StatelessWidget {
     required this.onProfile,
   });
 
-  Widget _menuButton(String label, VoidCallback onPressed,
-      {bool primary = false}) {
+  @override
+  State<MainMenuScreen> createState() => _MainMenuScreenState();
+}
+
+class _MainMenuScreenState extends State<MainMenuScreen> {
+  @override
+  void initState() {
+    super.initState();
+    AudioService.instance.playMusic();
+  }
+
+  Widget _menuButton(String label, VoidCallback onPressed, {bool primary = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: SizedBox(
@@ -88,12 +99,12 @@ class MainMenuScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 48),
-              _menuButton('SINGLE PLAYER', onSinglePlayer, primary: true),
-              _menuButton('2 PLAYERS', onTwoPlayers),
-              _menuButton('MULTIPLAYER', onMultiplayer),
-              _menuButton('LEADERBOARD', onLeaderboard),
-              _menuButton('SETTINGS', onSettings),
-              if (isSignedIn) _menuButton('PROFILE', onProfile),
+              _menuButton('SINGLE PLAYER', widget.onSinglePlayer, primary: true),
+              _menuButton('2 PLAYERS', widget.onTwoPlayers),
+              _menuButton('MULTIPLAYER', widget.onMultiplayer),
+              _menuButton('LEADERBOARD', widget.onLeaderboard),
+              _menuButton('SETTINGS', widget.onSettings),
+              if (widget.isSignedIn) _menuButton('PROFILE', widget.onProfile),
               const Spacer(),
             ],
           ),
