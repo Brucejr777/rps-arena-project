@@ -9,6 +9,7 @@
 const { Router } = require('express');
 const { requireAuth } = require('../lib/auth_middleware');
 const { matchQueue } = require('../lib/match_queue');
+const { readyUpManager } = require('../lib/ready_up_manager');
 
 function createQuickMatchRouter(pool) {
   const router = Router();
@@ -60,6 +61,15 @@ function createQuickMatchRouter(pool) {
 
         const matchId = matchResult.rows[0].match_id;
 
+        // Start the ready-up countdown (T89)
+        readyUpManager.startReadyUp({
+          matchId,
+          playerA: { playerId: player1.playerId, username: player1.username, rating: player1.rating },
+          playerB: { playerId: player2.playerId, username: player2.username, rating: player2.rating },
+          formatType,
+          winsRequired,
+        });
+
         res.json({
           status: 'matched',
           matchId,
@@ -107,24 +117,37 @@ function createQuickMatchRouter(pool) {
         return res.status(400).json({ error: 'matchId is required.' });
       }
 
-      // Verify the player is part of this match
-      const matchResult = await pool.query(
-        'SELECT player_a_id, player_b_id FROM match WHERE match_id = $1',
-        [matchId]
-      );
-
-      if (matchResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Match not found.' });
+      // Verify the player is part of this match via the pending ready-up
+      const pending = readyUpManager.getPendingMatch(playerId);
+      if (!pending || pending.matchId !== matchId) {
+        // Also check the database for already-confirmed matches
+        const matchResult = await pool.query(
+          'SELECT player_a_id, player_b_id FROM match WHERE match_id = $1',
+          [matchId]
+        );
+        if (matchResult.rows.length === 0) {
+          return res.status(404).json({ error: 'Match not found.' });
+        }
+        const match = matchResult.rows[0];
+        if (match.player_a_id !== playerId && match.player_b_id !== playerId) {
+          return res.status(403).json({ error: 'You are not part of this match.' });
+        }
+        return res.json({ status: 'already_confirmed', matchId });
       }
 
-      const match = matchResult.rows[0];
-      if (match.player_a_id !== playerId && match.player_b_id !== playerId) {
-        return res.status(403).json({ error: 'You are not part of this match.' });
+      const result = readyUpManager.playerReady(matchId, playerId);
+
+      if (result.status === 'not_found' || result.status === 'not_participant') {
+        return res.status(400).json({ error: 'Invalid ready-up request.' });
       }
 
-      // TODO T89: implement full ready-up tracking with 15s timeout
-      // For now, acknowledge readiness
-      res.json({ status: 'ready', matchId });
+      if (result.status === 'confirmed') {
+        return res.json({ status: 'confirmed', matchId, message: 'Both players ready. Match starting!' });
+      }
+
+      // Still waiting for the other player
+      const opponent = readyUpManager.getOpponent(matchId, playerId);
+      res.json({ status: 'waiting', matchId, opponentName: opponent?.username });
     } catch (err) {
       console.error('Quick match ready error:', err);
       res.status(500).json({ error: 'Internal server error.' });
