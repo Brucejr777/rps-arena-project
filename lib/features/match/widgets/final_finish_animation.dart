@@ -1,0 +1,154 @@
+import 'package:flutter/material.dart';
+import '../../../core/theme/app_colors.dart';
+import 'theme_background.dart';
+
+class FinalFinishAnimation extends StatefulWidget {
+  final String winningMove;
+  final String losingMove;
+  final GameTheme theme;
+  final String Function(String move) handAssetFor;
+
+  const FinalFinishAnimation({
+    super.key,
+    required this.winningMove,
+    required this.losingMove,
+    required this.theme,
+    required this.handAssetFor,
+  });
+
+  @override
+  State<FinalFinishAnimation> createState() => _FinalFinishAnimationState();
+}
+
+class _FinalFinishAnimationState extends State<FinalFinishAnimation>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _winnerScale;
+  late Animation<double> _winnerRotation;
+  late Animation<double> _loserSlide;
+  late Animation<double> _loserOpacity;
+  late Animation<double> _glowPulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3), // maximum duration three seconds
+    );
+
+    // Winner: "stylized impact" (Normal) / "energy attack" (Space) — a
+    // strong pop with a slight rotation, then settles into a victory pose.
+    _winnerScale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 1.5)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 25,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.5, end: 1.2)
+            .chain(CurveTween(curve: Curves.elasticOut)),
+        weight: 75,
+      ),
+    ]).animate(_controller);
+
+    _winnerRotation = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 0.08), weight: 25),
+      TweenSequenceItem(tween: Tween(begin: 0.08, end: 0.0), weight: 75),
+    ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+    // Loser: "knocked backward" / "powers down" — slides away and fades
+    // over the first half of the timeline.
+    _loserSlide = Tween<double>(begin: 0, end: 80).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+      ),
+    );
+    _loserOpacity = Tween<double>(begin: 1.0, end: 0.15).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+      ),
+    );
+
+    // Continuous soft glow pulse behind the winner for the victory pose.
+    _glowPulse = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.4, end: 0.9), weight: 50),
+      TweenSequenceItem(tween: Tween(begin: 0.9, end: 0.4), weight: 50),
+    ]).animate(CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.4, 1.0, curve: Curves.easeInOut),
+    ));
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Color get _glowColor =>
+      widget.theme == GameTheme.space ? AppColors.secondaryAccent : AppColors.defaultAccent;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Transform.rotate(
+              angle: _winnerRotation.value,
+              child: Transform.scale(
+                scale: _winnerScale.value,
+                child: Container(
+                  width: 130,
+                  height: 130,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _glowColor.withValues(alpha: _glowPulse.value),
+                        blurRadius: 32,
+                        spreadRadius: 4,
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Image.asset(
+                    widget.handAssetFor(widget.winningMove),
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+            Opacity(
+              opacity: _loserOpacity.value,
+              child: Transform.translate(
+                offset: Offset(_loserSlide.value, 0),
+                child: Container(
+                  width: 90,
+                  height: 90,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  padding: const EdgeInsets.all(12),
+                  child: Image.asset(
+                    widget.handAssetFor(widget.losingMove),
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
