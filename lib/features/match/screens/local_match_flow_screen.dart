@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/game_theme_controller.dart';
 import '../widgets/theme_background.dart';
 import '../widgets/reveal_animation.dart';
+import '../widgets/round_victory_animation.dart';
 
 enum _LocalFlowStage {
   countdown,
@@ -204,30 +205,27 @@ Widget _buildStageContent() {
                   ),
                 ),
                 const SizedBox(height: 24),
-                if (_engine.playerAMove != null && _engine.playerBMove != null)
-                  RevealAnimation(
-                    playerAMove: _engine.playerAMove!,
-                    playerBMove: _engine.playerBMove!,
-                    handAssetFor: themeController.handAssetFor,
-                  ),
-                const SizedBox(height: 24),
-                Text(
-                  '${_engine.playerAScore} - ${_engine.playerBScore}',
-                  style: const TextStyle(
-                    color: AppColors.primaryText,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _resultLabel(),
-                  style: const TextStyle(
-                    color: AppColors.defaultAccent,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                if (_engine.lastResult == RoundResult.playerAWin ||
+                      _engine.lastResult == RoundResult.playerBWin)
+                    RoundVictoryAnimation(
+                      winningMove: _engine.lastResult == RoundResult.playerAWin
+                          ? _engine.playerAMove!
+                          : _engine.playerBMove!,
+                      losingMove: _engine.lastResult == RoundResult.playerAWin
+                          ? _engine.playerBMove!
+                          : _engine.playerAMove!,
+                      theme: ref.watch(gameThemeProvider),
+                      handAssetFor: themeController.handAssetFor,
+                    )
+                  else
+                    Text(
+                      _resultLabel(),
+                      style: const TextStyle(
+                        color: AppColors.defaultAccent,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
               ],
             ),
           ),
