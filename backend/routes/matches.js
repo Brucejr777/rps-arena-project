@@ -437,6 +437,82 @@ function createMatchesRouter(pool, wss) {
     }
   });
 
+  // ── POST /matches/:matchId/quit (T106) ────────────────────
+  router.post('/:matchId/quit', async (req, res) => {
+    try {
+      const { playerId } = req.player;
+      const { matchId } = req.params;
+
+      // Fetch match
+      const matchResult = await pool.query(
+        'SELECT * FROM match WHERE match_id = $1',
+        [matchId]
+      );
+
+      if (matchResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Match not found.' });
+      }
+
+      const match = matchResult.rows[0];
+
+      // Match must not already be finished
+      if (match.winner_id || match.match_draw) {
+        return res.status(400).json({ error: 'Match is already finished.' });
+      }
+
+      // Verify player is in this match
+      const isPlayerA = match.player_a_id === playerId;
+      const isPlayerB = match.player_b_id === playerId;
+      if (!isPlayerA && !isPlayerB) {
+        return res.status(403).json({ error: 'You are not part of this match.' });
+      }
+
+      // Must be a ranked match to use quit penalty
+      if (match.mode !== 'ranked') {
+        return res.status(400).json({ error: 'Quit penalty only applies to ranked matches.' });
+      }
+
+      // Determine winner (opponent) and loser (quitter)
+      const winnerId = isPlayerA ? match.player_b_id : match.player_a_id;
+      const loserId = playerId;
+
+      // Update match: set winner, increment total rounds for record
+      await pool.query(
+        'UPDATE match SET winner_id = $1, total_rounds = total_rounds + 1 WHERE match_id = $2',
+        [winnerId, matchId]
+      );
+
+      // Send match_completed via WebSocket
+      if (wss) {
+        const completedPayload = {
+          type: 'match_completed',
+          matchId: parseInt(matchId),
+          winnerId,
+          reason: 'quit',
+          message: 'Opponent quit the match.',
+          formatType: match.format_type,
+          winsRequired: match.wins_required,
+        };
+        const completedMsg = JSON.stringify(completedPayload);
+        wss.clients.forEach((client) => {
+          if (client.readyState === 1) {
+            client.send(completedMsg);
+          }
+        });
+      }
+
+      res.json({
+        matchId: parseInt(matchId),
+        winnerId,
+        loserId,
+        message: 'Match quit. Loss recorded.',
+      });
+    } catch (err) {
+      console.error('Match quit error:', err);
+      res.status(500).json({ error: 'Internal server error.' });
+    }
+  });
+
   // ── Round timeout handler (T100) ─────────────────────────────
   roundTimeoutManager.onTimeout(async ({ matchId, roundNumber, playerId, isPlayerA, autoMove }) => {
     try {
