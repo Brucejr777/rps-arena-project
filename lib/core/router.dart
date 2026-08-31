@@ -6,6 +6,7 @@ import '../features/online/screens/quick_match_setup_screen.dart';
 import '../features/online/screens/quick_match_searching_screen.dart';
 import '../features/online/screens/opponent_found_screen.dart';
 import '../features/online/screens/private_room_create_screen.dart';
+import '../features/online/screens/private_room_join_screen.dart';
 import '../features/home/splash_screen.dart';
 import '../features/home/main_menu_screen.dart';
 import '../features/match/screens/single_player_setup_screen.dart';
@@ -180,6 +181,16 @@ final GoRouter appRouter = GoRouter(
           onCancel: () => context.go('/main'),
         );
       },
+    ),
+    GoRoute(
+      path: '/private-room-join',
+      builder: (context, state) => PrivateRoomJoinScreen(
+        onJoin: (code) async {
+          // TODO T93: call POST /rooms/join with the code
+          return null;
+        },
+        onCancel: () => context.go('/main'),
+      ),
     ),
     GoRoute(
       path: '/login',
