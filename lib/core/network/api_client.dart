@@ -50,7 +50,7 @@ class AuthClient {
   static const refreshTokenKey = 'refresh_token';
 
   AuthClient({
-    String baseUrl = 'https://rps-arena-api.onrender.com',
+    String baseUrl = 'https://rps-arena-project-3.onrender.com',
     TokenStorage? storage,
     Dio? dio,
   })  : _storage = storage ?? SecureTokenStorage(),
