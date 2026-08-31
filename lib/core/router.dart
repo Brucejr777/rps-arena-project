@@ -17,6 +17,7 @@ import '../features/settings/screens/data_screen.dart';
 import '../features/stats/screens/view_statistics_screen.dart';
 import 'package:flutter/material.dart';
 import '../features/settings/screens/gameplay_settings_screen.dart';
+import '../features/settings/screens/audio_settings_screen.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
@@ -87,9 +88,7 @@ final GoRouter appRouter = GoRouter(
       path: '/settings',
       builder: (context, state) => SettingsHomeScreen(
         onAppearance: () => context.push('/settings/appearance'),
-        onAudio: () {
-          // TODO T72: navigate to Audio settings once it exists
-        },
+        onAudio: () => context.push('/settings/audio'),
         onGameplay: () => context.push('/settings/gameplay'),
         onData: () => context.push('/settings/data'),
       ),
@@ -121,6 +120,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/gameplay',
       builder: (context, state) => const GameplaySettingsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/audio',
+      builder: (context, state) => const AudioSettingsScreen(),
     ),
   ],
 );
