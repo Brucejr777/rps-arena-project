@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import '../features/auth/screens/login_screen.dart';
 import '../features/home/splash_screen.dart';
 import '../features/home/main_menu_screen.dart';
 import '../features/match/screens/single_player_setup_screen.dart';
@@ -124,6 +125,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/audio',
       builder: (context, state) => const AudioSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/login',
+      builder: (context, state) => const LoginScreen(),
     ),
   ],
 );
