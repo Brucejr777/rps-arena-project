@@ -75,6 +75,7 @@ flutter:
     - assets/images/normal/
     - assets/images/space/
     - assets/audio/normal/
+    - assets/audio/space/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
