@@ -16,6 +16,7 @@ import '../widgets/reveal_animation.dart';
 import '../widgets/round_victory_animation.dart';
 import '../widgets/final_finish_animation.dart';
 import '../widgets/draw_animation.dart';
+import '../../settings/settings_repository.dart';
 
 enum _LocalFlowStage {
   countdown,
@@ -43,12 +44,21 @@ class _LocalMatchFlowScreenState
   final LocalStatsRepository _statsRepo = LocalStatsRepository();
   _LocalFlowStage _stage = _LocalFlowStage.countdown;
   Timer? _countdownTimer;
+  bool _victoryAnimationsEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _engine = MatchEngine(widget.format);
     _startRound();
+    _loadVictoryAnimationSetting();
+  }
+
+  Future<void> _loadVictoryAnimationSetting() async {
+    final settings = await SettingsRepository().load();
+    if (mounted) {
+      setState(() => _victoryAnimationsEnabled = settings.victoryAnimationsEnabled);
+    }
   }
 
   @override
@@ -111,7 +121,7 @@ class _LocalMatchFlowScreenState
         break;
     }
 
-    final delay = _isMatchWinningRound
+    final delay = (_isMatchWinningRound && _victoryAnimationsEnabled)
         ? const Duration(seconds: 3)
         : const Duration(seconds: 2);
     Future.delayed(delay, _advanceAfterReveal);
@@ -229,8 +239,22 @@ class _LocalMatchFlowScreenState
                       handAssetFor: themeController.handAssetFor,
                     ),
                   const SizedBox(height: 24),
-                  if (_isMatchWinningRound)
+                  if (_isMatchWinningRound && _victoryAnimationsEnabled)
                     FinalFinishAnimation(
+                      winningMove: _engine.lastResult == RoundResult.playerAWin
+                          ? _engine.playerAMove!
+                          : _engine.playerBMove!,
+                      losingMove: _engine.lastResult == RoundResult.playerAWin
+                          ? _engine.playerBMove!
+                          : _engine.playerAMove!,
+                      theme: ref.watch(gameThemeProvider),
+                      handAssetFor: themeController.handAssetFor,
+                    )
+                  else if (_isMatchWinningRound && !_victoryAnimationsEnabled)
+                    const SizedBox.shrink() // match result displays immediately, no animation
+                  else if (_engine.lastResult == RoundResult.playerAWin ||
+                      _engine.lastResult == RoundResult.playerBWin)
+                    RoundVictoryAnimation(
                       winningMove: _engine.lastResult == RoundResult.playerAWin
                           ? _engine.playerAMove!
                           : _engine.playerBMove!,
@@ -345,14 +369,14 @@ class _LocalMatchFlowScreenState
                 _engine.endUnlimitedMatch();
                 _statsRepo.recordUnlimitedMatchResult(winner: _engine.matchWinner);
 
-                if (_engine.matchWinner != null) {
+                if (_engine.matchWinner != null && _victoryAnimationsEnabled) {
                   setState(() => _stage = _LocalFlowStage.finishing);
                   Future.delayed(const Duration(seconds: 3), () {
-                    if (mounted) {
-                      setState(() => _stage = _LocalFlowStage.roundComplete);
-                    }
+                    if (mounted) setState(() => _stage = _LocalFlowStage.roundComplete);
                   });
                 } else {
+                  // Either a Match Draw, or Victory Animations is OFF — skip straight
+                  // to the result screen.
                   setState(() => _stage = _LocalFlowStage.roundComplete);
                 }
               },
