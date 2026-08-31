@@ -90,7 +90,7 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: AppColors.defaultAccent,
+            activeThumbColor: AppColors.defaultAccent,
           ),
         ],
       ),

@@ -173,7 +173,7 @@ class _GameplaySettingsScreenState extends ConsumerState<GameplaySettingsScreen>
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: AppColors.defaultAccent,
+            activeThumbColor: AppColors.defaultAccent,
           ),
         ],
       ),

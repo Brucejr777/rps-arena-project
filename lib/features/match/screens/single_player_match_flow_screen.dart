@@ -12,7 +12,6 @@ import '../widgets/countdown_animation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/game_theme_controller.dart';
 import '../widgets/theme_background.dart';
-import '../widgets/reveal_animation.dart';
 import '../widgets/round_victory_animation.dart';
 import '../widgets/final_finish_animation.dart';
 import '../widgets/draw_animation.dart';
