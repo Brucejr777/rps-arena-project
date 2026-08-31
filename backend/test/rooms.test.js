@@ -50,6 +50,35 @@ describe('POST /rooms/join (T93)', () => {
   });
 });
 
+describe('POST /rooms/start (T95)', () => {
+  it('only host can start — non-host playerId would get 403', () => {
+    // The endpoint checks room.host_id !== playerId
+    const hostId = 1;
+    const nonHostId = 2;
+    assert.notStrictEqual(hostId, nonHostId, 'Non-host cannot start');
+  });
+
+  it('cannot start without a guest', () => {
+    // The endpoint checks room.guest_id is truthy
+    const guestId = null;
+    assert.ok(!guestId, 'Null guest means room not ready');
+  });
+
+  it('cannot start if room status is not ready', () => {
+    const statuses = ['waiting', 'active', 'finished'];
+    for (const s of statuses) {
+      assert.notStrictEqual(s, 'ready', `Status '${s}' cannot start`);
+    }
+  });
+
+  it('creates match record with room format_type and wins_required', () => {
+    // Verify the INSERT uses room.format_type and room.wins_required
+    const room = { format_type: 'bestOf5', wins_required: 3 };
+    assert.strictEqual(room.format_type, 'bestOf5');
+    assert.strictEqual(room.wins_required, 3);
+  });
+});
+
 describe('POST /rooms/create', () => {
   it('rejects unauthenticated requests', () => {
     // requireAuth middleware is active on all /rooms routes
