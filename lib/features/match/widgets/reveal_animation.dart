@@ -5,12 +5,17 @@ class RevealAnimation extends StatefulWidget {
   final String playerAMove;
   final String playerBMove;
   final String Function(String move) handAssetFor;
+  final String playerALabel;
+  final String playerBLabel;
+
 
   const RevealAnimation({
     super.key,
     required this.playerAMove,
     required this.playerBMove,
     required this.handAssetFor,
+    this.playerALabel = 'PLAYER 1',
+    this.playerBLabel = 'PLAYER 2',
   });
 
   @override
@@ -43,7 +48,7 @@ class _RevealAnimationState extends State<RevealAnimation>
     super.dispose();
   }
 
-  Widget _hand(String move, {required bool fromLeft}) {
+  Widget _hand(String move, {required bool fromLeft, required String label}) {
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -56,22 +61,31 @@ class _RevealAnimationState extends State<RevealAnimation>
           ),
         );
       },
-      child: Container(
-        width: 100,
-        height: 100,
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-          ],
-        ),
-        padding: const EdgeInsets.all(12),
-        child: Image.asset(widget.handAssetFor(move), fit: BoxFit.contain),
+            padding: const EdgeInsets.all(12),
+            child: Image.asset(widget.handAssetFor(move), fit: BoxFit.contain),
+          ),
+        ],
       ),
     );
   }
@@ -81,7 +95,7 @@ class _RevealAnimationState extends State<RevealAnimation>
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _hand(widget.playerAMove, fromLeft: true),
+        _hand(widget.playerAMove, fromLeft: true, label: widget.playerALabel),
         Text(
           'VS',
           style: TextStyle(
@@ -90,7 +104,7 @@ class _RevealAnimationState extends State<RevealAnimation>
             fontSize: 18,
           ),
         ),
-        _hand(widget.playerBMove, fromLeft: false),
+        _hand(widget.playerBMove, fromLeft: false, label: widget.playerBLabel),
       ],
     );
   }

@@ -12,7 +12,7 @@ import '../widgets/countdown_animation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/game_theme_controller.dart';
 import '../widgets/theme_background.dart';
-// import '../widgets/reveal_animation.dart';
+import '../widgets/reveal_animation.dart';
 import '../widgets/round_victory_animation.dart';
 import '../widgets/final_finish_animation.dart';
 
@@ -172,16 +172,23 @@ class _SinglePlayerMatchFlowScreenState
                 style: TextStyle(color: Colors.white70)),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _countdownTimer?.cancel();
-              _engine.endUnlimitedMatch();
-              _statsRepo.recordUnlimitedMatchResult(winner: _engine.matchWinner);
+          onPressed: () {
+            Navigator.of(context).pop();
+            _countdownTimer?.cancel();
+            _engine.endUnlimitedMatch();
+            _statsRepo.recordUnlimitedMatchResult(winner: _engine.matchWinner);
+
+            if (_engine.matchWinner != null) {
+              setState(() => _stage = _SpFlowStage.finishing);
+              Future.delayed(const Duration(seconds: 3), () {
+                if (mounted) setState(() => _stage = _SpFlowStage.roundComplete);
+              });
+            } else {
               setState(() => _stage = _SpFlowStage.roundComplete);
-            },
-            child: const Text('END MATCH',
-                style: TextStyle(color: AppColors.red)),
-          ),
+            }
+          },
+          child: const Text('END MATCH', style: TextStyle(color: AppColors.red)),
+        ),
         ],
       ),
     );
@@ -219,23 +226,7 @@ Widget build(BuildContext context) {
             right: 16,
             child: SafeArea(
               child: TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _countdownTimer?.cancel();
-                  _engine.endUnlimitedMatch();
-                  _statsRepo.recordUnlimitedMatchResult(winner: _engine.matchWinner);
-
-                  if (_engine.matchWinner != null) {
-                    // Has a winner (not a Match Draw) — show finishing animation first.
-                    setState(() => _stage = _SpFlowStage.finishing);
-                    Future.delayed(const Duration(seconds: 3), () {
-                      if (mounted) setState(() => _stage = _SpFlowStage.roundComplete);
-                    });
-                  } else {
-                    // Unlimited Match Draw: no finishing animation.
-                    setState(() => _stage = _SpFlowStage.roundComplete);
-                  }
-                },
+                onPressed: _onEndMatchPressed,
                 child: const Text(
                   'END MATCH',
                   style: TextStyle(
@@ -279,7 +270,7 @@ Widget build(BuildContext context) {
           ),
         );
 
-      case _SpFlowStage.revealing:
+        case _SpFlowStage.revealing:
         final themeController = ref.read(gameThemeProvider.notifier);
         return Scaffold(
           backgroundColor: AppColors.background,
@@ -287,6 +278,15 @@ Widget build(BuildContext context) {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                if (_engine.playerAMove != null && _engine.playerBMove != null)
+                  RevealAnimation(
+                    playerAMove: _engine.playerAMove!,
+                    playerBMove: _engine.playerBMove!,
+                    handAssetFor: themeController.handAssetFor,
+                    playerALabel: 'YOU',
+                    playerBLabel: 'OPPONENT',
+                  ),
+                const SizedBox(height: 24),
                 if (_isMatchWinningRound)
                   FinalFinishAnimation(
                     winningMove: _engine.lastResult == RoundResult.playerAWin
