@@ -4,6 +4,7 @@ import '../features/auth/screens/register_screen.dart';
 import '../features/online/screens/multiplayer_screen.dart';
 import '../features/online/screens/quick_match_setup_screen.dart';
 import '../features/online/screens/quick_match_searching_screen.dart';
+import '../features/online/screens/opponent_found_screen.dart';
 import '../features/home/splash_screen.dart';
 import '../features/home/main_menu_screen.dart';
 import '../features/match/screens/single_player_setup_screen.dart';
@@ -140,6 +141,20 @@ final GoRouter appRouter = GoRouter(
         return QuickMatchSearchingScreen(
           formatLabel: args['formatLabel'] as String? ?? 'BEST OF 3',
           rating: args['rating'] as int? ?? 1000,
+          onCancel: () => context.go('/main'),
+        );
+      },
+    ),
+    GoRoute(
+      path: '/opponent-found',
+      builder: (context, state) {
+        final args = state.extra as Map<String, dynamic>? ?? {};
+        return OpponentFoundScreen(
+          opponentName: args['opponentName'] as String? ?? 'Unknown',
+          opponentRating: args['opponentRating'] as int? ?? 1000,
+          onReady: () {
+            // TODO T89: call POST /quick-match/ready
+          },
           onCancel: () => context.go('/main'),
         );
       },
