@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { WebSocketServer } = require('ws');
 const { Pool } = require('pg');
 const { createAuthRouter } = require('./routes/auth');
@@ -159,9 +161,26 @@ async function handleDisconnect(matchId, playerId) {
   }
 }
 
+// Auto-initialize database schema on startup
+async function initDatabase() {
+  try {
+    const schemaPath = path.join(__dirname, 'schema.sql');
+    const schema = fs.readFileSync(schemaPath, 'utf8');
+    const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    for (const stmt of statements) {
+      await pool.query(stmt);
+    }
+    console.log(`Database initialized: ${statements.length} tables created/verified.`);
+  } catch (err) {
+    console.error('Database init error:', err.message);
+  }
+}
+
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
-  server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  initDatabase().then(() => {
+    server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  });
 }
 
 module.exports = { app, pool, server, wss, matchConnections };
