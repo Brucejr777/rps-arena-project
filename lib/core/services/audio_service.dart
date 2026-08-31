@@ -10,9 +10,9 @@ class AudioService {
   /// Safe no-op if the asset doesn't exist yet — assets are added in T70/T71.
   Future<void> playSound(String assetName) async {
     try {
-      await _player.play(AssetSource('audio/normal/$assetName.mp3'));
+      await _player.play(AssetSource('audio/normal/normal_$assetName.mp3'));
     } catch (_) {
-      // Asset not yet available — ignore silently until T70 adds sound files.
+      // Asset not yet available — ignore silently.
     }
   }
 }
