@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import 'theme_background.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/animation_speed_controller.dart';
 
-class CountdownAnimation extends StatefulWidget {
-  final int value; // 3, 2, 1, or 0 (0 means "GO!")
+class CountdownAnimation extends ConsumerStatefulWidget {
+  final int value;
   final GameTheme theme;
 
   const CountdownAnimation({
@@ -13,11 +15,11 @@ class CountdownAnimation extends StatefulWidget {
   });
 
   @override
-  State<CountdownAnimation> createState() => _CountdownAnimationState();
+  ConsumerState<CountdownAnimation> createState() => _CountdownAnimationState();
 }
 
-class _CountdownAnimationState extends State<CountdownAnimation>
-    with SingleTickerProviderStateMixin {
+class _CountdownAnimationState extends ConsumerState<CountdownAnimation>
+  with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   late Animation<double> _opacityAnimation;
@@ -25,9 +27,12 @@ class _CountdownAnimationState extends State<CountdownAnimation>
   @override
   void initState() {
     super.initState();
+    final speedMultiplier = ref.read(animationSpeedProvider);
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 1),
+      duration: Duration(
+        milliseconds: (1000 * speedMultiplier).round(),
+      ),
     );
     _setupAnimation();
     _controller.forward();

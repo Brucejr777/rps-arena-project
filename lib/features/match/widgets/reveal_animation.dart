@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/animation_speed_controller.dart';
 
-class RevealAnimation extends StatefulWidget {
+class RevealAnimation extends ConsumerStatefulWidget  {
   final String playerAMove;
   final String playerBMove;
   final String Function(String move) handAssetFor;
@@ -19,10 +21,10 @@ class RevealAnimation extends StatefulWidget {
   });
 
   @override
-  State<RevealAnimation> createState() => _RevealAnimationState();
+  ConsumerState<RevealAnimation> createState() => _RevealAnimationState();
 }
 
-class _RevealAnimationState extends State<RevealAnimation>
+class _RevealAnimationState extends ConsumerState<RevealAnimation>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _slideAnimation;
@@ -31,9 +33,12 @@ class _RevealAnimationState extends State<RevealAnimation>
   @override
   void initState() {
     super.initState();
+    final speedMultiplier = ref.read(animationSpeedProvider);
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 1),
+      duration: Duration(
+        milliseconds: (1000 * speedMultiplier).round(),
+    ), 
     );
     _slideAnimation = Tween<double>(begin: 60, end: 0)
         .animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));

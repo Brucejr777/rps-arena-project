@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import 'theme_background.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/animation_speed_controller.dart';
 
-class FinalFinishAnimation extends StatefulWidget {
+class FinalFinishAnimation extends ConsumerStatefulWidget  {
   final String winningMove;
   final String losingMove;
   final GameTheme theme;
@@ -17,10 +19,10 @@ class FinalFinishAnimation extends StatefulWidget {
   });
 
   @override
-  State<FinalFinishAnimation> createState() => _FinalFinishAnimationState();
+  ConsumerState<FinalFinishAnimation> createState() => _FinalFinishAnimationState();
 }
 
-class _FinalFinishAnimationState extends State<FinalFinishAnimation>
+class _FinalFinishAnimationState extends ConsumerState<FinalFinishAnimation>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _winnerScale;
@@ -32,9 +34,12 @@ class _FinalFinishAnimationState extends State<FinalFinishAnimation>
   @override
   void initState() {
     super.initState();
+    final speedMultiplier = ref.read(animationSpeedProvider);
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3), // maximum duration three seconds
+       duration: Duration(
+        milliseconds: (3000 * speedMultiplier).round(),
+      ),// maximum duration three seconds
     );
 
     // Winner: "stylized impact" (Normal) / "energy attack" (Space) — a

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/game_theme_controller.dart';
 import 'theme_background.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/animation_speed_controller.dart';
 
 
-class RoundVictoryAnimation extends StatefulWidget {
+class RoundVictoryAnimation extends ConsumerStatefulWidget  {
   final String winningMove;
   final String losingMove;
   final GameTheme theme;
@@ -19,11 +20,11 @@ class RoundVictoryAnimation extends StatefulWidget {
   });
 
   @override
-  State<RoundVictoryAnimation> createState() => _RoundVictoryAnimationState();
+  ConsumerState<RoundVictoryAnimation> createState() => _RoundVictoryAnimationState();
 }
 
-class _RoundVictoryAnimationState extends State<RoundVictoryAnimation>
-    with SingleTickerProviderStateMixin {
+class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
+  with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _winnerScale;
   late Animation<double> _loserSlide;
@@ -32,9 +33,12 @@ class _RoundVictoryAnimationState extends State<RoundVictoryAnimation>
   @override
   void initState() {
     super.initState();
+    final speedMultiplier = ref.read(animationSpeedProvider);
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2), // maximum duration two seconds
+      duration: Duration(
+      milliseconds: (2000 * speedMultiplier).round(),
+    ),// maximum duration two seconds
     );
 
     // Winning hand performs a themed "impact" — a confident pop/pulse.

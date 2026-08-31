@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../settings_repository.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/animation_speed_controller.dart';
 
-class GameplaySettingsScreen extends StatefulWidget {
+class GameplaySettingsScreen extends ConsumerStatefulWidget {
   const GameplaySettingsScreen({super.key});
 
   @override
-  State<GameplaySettingsScreen> createState() =>
+  ConsumerState<GameplaySettingsScreen> createState() =>
       _GameplaySettingsScreenState();
 }
 
-class _GameplaySettingsScreenState extends State<GameplaySettingsScreen> {
+class _GameplaySettingsScreenState extends ConsumerState<GameplaySettingsScreen> {
   final SettingsRepository _repository = SettingsRepository();
   AppSettings? _settings;
 
@@ -28,6 +30,7 @@ class _GameplaySettingsScreenState extends State<GameplaySettingsScreen> {
   Future<void> _update(AppSettings updated) async {
     setState(() => _settings = updated);
     await _repository.save(updated);
+    ref.read(animationSpeedProvider.notifier).refreshFrom(updated);
   }
 
   Widget _sectionLabel(String text) {

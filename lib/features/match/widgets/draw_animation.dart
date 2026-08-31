@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import 'theme_background.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/animation_speed_controller.dart';
 
-class DrawAnimation extends StatefulWidget {
+class DrawAnimation extends ConsumerStatefulWidget  {
   final String playerAMove;
   final String playerBMove;
   final GameTheme theme;
@@ -15,20 +17,24 @@ class DrawAnimation extends StatefulWidget {
   });
 
   @override
-  State<DrawAnimation> createState() => _DrawAnimationState();
+  ConsumerState <DrawAnimation> createState() => _DrawAnimationState();
 }
 
-class _DrawAnimationState extends State<DrawAnimation>
-    with SingleTickerProviderStateMixin {
+class _DrawAnimationState extends ConsumerState<DrawAnimation>
+  with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _shake;
 
   @override
   void initState() {
     super.initState();
+    final speedMultiplier = ref.read(animationSpeedProvider);
+
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500), // ~1.5 seconds
+      duration: Duration(
+        milliseconds: (1500 * speedMultiplier).round(),
+      ), // ~1.5 seconds
     );
 
     // Both hands perform a short reaction — a gentle side-to-side shake,
