@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/services/audio_service.dart';
+import '../../core/services/internet_service.dart';
 import '../auth/controllers/auth_controller.dart';
 
 class MainMenuScreen extends ConsumerStatefulWidget {
@@ -38,7 +39,7 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
   }
 
   Widget _menuButton(String label, VoidCallback onPressed,
-      {bool primary = false, bool enabled = true}) {
+      {bool primary = false, bool enabled = true, String? disabledLabel}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: SizedBox(
@@ -89,38 +90,37 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        color: Colors.white30,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppColors.orange.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'ACCOUNT REQUIRED',
-                        style: TextStyle(
-                          color: AppColors.orange,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
+                ),                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            color: Colors.white30,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.0,
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.orange.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            disabledLabel ?? 'ACCOUNT REQUIRED',
+                            style: const TextStyle(
+                              color: AppColors.orange,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
               ),
       ),
     );
@@ -130,6 +130,8 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     final isSignedIn = auth.isSignedIn;
+    final internetService = ref.watch(internetServiceProvider);
+    final isConnected = internetService.isConnected;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -216,9 +218,13 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
               _menuButton('2 PLAYERS', widget.onTwoPlayers),
               _menuButton('SETTINGS', widget.onSettings),
 
-              // Disabled for guests, enabled when signed in
-              _menuButton('MULTIPLAYER', widget.onMultiplayer, enabled: isSignedIn),
-              _menuButton('LEADERBOARD', widget.onLeaderboard, enabled: isSignedIn),
+              // Disabled for guests or when offline
+              _menuButton('MULTIPLAYER', widget.onMultiplayer, 
+                enabled: isSignedIn && isConnected,
+                disabledLabel: !isConnected ? 'INTERNET CONNECTION REQUIRED' : (isSignedIn ? null : 'ACCOUNT REQUIRED')),
+              _menuButton('LEADERBOARD', widget.onLeaderboard, 
+                enabled: isSignedIn && isConnected,
+                disabledLabel: !isConnected ? 'INTERNET CONNECTION REQUIRED' : (isSignedIn ? null : 'ACCOUNT REQUIRED')),
 
               // Profile only visible when signed in
               if (isSignedIn)
