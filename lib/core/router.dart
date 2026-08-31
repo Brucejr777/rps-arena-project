@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/screens/login_screen.dart';
 import '../features/auth/screens/register_screen.dart';
 import '../features/online/screens/multiplayer_screen.dart';
+import '../features/online/screens/quick_match_setup_screen.dart';
 import '../features/home/splash_screen.dart';
 import '../features/home/main_menu_screen.dart';
 import '../features/match/screens/single_player_setup_screen.dart';
@@ -128,11 +129,13 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const AudioSettingsScreen(),
     ),
     GoRoute(
+      path: '/quick-match-setup',
+      builder: (context, state) => const QuickMatchSetupScreen(),
+    ),
+    GoRoute(
       path: '/multiplayer',
       builder: (context, state) => MultiplayerScreen(
-        onQuickMatch: () {
-          // TODO T86: navigate to QuickMatchSetupScreen
-        },
+        onQuickMatch: () => context.push('/quick-match-setup'),
         onPrivateRoom: () {
           // TODO T92: navigate to PrivateRoomCreateScreen
         },
