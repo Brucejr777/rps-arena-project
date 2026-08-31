@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/network/api_client.dart';
+import '../controllers/auth_controller.dart';
 
 /// Register screen (T82).
 ///
@@ -58,11 +58,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     });
 
     try {
-      final client = AuthClient();
-      final result =
-          await client.register(username: username, password: password);
+      final auth = ref.read(authControllerProvider.notifier);
+      final result = await auth.client.register(username: username, password: password);
 
       if (!mounted) return;
+
+      // Update auth state so Main Menu enables online features
+      auth.onLoginSuccess(result);
 
       final player = result['player'] as Map<String, dynamic>?;
       setState(() {
@@ -71,7 +73,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         _isError = false;
       });
 
-      // TODO: navigate to main menu with authenticated state (T84)
+      // Navigate back to main menu after brief delay
+      await Future.delayed(const Duration(seconds: 1));
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
     } catch (e) {
       if (!mounted) return;
 
