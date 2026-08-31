@@ -1,78 +1,125 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/services/audio_service.dart';
+import '../auth/controllers/auth_controller.dart';
 
-class MainMenuScreen extends StatefulWidget {
-  final bool isSignedIn;
+class MainMenuScreen extends ConsumerStatefulWidget {
   final VoidCallback onSinglePlayer;
   final VoidCallback onTwoPlayers;
   final VoidCallback onMultiplayer;
   final VoidCallback onLeaderboard;
   final VoidCallback onSettings;
   final VoidCallback onProfile;
+  final VoidCallback onLogin;
+  final VoidCallback onRegister;
 
   const MainMenuScreen({
     super.key,
-    required this.isSignedIn,
     required this.onSinglePlayer,
     required this.onTwoPlayers,
     required this.onMultiplayer,
     required this.onLeaderboard,
     required this.onSettings,
     required this.onProfile,
+    required this.onLogin,
+    required this.onRegister,
   });
 
   @override
-  State<MainMenuScreen> createState() => _MainMenuScreenState();
+  ConsumerState<MainMenuScreen> createState() => _MainMenuScreenState();
 }
 
-class _MainMenuScreenState extends State<MainMenuScreen> {
+class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
   @override
   void initState() {
     super.initState();
     AudioService.instance.playMusic();
   }
 
-  Widget _menuButton(String label, VoidCallback onPressed, {bool primary = false}) {
+  Widget _menuButton(String label, VoidCallback onPressed,
+      {bool primary = false, bool enabled = true}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: SizedBox(
         width: double.infinity,
-        child: primary
-            ? ElevatedButton(
-                onPressed: onPressed,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.defaultAccent,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-              )
+        child: enabled
+            ? primary
+                ? ElevatedButton(
+                    onPressed: onPressed,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.defaultAccent,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  )
+                : OutlinedButton(
+                    onPressed: onPressed,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.white24),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  )
             : OutlinedButton(
-                onPressed: onPressed,
+                onPressed: null,
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.white24),
+                  side: const BorderSide(color: Colors.white12),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white30,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.orange.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'ACCOUNT REQUIRED',
+                        style: TextStyle(
+                          color: AppColors.orange,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
       ),
@@ -81,6 +128,9 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = ref.watch(authControllerProvider);
+    final isSignedIn = auth.isSignedIn;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -98,13 +148,82 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   letterSpacing: 2,
                 ),
               ),
-              const SizedBox(height: 48),
+              // ── Auth status + Login/Register buttons ────────────
+              if (!isSignedIn) ...[
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: widget.onLogin,
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppColors.defaultAccent),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'LOGIN',
+                          style: TextStyle(
+                            color: AppColors.defaultAccent,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: widget.onRegister,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.defaultAccent,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'REGISTER',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              if (isSignedIn) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Welcome, ${auth.username ?? 'Player'}!',
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 32),
+
+              // ── Menu buttons ────────────────────────────────────
               _menuButton('SINGLE PLAYER', widget.onSinglePlayer, primary: true),
               _menuButton('2 PLAYERS', widget.onTwoPlayers),
-              _menuButton('MULTIPLAYER', widget.onMultiplayer),
-              _menuButton('LEADERBOARD', widget.onLeaderboard),
               _menuButton('SETTINGS', widget.onSettings),
-              if (widget.isSignedIn) _menuButton('PROFILE', widget.onProfile),
+
+              // Disabled for guests, enabled when signed in
+              _menuButton('MULTIPLAYER', widget.onMultiplayer, enabled: isSignedIn),
+              _menuButton('LEADERBOARD', widget.onLeaderboard, enabled: isSignedIn),
+
+              // Profile only visible when signed in
+              if (isSignedIn)
+                _menuButton('PROFILE', widget.onProfile),
+
               const Spacer(),
             ],
           ),

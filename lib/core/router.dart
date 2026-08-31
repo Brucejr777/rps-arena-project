@@ -33,7 +33,6 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/main',
       builder: (context, state) => MainMenuScreen(
-        isSignedIn: false, // TODO: replace with real auth state (T84 etc.)
         onSinglePlayer: () => context.push('/single-player-setup'),
         onTwoPlayers: () => context.push('/local-setup'),
         onMultiplayer: () {
@@ -46,6 +45,8 @@ final GoRouter appRouter = GoRouter(
         onProfile: () {
           // TODO T116: navigate to Player Profile once it exists
         },
+        onLogin: () => context.push('/login'),
+        onRegister: () => context.push('/register'),
       ),
     ),
     GoRoute(
