@@ -17,6 +17,7 @@
 const { Router } = require('express');
 const { requireAuth } = require('../lib/auth_middleware');
 const { resolveRound } = require('../lib/resolution');
+const { roundTimeoutManager } = require('../lib/round_timeout');
 
 const VALID_MOVES = ['rock', 'paper', 'scissors'];
 
@@ -86,6 +87,11 @@ function createMatchesRouter(pool, wss) {
           [matchId, currentRound, isPlayerA ? move : null, isPlayerB ? move : null]
         );
         roundId = insertResult.rows[0].id;
+
+        // Start 10s timeout for the other player (T100)
+        const waitingPlayerId = isPlayerA ? match.player_b_id : match.player_a_id;
+        const waitingIsPlayerA = !isPlayerA;
+        roundTimeoutManager.startTimer(parseInt(matchId), currentRound, waitingPlayerId, waitingIsPlayerA);
       } else {
         // Round exists — check if this player already submitted
         const round = existingRound.rows[0];
@@ -124,7 +130,9 @@ function createMatchesRouter(pool, wss) {
         });
       }
 
-      // Both moves submitted — resolve the round
+      // Both moves submitted — cancel timeout and resolve (T100)
+      roundTimeoutManager.cancelTimer(parseInt(matchId), currentRound);
+
       const result = resolveRound(round.player_a_move, round.player_b_move);
 
       // Update round result
@@ -265,6 +273,103 @@ function createMatchesRouter(pool, wss) {
     } catch (err) {
       console.error('Match state error:', err);
       res.status(500).json({ error: 'Internal server error.' });
+    }
+  });
+
+  // ── Round timeout handler (T100) ─────────────────────────────
+  roundTimeoutManager.onTimeout(async ({ matchId, roundNumber, playerId, isPlayerA, autoMove }) => {
+    try {
+      // Check if round still needs this move
+      const roundResult = await pool.query(
+        `SELECT id, player_a_move, player_b_move FROM round
+         WHERE match_id = $1 AND round_number = $2`,
+        [matchId, roundNumber]
+      );
+
+      if (roundResult.rows.length === 0) return;
+      const round = roundResult.rows[0];
+
+      // Player already submitted — nothing to do
+      if (isPlayerA && round.player_a_move) return;
+      if (!isPlayerA && round.player_b_move) return;
+
+      // Assign random move and mark AUTO
+      if (isPlayerA) {
+        await pool.query(
+          'UPDATE round SET player_a_move = $1, player_a_auto = true WHERE id = $2',
+          [autoMove, round.id]
+        );
+      } else {
+        await pool.query(
+          'UPDATE round SET player_b_move = $1, player_b_auto = true WHERE id = $2',
+          [autoMove, round.id]
+        );
+      }
+
+      // Now resolve the round as if both submitted
+      const updatedRound = await pool.query(
+        'SELECT player_a_move, player_b_move FROM round WHERE id = $1',
+        [round.id]
+      );
+      const r = updatedRound.rows[0];
+      if (!r.player_a_move || !r.player_b_move) return;
+
+      const result = resolveRound(r.player_a_move, r.player_b_move);
+      await pool.query('UPDATE round SET result = $1 WHERE id = $2', [result, round.id]);
+
+      // Fetch match for score calculation
+      const matchResult = await pool.query('SELECT * FROM match WHERE match_id = $1', [matchId]);
+      const match = matchResult.rows[0];
+      if (!match) return;
+
+      // Update match totals
+      const newTotalRounds = match.total_rounds + 1;
+      const newDrawCount = result === 'draw' ? match.draw_count + 1 : match.draw_count;
+      await pool.query(
+        'UPDATE match SET total_rounds = $1, draw_count = $2 WHERE match_id = $3',
+        [newTotalRounds, newDrawCount, matchId]
+      );
+
+      // Calculate scores
+      const aWins = (await pool.query(
+        `SELECT COUNT(*) as c FROM round WHERE match_id = $1 AND result = 'player_a_wins'`, [matchId]
+      )).rows[0].c;
+      const bWins = (await pool.query(
+        `SELECT COUNT(*) as c FROM round WHERE match_id = $1 AND result = 'player_b_wins'`, [matchId]
+      )).rows[0].c;
+
+      // Check match completion
+      let matchFinished = false;
+      let matchWinner = null;
+      if (match.format_type !== 'unlimited') {
+        if (aWins >= match.wins_required) { matchFinished = true; matchWinner = match.player_a_id; }
+        else if (bWins >= match.wins_required) { matchFinished = true; matchWinner = match.player_b_id; }
+      }
+      if (matchFinished) {
+        await pool.query('UPDATE match SET winner_id = $1 WHERE match_id = $2', [matchWinner, matchId]);
+      }
+
+      // Broadcast via WebSocket
+      if (wss) {
+        const event = JSON.stringify({
+          type: 'round_result',
+          matchId,
+          roundNumber,
+          playerAMove: r.player_a_move,
+          playerBMove: r.player_b_move,
+          result,
+          playerAScore: aWins,
+          playerBScore: bWins,
+          drawCount: newDrawCount,
+          totalRounds: newTotalRounds,
+          matchFinished,
+          winnerId: matchWinner,
+          autoMove: true,
+        });
+        wss.clients.forEach((c) => { if (c.readyState === 1) c.send(event); });
+      }
+    } catch (err) {
+      console.error('Round timeout error:', err);
     }
   });
 
