@@ -7,6 +7,7 @@ import '../features/online/screens/quick_match_searching_screen.dart';
 import '../features/online/screens/opponent_found_screen.dart';
 import '../features/online/screens/private_room_create_screen.dart';
 import '../features/online/screens/private_room_join_screen.dart';
+import '../features/online/screens/connection_lost_screen.dart';
 import '../features/home/splash_screen.dart';
 import '../features/home/main_menu_screen.dart';
 import '../features/match/screens/single_player_setup_screen.dart';
@@ -199,6 +200,16 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/register',
       builder: (context, state) => const RegisterScreen(),
+    ),
+    GoRoute(
+      path: '/connection-lost',
+      builder: (context, state) {
+        final args = state.extra as Map<String, dynamic>? ?? {};
+        return ConnectionLostScreen(
+          onReconnect: args['onReconnect'] as VoidCallback?,
+          onExit: args['onExit'] as VoidCallback? ?? () => context.go('/main'),
+        );
+      },
     ),
   ],
 );
