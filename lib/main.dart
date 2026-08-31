@@ -9,14 +9,16 @@ import 'core/router.dart';
 // import 'features/match/screens/unlimited_result_screen.dart';
 // import 'features/home/splash_screen.dart';
 // import 'features/home/main_menu_screen.dart';
+import 'core/services/audio_service.dart';
 
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+  await AudioService.instance.refreshVolumesFromSettings();
   runApp(const ProviderScope(child: MyApp()));
 }
 
