@@ -112,8 +112,13 @@ class _QuickMatchSetupScreenState extends State<QuickMatchSetupScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    // TODO T87/T88: navigate to QuickMatchSearchingScreen
-                    // passing the selected format to start the queue search
+                    context.push(
+                      '/quick-match-searching',
+                      extra: {
+                        'formatLabel': _formatLabel,
+                        'rating': 1000, // TODO: use real player rating from auth state
+                      },
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.defaultAccent,
