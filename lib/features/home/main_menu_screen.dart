@@ -203,12 +203,32 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
               ],
               if (isSignedIn) ...[
                 const SizedBox(height: 16),
-                Text(
-                  'Welcome, ${auth.username ?? 'Player'}!',
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 13,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Welcome, ${auth.username ?? 'Player'}!',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () async {
+                        await ref.read(authControllerProvider.notifier).signOut();
+                      },
+                      child: const Text(
+                        'SIGN OUT',
+                        style: TextStyle(
+                          color: AppColors.orange,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
               const SizedBox(height: 32),
