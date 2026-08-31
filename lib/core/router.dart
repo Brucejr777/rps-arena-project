@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 import '../features/auth/screens/login_screen.dart';
 import '../features/auth/screens/register_screen.dart';
+import '../features/online/screens/multiplayer_screen.dart';
 import '../features/home/splash_screen.dart';
 import '../features/home/main_menu_screen.dart';
 import '../features/match/screens/single_player_setup_screen.dart';
@@ -35,9 +36,7 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => MainMenuScreen(
         onSinglePlayer: () => context.push('/single-player-setup'),
         onTwoPlayers: () => context.push('/local-setup'),
-        onMultiplayer: () {
-          // TODO T85: navigate to MultiplayerScreen once it exists
-        },
+        onMultiplayer: () => context.push('/multiplayer'),
         onLeaderboard: () {
           // TODO T114: navigate to LeaderboardScreen once it exists
         },
@@ -127,6 +126,20 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/audio',
       builder: (context, state) => const AudioSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/multiplayer',
+      builder: (context, state) => MultiplayerScreen(
+        onQuickMatch: () {
+          // TODO T86: navigate to QuickMatchSetupScreen
+        },
+        onPrivateRoom: () {
+          // TODO T92: navigate to PrivateRoomCreateScreen
+        },
+        onRankedMatch: () {
+          // TODO T96: navigate to Ranked Match setup
+        },
+      ),
     ),
     GoRoute(
       path: '/login',
