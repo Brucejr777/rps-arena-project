@@ -285,9 +285,7 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
                               }),
                               const SizedBox(height: 12),
                               _actionButton('ONLINE STATISTICS', () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Online statistics coming soon')),
-                                );
+                                Navigator.of(context).pushNamed('/online-stats');
                               }),
                             ],
                           ),
