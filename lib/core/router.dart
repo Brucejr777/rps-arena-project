@@ -10,6 +10,7 @@ import '../features/online/screens/private_room_join_screen.dart';
 import '../features/online/screens/connection_lost_screen.dart';
 import '../features/online/screens/leaderboard_screen.dart';
 import '../features/online/screens/player_profile_screen.dart';
+import '../features/online/screens/match_history_screen.dart';
 import '../features/home/splash_screen.dart';
 import '../features/home/main_menu_screen.dart';
 import '../features/match/screens/single_player_setup_screen.dart';
@@ -206,6 +207,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/profile',
       builder: (context, state) => const PlayerProfileScreen(),
+    ),
+    GoRoute(
+      path: '/match-history',
+      builder: (context, state) => const MatchHistoryScreen(),
     ),
     GoRoute(
       path: '/connection-lost',

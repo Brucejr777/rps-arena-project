@@ -281,9 +281,7 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
 
                               // ── Action buttons ───────────────
                               _actionButton('MATCH HISTORY', () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Match history coming soon')),
-                                );
+                                Navigator.of(context).pushNamed('/match-history');
                               }),
                               const SizedBox(height: 12),
                               _actionButton('ONLINE STATISTICS', () {
