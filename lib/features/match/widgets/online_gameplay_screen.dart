@@ -11,6 +11,8 @@ import 'move_button.dart';
 import 'pause_exit_overlay.dart';
 import 'reveal_animation.dart';
 import 'countdown_animation.dart';
+import '../screens/standard_result_screen.dart';
+import '../screens/unlimited_result_screen.dart';
 import '../../online/screens/connection_lost_screen.dart';
 
 /// Online gameplay screen (T99).
@@ -108,7 +110,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         _handleMatchCompleted(event.data);
         break;
       case SocketEventType.opponentDisconnected:
-        // TODO T104: navigate to ConnectionLostScreen
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ConnectionLostScreen()),
+        );
         break;
       default:
         break;
@@ -148,8 +152,40 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       });
 
       if (matchFinished) {
-        // Match over — navigate to result screen
-        // TODO: navigate to result screen with match data
+        if (_isUnlimited) {
+          final total = _playerScore + _opponentScore + _drawCount;
+          final p1Rate = total == 0 ? 0.0 : (_playerScore / total) * 100;
+          final p2Rate = total == 0 ? 0.0 : (_opponentScore / total) * 100;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => UnlimitedResultScreen(
+                player1Wins: _playerScore,
+                player2Wins: _opponentScore,
+                draws: _drawCount,
+                totalRounds: total,
+                player1WinRate: p1Rate,
+                player2WinRate: p2Rate,
+                onPlayAgain: () => Navigator.of(context).maybePop(),
+                onMainMenu: () =>
+                    Navigator.of(context).popUntil((route) => route.isFirst),
+              ),
+            ),
+          );
+        } else {
+          final playerWon = _playerScore > _opponentScore;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => StandardResultScreen(
+                playerWon: playerWon,
+                playerScore: _playerScore,
+                opponentScore: _opponentScore,
+                onPlayAgain: () => Navigator.of(context).maybePop(),
+                onMainMenu: () =>
+                    Navigator.of(context).popUntil((route) => route.isFirst),
+              ),
+            ),
+          );
+        }
       } else {
         _currentRound = totalRounds + 1;
         _startRound();
@@ -168,7 +204,24 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           : (data['playerAScore'] as int? ?? 0);
       _drawCount = data['drawCount'] as int? ?? 0;
     });
-    // TODO T103: navigate to UnlimitedResultScreen
+    final total = _playerScore + _opponentScore + _drawCount;
+    final p1Rate = total == 0 ? 0.0 : (_playerScore / total) * 100;
+    final p2Rate = total == 0 ? 0.0 : (_opponentScore / total) * 100;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => UnlimitedResultScreen(
+          player1Wins: _playerScore,
+          player2Wins: _opponentScore,
+          draws: _drawCount,
+          totalRounds: total,
+          player1WinRate: p1Rate,
+          player2WinRate: p2Rate,
+          onPlayAgain: () => Navigator.of(context).maybePop(),
+          onMainMenu: () =>
+              Navigator.of(context).popUntil((route) => route.isFirst),
+        ),
+      ),
+    );
   }
 
   void _startRound() {

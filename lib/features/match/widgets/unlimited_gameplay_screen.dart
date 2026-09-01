@@ -119,14 +119,9 @@ class _UnlimitedGameplayScreenState
                 totalRounds: _engine.totalRounds,
                 player1WinRate: _engine.playerAWinRate,
                 player2WinRate: _engine.playerBWinRate,
-                onPlayAgain: () {
-                  // TODO: reset engine and pop back to gameplay
-                  Navigator.of(context).maybePop();
-                },
-                onMainMenu: () {
-                  // TODO: navigate to MainMenuScreen once it exists (T32)
-                  Navigator.of(context).maybePop();
-                },
+                onPlayAgain: () => Navigator.of(context).maybePop(),
+                onMainMenu: () =>
+                    Navigator.of(context).popUntil((route) => route.isFirst),
               ),
             ),
           );
