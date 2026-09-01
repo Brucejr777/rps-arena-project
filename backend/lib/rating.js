@@ -8,7 +8,7 @@
  *   - Rating floor: 0
  */
 
-const { RATING_WIN, RATING_LOSS, RATING_DRAW, RATING_FLOOR } = require('../routes/ranked');
+const { RATING_WIN, RATING_LOSS, RATING_DRAW, RATING_FLOOR, getRankForRating } = require('../routes/ranked');
 
 /**
  * Calculate rating changes for both players.
@@ -63,9 +63,13 @@ async function applyRatingChanges(pool, matchId, playerAId, playerBId, ratingCha
   const newRatingA = Math.max(RATING_FLOOR, currentRatingA + ratingChangeA);
   const newRatingB = Math.max(RATING_FLOOR, currentRatingB + ratingChangeB);
 
-  // Update account ratings
-  await pool.query('UPDATE account SET rating = $1 WHERE player_id = $2', [newRatingA, playerAId]);
-  await pool.query('UPDATE account SET rating = $1 WHERE player_id = $2', [newRatingB, playerBId]);
+  // Calculate new ranks based on ratings
+  const newRankA = getRankForRating(newRatingA);
+  const newRankB = getRankForRating(newRatingB);
+
+  // Update account ratings and ranks
+  await pool.query('UPDATE account SET rating = $1, rank = $2 WHERE player_id = $3', [newRatingA, newRankA, playerAId]);
+  await pool.query('UPDATE account SET rating = $1, rank = $2 WHERE player_id = $3', [newRatingB, newRankB, playerBId]);
 
   // Update leaderboard
   await pool.query(
@@ -88,19 +92,25 @@ async function applyRatingChanges(pool, matchId, playerAId, playerBId, ratingCha
   const resultA = isDraw ? 'draw' : (ratingChangeA > 0 ? 'win' : 'loss');
   const resultB = isDraw ? 'draw' : (ratingChangeB > 0 ? 'win' : 'loss');
 
+  // Calculate rank changes
+  const oldRankA = getRankForRating(currentRatingA);
+  const oldRankB = getRankForRating(currentRatingB);
+  const rankChangeA = newRankA !== oldRankA ? `${oldRankA} → ${newRankA}` : null;
+  const rankChangeB = newRankB !== oldRankB ? `${oldRankB} → ${newRankB}` : null;
+
   await pool.query(
-    `INSERT INTO match_history (player_id, match_id, opponent_id, mode, format_type, result, rating_before, rating_after)
-     SELECT $1, $2, $3, mode, format_type, $4, $5, $6 FROM match WHERE match_id = $2`,
-    [playerAId, matchId, playerBId, resultA, currentRatingA, newRatingA]
+    `INSERT INTO match_history (player_id, match_id, opponent_id, mode, format_type, result, rating_before, rating_after, rank_change)
+     SELECT $1, $2, $3, mode, format_type, $4, $5, $6, $7 FROM match WHERE match_id = $2`,
+    [playerAId, matchId, playerBId, resultA, currentRatingA, newRatingA, rankChangeA]
   );
 
   await pool.query(
-    `INSERT INTO match_history (player_id, match_id, opponent_id, mode, format_type, result, rating_before, rating_after)
-     SELECT $1, $2, $3, mode, format_type, $4, $5, $6 FROM match WHERE match_id = $2`,
-    [playerBId, matchId, playerAId, resultB, currentRatingB, newRatingB]
+    `INSERT INTO match_history (player_id, match_id, opponent_id, mode, format_type, result, rating_before, rating_after, rank_change)
+     SELECT $1, $2, $3, mode, format_type, $4, $5, $6, $7 FROM match WHERE match_id = $2`,
+    [playerBId, matchId, playerAId, resultB, currentRatingB, newRatingB, rankChangeB]
   );
 
-  return { newRatingA, newRatingB };
+  return { newRatingA, newRatingB, newRankA, newRankB, rankChangeA, rankChangeB };
 }
 
 /**

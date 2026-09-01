@@ -1,11 +1,12 @@
 /**
- * T111 — Rating changes tests.
+ * T111/T112 — Rating changes and rank threshold tests.
  *
  * Verifies:
  *   - Ranked Win: +20
  *   - Ranked Loss: -20
  *   - Draw: 0
  *   - Rating floor: 0
+ *   - Rank updates when rating crosses thresholds
  */
 
 const { describe, it } = require('node:test');
@@ -15,7 +16,7 @@ const {
   applyRatingChanges,
   updatePlayerStatistics,
 } = require('../lib/rating');
-const { RATING_WIN, RATING_LOSS, RATING_DRAW, RATING_FLOOR } = require('../routes/ranked');
+const { RATING_WIN, RATING_LOSS, RATING_DRAW, RATING_FLOOR, getRankForRating } = require('../routes/ranked');
 
 // ── Pure calculation tests ─────────────────────────────────────────
 
@@ -87,10 +88,19 @@ describe('applyRatingChanges (database)', () => {
             .filter(Boolean);
           return Promise.resolve({ rows });
         }
-        // UPDATE account SET rating
+        // UPDATE account SET rating (with optional rank)
         if (sql.includes('UPDATE account SET rating')) {
-          const [rating, playerId] = params;
-          if (accounts[playerId]) accounts[playerId].rating = rating;
+          if (sql.includes('rank =')) {
+            // T112: rating + rank update
+            const [rating, rank, playerId] = params;
+            if (accounts[playerId]) {
+              accounts[playerId].rating = rating;
+              accounts[playerId].rank = rank;
+            }
+          } else {
+            const [rating, playerId] = params;
+            if (accounts[playerId]) accounts[playerId].rating = rating;
+          }
           return Promise.resolve({ rows: [] });
         }
         // UPDATE leaderboard SET rating
@@ -115,6 +125,7 @@ describe('applyRatingChanges (database)', () => {
             result: params[3],
             rating_before: params[4],
             rating_after: params[5],
+            rank_change: params[6] || null,
           });
           return Promise.resolve({ rows: [] });
         }
@@ -172,6 +183,20 @@ describe('applyRatingChanges (database)', () => {
     assert.equal(pool.leaderboard[2].rating, 980);
   });
 
+  it('updates rank when rating crosses threshold', async () => {
+    const pool = createMockPool();
+    // Player 2 at 1000 (Silver), loses 20 → 980 (Bronze)
+    const result1 = await applyRatingChanges(pool, 1, 1, 2, 20, -20);
+    assert.equal(result1.newRankB, 'Bronze'); // Demoted to Bronze
+
+    // Player 2 at 980 (Bronze), wins 20 → 1000 (Silver)
+    pool.accounts[2].rating = 980;
+    pool.accounts[2].rank = 'Bronze';
+    pool.leaderboard[2].rating = 980;
+    const result2 = await applyRatingChanges(pool, 2, 1, 2, -20, 20);
+    assert.equal(result2.newRankB, 'Silver'); // Promoted to Silver
+  });
+
   it('stores rating changes in match record', async () => {
     const pool = createMockPool();
     await applyRatingChanges(pool, 1, 1, 2, 20, -20);
@@ -201,6 +226,85 @@ describe('applyRatingChanges (database)', () => {
     assert.equal(pool.matchHistory.length, 2);
     assert.equal(pool.matchHistory[0].result, 'draw');
     assert.equal(pool.matchHistory[1].result, 'draw');
+  });
+
+  it('records rank_change in match history when rank changes', async () => {
+    const pool = createMockPool();
+    // Set up player 1 to promote from Silver to Gold (1480 → 1500)
+    pool.accounts[1].rating = 1480;
+    pool.accounts[1].rank = 'Silver';
+    pool.leaderboard[1].rating = 1480;
+      const result = await applyRatingChanges(pool, 1, 1, 2, 20, -20);
+    assert.equal(result.rankChangeA, 'Silver → Gold');
+    assert.equal(pool.matchHistory[0].rank_change, 'Silver → Gold');
+  });
+
+  it('no rank_change when rating stays in same tier', async () => {
+    const pool = createMockPool();
+    // Set both players well within Silver (1200) so +20/-20 keeps them in Silver
+    pool.accounts[1].rating = 1200;
+    pool.accounts[1].rank = 'Silver';
+    pool.accounts[2].rating = 1200;
+    pool.accounts[2].rank = 'Silver';
+    pool.leaderboard[1].rating = 1200;
+    pool.leaderboard[2].rating = 1200;
+    const result = await applyRatingChanges(pool, 1, 1, 2, 20, -20);
+    assert.equal(result.rankChangeA, null);
+    assert.equal(result.rankChangeB, null);
+  });
+});
+
+// ── Rank threshold tests ──────────────────────────────────────────
+
+describe('Rank threshold updates (T112)', () => {
+  it('getRankForRating returns correct ranks for all tiers', () => {
+    assert.equal(getRankForRating(0), 'Bronze');
+    assert.equal(getRankForRating(500), 'Bronze');
+    assert.equal(getRankForRating(999), 'Bronze');
+    assert.equal(getRankForRating(1000), 'Silver');
+    assert.equal(getRankForRating(1250), 'Silver');
+    assert.equal(getRankForRating(1499), 'Silver');
+    assert.equal(getRankForRating(1500), 'Gold');
+    assert.equal(getRankForRating(1750), 'Gold');
+    assert.equal(getRankForRating(1999), 'Gold');
+    assert.equal(getRankForRating(2000), 'Platinum');
+    assert.equal(getRankForRating(2250), 'Platinum');
+    assert.equal(getRankForRating(2499), 'Platinum');
+    assert.equal(getRankForRating(2500), 'Diamond');
+    assert.equal(getRankForRating(2750), 'Diamond');
+    assert.equal(getRankForRating(2999), 'Diamond');
+    assert.equal(getRankForRating(3000), 'Master');
+    assert.equal(getRankForRating(5000), 'Master');
+  });
+
+  it('Bronze → Silver at rating 1000', () => {
+    assert.equal(getRankForRating(999), 'Bronze');
+    assert.equal(getRankForRating(1000), 'Silver');
+  });
+
+  it('Silver → Gold at rating 1500', () => {
+    assert.equal(getRankForRating(1499), 'Silver');
+    assert.equal(getRankForRating(1500), 'Gold');
+  });
+
+  it('Gold → Platinum at rating 2000', () => {
+    assert.equal(getRankForRating(1999), 'Gold');
+    assert.equal(getRankForRating(2000), 'Platinum');
+  });
+
+  it('Platinum → Diamond at rating 2500', () => {
+    assert.equal(getRankForRating(2499), 'Platinum');
+    assert.equal(getRankForRating(2500), 'Diamond');
+  });
+
+  it('Diamond → Master at rating 3000', () => {
+    assert.equal(getRankForRating(2999), 'Diamond');
+    assert.equal(getRankForRating(3000), 'Master');
+  });
+
+  it('rating drop demotes rank', () => {
+    assert.equal(getRankForRating(1000), 'Silver');
+    assert.equal(getRankForRating(999), 'Bronze');
   });
 });
 
@@ -233,8 +337,16 @@ describe('Rating across multiple matches', () => {
           return Promise.resolve({ rows });
         }
         if (sql.includes('UPDATE account SET rating')) {
-          const [rating, playerId] = params;
-          if (accounts[playerId]) accounts[playerId].rating = rating;
+          if (sql.includes('rank =')) {
+            const [rating, rank, playerId] = params;
+            if (accounts[playerId]) {
+              accounts[playerId].rating = rating;
+              accounts[playerId].rank = rank;
+            }
+          } else {
+            const [rating, playerId] = params;
+            if (accounts[playerId]) accounts[playerId].rating = rating;
+          }
           return Promise.resolve({ rows: [] });
         }
         if (sql.includes('UPDATE leaderboard SET rating')) {
