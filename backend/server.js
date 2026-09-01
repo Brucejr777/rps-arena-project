@@ -10,6 +10,7 @@ const { createQuickMatchRouter } = require('./routes/quick_match');
 const { createRoomsRouter } = require('./routes/rooms');
 const { createRankedRouter } = require('./routes/ranked');
 const { createMatchesRouter } = require('./routes/matches');
+const { createLeaderboardRouter } = require('./routes/leaderboard');
 const { disconnectManager } = require('./lib/disconnect_manager');
 
 const app = express();
@@ -25,6 +26,7 @@ app.use('/auth', createAuthRouter(pool));
 app.use('/quick-match', createQuickMatchRouter(pool));
 app.use('/rooms', createRoomsRouter(pool));
 app.use('/ranked', createRankedRouter(pool));
+app.use('/leaderboard', createLeaderboardRouter(pool));
 
 // Create HTTP server for WebSocket
 const server = http.createServer(app);
