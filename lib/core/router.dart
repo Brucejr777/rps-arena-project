@@ -9,6 +9,7 @@ import '../features/online/screens/private_room_create_screen.dart';
 import '../features/online/screens/private_room_join_screen.dart';
 import '../features/online/screens/connection_lost_screen.dart';
 import '../features/online/screens/leaderboard_screen.dart';
+import '../features/online/screens/player_profile_screen.dart';
 import '../features/home/splash_screen.dart';
 import '../features/home/main_menu_screen.dart';
 import '../features/match/screens/single_player_setup_screen.dart';
@@ -46,9 +47,7 @@ final GoRouter appRouter = GoRouter(
         onMultiplayer: () => context.push('/multiplayer'),
         onLeaderboard: () => context.push('/leaderboard'),
         onSettings: () => context.push('/settings'),
-        onProfile: () {
-          // TODO T116: navigate to Player Profile once it exists
-        },
+        onProfile: () => context.push('/profile'),
         onLogin: () => context.push('/login'),
         onRegister: () => context.push('/register'),
       ),
@@ -203,6 +202,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/leaderboard',
       builder: (context, state) => const LeaderboardScreen(),
+    ),
+    GoRoute(
+      path: '/profile',
+      builder: (context, state) => const PlayerProfileScreen(),
     ),
     GoRoute(
       path: '/connection-lost',

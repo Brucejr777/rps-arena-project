@@ -29,7 +29,18 @@ function mockQuery(sql, params) {
 
   // INSERT INTO player_statistic
   if (sql.includes('INSERT INTO player_statistic')) {
-    stats.push({ player_id: params[0] });
+    stats.push({
+      player_id: params[0],
+      matches_played: 0,
+      matches_won: 0,
+      matches_lost: 0,
+      rounds_won: 0,
+      rounds_lost: 0,
+      draws: 0,
+      rock_selections: 0,
+      paper_selections: 0,
+      scissors_selections: 0,
+    });
     return Promise.resolve({ rows: [] });
   }
 
@@ -54,13 +65,21 @@ function mockQuery(sql, params) {
     });
   }
 
-  // SELECT ... FROM account WHERE player_id (refresh)
+  // SELECT ... FROM account WHERE player_id (refresh + profile)
   if (sql.includes('FROM account WHERE player_id')) {
     const found = accounts.find((a) => a.player_id === params[0]);
     return Promise.resolve({
       rows: found
         ? [{ player_id: found.player_id, username: found.username, rating: found.rating, rank: found.rank }]
         : [],
+    });
+  }
+
+  // SELECT * FROM player_statistic WHERE player_id
+  if (sql.includes('SELECT * FROM player_statistic WHERE player_id')) {
+    const found = stats.find((s) => s.player_id === params[0]);
+    return Promise.resolve({
+      rows: found ? [found] : [],
     });
   }
 
@@ -115,6 +134,21 @@ function post(path, body) {
     });
     req.on('error', reject);
     req.write(data);
+    req.end();
+  });
+}
+
+function get(path, token) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(path, baseUrl);
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const req = http.request(url, { method: 'GET', headers }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => (body += chunk));
+      res.on('end', () => resolve({ status: res.statusCode, body: JSON.parse(body) }));
+    });
+    req.on('error', reject);
     req.end();
   });
 }
@@ -248,5 +282,40 @@ describe('POST /auth/refresh', () => {
   it('rejects invalid refresh token', async () => {
     const res = await post('/auth/refresh', { refreshToken: 'totally.bogus.token' });
     assert.strictEqual(res.status, 401);
+  });
+});
+
+describe('GET /auth/profile', () => {
+  it('returns player profile with stats', async () => {
+    // Login first to get a token
+    const login = await post('/auth/login', { username: 'ExistingUser', password: 'TestPass1' });
+    const token = login.body.accessToken;
+
+    const res = await get('/auth/profile', token);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.player.username, 'ExistingUser');
+    assert.ok(typeof res.body.player.rating === 'number');
+    assert.ok(res.body.player.rank);
+    assert.ok(res.body.stats);
+    assert.ok(typeof res.body.stats.matchesPlayed === 'number');
+    assert.ok(typeof res.body.stats.matchesWon === 'number');
+    assert.ok(typeof res.body.stats.matchesLost === 'number');
+    assert.ok(typeof res.body.stats.winRate === 'number');
+  });
+
+  it('returns 401 without auth token', async () => {
+    const res = await get('/auth/profile');
+    assert.strictEqual(res.status, 401);
+  });
+
+  it('returns default stats for new player', async () => {
+    const register = await post('/auth/register', { username: 'NewProfileUser', password: 'StrongPass1' });
+    const token = register.body.accessToken;
+
+    const res = await get('/auth/profile', token);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.stats.matchesPlayed, 0);
+    assert.strictEqual(res.body.stats.matchesWon, 0);
+    assert.strictEqual(res.body.stats.winRate, 0);
   });
 });

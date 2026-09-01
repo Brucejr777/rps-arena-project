@@ -5,12 +5,14 @@
  * POST /auth/login      — verify credentials, return tokens
  * POST /auth/logout     — invalidate refresh token
  * POST /auth/refresh    — exchange refresh token for new access token
+ * GET  /auth/profile     — get player profile and stats (T116)
  */
 
 const { Router } = require('express');
 const { validateUsername } = require('../lib/validate_username');
 const { validatePassword } = require('../lib/validate_password');
 const { hashPassword, verifyPassword } = require('../lib/hash_password');
+const { requireAuth } = require('../lib/auth_middleware');
 const {
   signAccessToken,
   signRefreshToken,
@@ -204,6 +206,71 @@ function createAuthRouter(pool) {
       });
     } catch (err) {
       console.error('Refresh error:', err);
+      res.status(500).json({ error: 'Internal server error.' });
+    }
+  });
+
+  // ── GET /auth/profile (T116) ────────────────────────────────────
+  router.get('/profile', requireAuth, async (req, res) => {
+    try {
+      const { playerId } = req.player;
+
+      // Fetch player info
+      const playerResult = await pool.query(
+        'SELECT player_id, username, rating, rank FROM account WHERE player_id = $1',
+        [playerId]
+      );
+
+      if (playerResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Player not found.' });
+      }
+
+      const player = playerResult.rows[0];
+
+      // Fetch player statistics
+      const statsResult = await pool.query(
+        'SELECT * FROM player_statistic WHERE player_id = $1',
+        [playerId]
+      );
+
+      const stats = statsResult.rows[0] || {
+        matches_played: 0,
+        matches_won: 0,
+        matches_lost: 0,
+        rounds_won: 0,
+        rounds_lost: 0,
+        draws: 0,
+        rock_selections: 0,
+        paper_selections: 0,
+        scissors_selections: 0,
+      };
+
+      const winRate = stats.matches_played > 0
+        ? ((stats.matches_won / stats.matches_played) * 100).round()
+        : 0;
+
+      res.json({
+        player: {
+          playerId: player.player_id,
+          username: player.username,
+          rating: player.rating,
+          rank: player.rank,
+        },
+        stats: {
+          matchesPlayed: stats.matches_played,
+          matchesWon: stats.matches_won,
+          matchesLost: stats.matches_lost,
+          roundsWon: stats.rounds_won,
+          roundsLost: stats.rounds_lost,
+          draws: stats.draws,
+          winRate,
+          rockSelections: stats.rock_selections,
+          paperSelections: stats.paper_selections,
+          scissorsSelections: stats.scissors_selections,
+        },
+      });
+    } catch (err) {
+      console.error('Profile error:', err);
       res.status(500).json({ error: 'Internal server error.' });
     }
   });
