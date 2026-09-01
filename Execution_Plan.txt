@@ -1,0 +1,2352 @@
+Execution plan
+
+Technology baseline
+
+Item | Implementation
+Client framework | Current Flutter stable, verified by flutter --version
+Language | Dart SDK bundled with current Flutter stable, verified by dart --version
+State management | flutter_riverpod
+Navigation | go_router
+HTTP client | dio
+Real-time client | web_socket_channel
+Local settings storage | shared_preferences
+Secure token storage | flutter_secure_storage
+Audio playback | audioplayers
+Vibration | vibration
+Backend | Current Node.js LTS, verified by node –version; Latest stable Express, verified by npm view express version; Current PostgreSQL stable, verified by psql –version; Latest stable ws, verified by npm view ws version
+Authentication | JWT access token, bcrypt password hash
+Orientation | Portrait
+Release artifact | Android App Bundle
+Release version | 1.0.0
+
+Team assignments
+
+Member | Role
+M1 | Project Coordinator, QA Lead, Release Manager
+M2 | Core Match Engineer, Flutter Gameplay Engineer
+M3 | AI Engineer
+M4 | Local Flow, Settings, Data Engineer
+M5 | Interface Engineer, Flutter UI Engineer
+M6 | Artist, Animator, Audio Asset Creator
+M7 | Backend Engineer
+
+Mandatory sequence
+
+1. Complete Phase 0 before Phase 1.
+2. Complete Phase 1 before Phase 2.
+3. Complete Phase 2 before Phase 3.
+4. Complete Phase 3 before Phase 4.
+5. Complete Phase 4 before Phase 5.
+6. Complete Phase 5 before Release.
+7. A phase gate PASS requires M1 to execute every listed test and record zero blocking defects.
+8. The listed member performs the task.
+9. Every screen label uses the exact text listed in the task.
+
+Phase 0 — Week 1 — Flutter project foundation
+
+T01 — M1
+
+Create project board with phases:
+- Phase 1 Core Game
+- Phase 2 Local Multiplayer
+- Phase 3 Visual System
+- Phase 4 Online Multiplayer
+- Phase 5 Competitive System
+- Release
+
+Create defect tags:
+- gameplay
+- match-format
+- ai
+- ui
+- local
+- visual
+- audio
+- backend
+- ranked
+
+Done evidence: project board visible to all seven members.
+
+T02 — M1
+
+Write acceptance checklist containing:
+- Best-of-3
+- Best-of-5
+- Best-of-7
+- Best-of-9
+- Custom Match
+- Unlimited Match
+- Custom minimum 2 wins
+- Custom maximum 99 wins
+- draw handling
+- 10-second timer
+- Easy AI
+- Normal AI
+- Hard AI
+- local privacy
+- Quick Match
+- Private Room
+- Ranked Match
+- Ranked fixed Best-of-3
+- server authority
+- disconnect
+- reconnect
+- rating
+- rank tiers
+- leaderboard
+- online statistics
+- ranked match history
+- themes
+- settings
+- local statistics
+
+Done evidence: checklist attached to project board.
+
+T03 — M2
+
+Create Flutter project.
+
+Command:
+flutter create --org com.rpsarena --platforms android,ios rps_arena
+
+Set:
+- portrait orientation
+- Android minSdk 24
+- iOS deployment target 12.0
+- app label RPS Arena
+
+Add pubspec dependencies:
+flutter channel stable
+flutter upgrade
+flutter create --org com.rpsarena --platforms android,ios rps_arena
+cd rps_arena
+flutter pub add flutter_riverpod
+flutter pub add go_router
+flutter pub add dio
+flutter pub add web_socket_channel
+flutter pub add shared_preferences
+flutter pub add futter_secure_storage
+flutter pub add audioplayers
+flutter pub add vibration
+flutter pub add intl
+flutter pub add --dev flutter_lints
+flutter pub upgrade --major-versions
+dart fix --apply
+flutter analyze
+flutter test
+
+Done evidence: flutter run builds on Android emulator.
+
+T03A — M2
+
+Create Flutter folder structure:
+lib/main.dart
+lib/core/router.dart
+lib/core/theme/app_colors.dart
+lib/core/theme/app_theme.dart
+lib/core/services/audio_service.dart
+lib/core/services/vibration_service.dart
+lib/core/network/api_client.dart
+lib/core/network/socket_client.dart
+lib/features/match/domain
+lib/features/match/controllers
+lib/features/match/widgets
+lib/features/settings/controllers
+lib/features/settings/screens
+lib/features/auth/controllers
+lib/features/auth/screens
+lib/features/online/controllers
+lib/features/online/screens
+lib/features/profile/screens
+lib/features/stats/screens
+assets/images/normal
+assets/images/space
+assets/audio/normal
+assets/audio/space
+
+Done evidence: folders exist in repository.
+
+Update Flutter, Dart, and package versions.
+
+Commands:
+flutter channel stable
+flutter upgrade
+flutter --version
+dart --version
+flutter pub upgrade --major-versions
+dart fix --apply
+flutter analyze
+flutter test
+
+Save the version output in: docs/toolchain_versions.md
+
+Required contents of docs/toolchain_versions.md
+Flutter version:
+Dart version:
+flutter_riverpod:
+go_router:
+dio:
+web_socket_channel:
+shared_preferences:
+flutter_secure_storage:
+audioplayers:
+vibration:
+intl:
+flutter_lints:
+
+Done evidence: flutter analyze passes, flutter test passes, docs/toolchain_versions.md contains the installed versions.
+
+T04 — M5
+
+Produce wireframes for every screen:
+- SplashScreen
+- MainMenuScreen
+- SinglePlayerSetupScreen
+- LocalSetupScreen
+- MatchFormatSelectScreen
+- CustomMatchConfigScreen
+- StandardGameplayScreen
+- UnlimitedGameplayScreen
+- LocalPassScreen
+- MultiplayerScreen
+- QuickMatchSetupScreen
+- QuickMatchSearchingScreen
+- OpponentFoundScreen
+- PrivateRoomCreateScreen
+- PrivateRoomJoinScreen
+- LeaderboardScreen
+- SettingsScreen
+- AppearanceScreen
+- AudioScreen
+- GameplaySettingsScreen
+- DataScreen
+- StandardResultScreen
+- UnlimitedResultScreen
+- LoginScreen
+- RegisterScreen
+- ProfileScreen
+- OnlineStatsScreen
+- MatchHistoryScreen
+- ConnectionLostScreen
+
+Done evidence: M1 approves wireframes.
+
+T05 — M6
+
+Produce UI kit using exact colors:
+- background: #0F172A
+- primary text: #FFFFFF
+- default accent: #2563EB
+- secondary accent: #7C3AED
+
+Include:
+- rounded buttons
+- rounded cards
+- moderate shadows
+- subtle gradients
+- large hand graphics
+- high-contrast text
+- short animated transitions
+
+Done evidence: UI kit saved in design folder.
+
+T05A — M2
+
+Implement Flutter color constants in lib/core/theme/app_colors.dart:
+background = Color(0xFF0F172A);
+primaryText = Color(0xFFFFFFFF);
+defaultAccent = Color(0xFF2563EB);
+secondaryAccent = Color(0xFF7C3AED);
+blue = Color(0xFF2563EB);
+purple = Color(0xFF7C3AED);
+red = Color(0xFFDC2626);
+green = Color(0xFF16A34A);
+orange = Color(0xFFEA580C);
+
+Done evidence: constants compile.
+
+T06 — M7
+
+Create backend service with database tables.
+
+Account
+- player_id
+- username
+- password_hash
+- rating
+- rank
+
+PlayerStatistic
+- player_id
+- matches_played
+- matches_won
+- matches_lost
+- rounds_won
+- rounds_lost
+- draws
+- rock_selections
+- paper_selections
+- scissors_selections
+
+Match
+- match_id
+- mode
+- format_type
+- wins_required
+- player_a_id
+- player_b_id
+- winner_id
+- match_draw
+- total_rounds
+- draw_count
+- rating_change_a
+- rating_change_b
+- created_at
+
+Round
+- match_id
+- round_number
+- player_a_move
+- player_b_move
+- player_a_auto
+- player_b_auto
+- result
+
+Room
+- room_code
+- host_id
+- guest_id
+- status
+- format_type
+- wins_required
+
+Leaderboard
+- player_id
+- rating
+- updated_at
+
+MatchHistory
+- history_id
+- player_id
+- match_id
+- opponent_id
+- mode
+- format_type
+- result
+- rating_before
+- rating_after
+- rank_change
+- created_at
+
+Deploy staging base URL:
+https://api.rpsarena.staging
+
+Done evidence: staging server responds to health check.
+
+T06A — M7
+
+Document API route map:
+- POST /auth/register
+- POST /auth/login
+- POST /auth/logout
+- POST /auth/refresh
+- POST /quick-match/join
+- DELETE /quick-match/cancel
+- POST /quick-match/ready
+- POST /rooms/create
+- POST /rooms/join
+- POST /rooms/start
+- POST /matches/{matchId}/move
+- POST /matches/{matchId}/end
+- GET /matches/{matchId}/state
+- GET /leaderboard
+- GET /profile
+- GET /statistics
+- GET /match-history
+
+Document WebSocket channel:
+wss://api.rpsarena.staging/matches/{matchId}/events
+
+WebSocket events:
+- opponent_connected
+- opponent_found
+- round_result
+- match_completed
+- opponent_disconnected
+- reconnect_state
+
+Done evidence: route map saved in repository.
+
+T07 — M3
+
+Write AI algorithm sheet.
+
+Easy AI
+- ROCK: 33.33%
+- PAPER: 33.33%
+- SCISSORS: 33.33%
+- no history
+- no pattern tracking
+- no adaptation
+
+Normal AI
+- record current-match player moves
+- select counter to most frequent player move
+- counter probability: 50%
+- remaining two moves: 25% each
+
+Hard AI
+- record current-match player moves
+- weight recent three moves higher
+- predict likely next player move
+- favor counter to predicted move
+- counter probability: 60%
+- remaining two moves: 20% each
+
+Add AI scope rule:
+- AI behavior is identical across Best-of-3, Best-of-5, Best-of-7, Best-of-9, Custom, Unlimited
+
+Done evidence: M1 approves AI sheet.
+
+T08 — M4
+
+Create local storage keys using shared_preferences:
+- selectedAppColor
+- selectedTheme
+- masterVolume
+- musicVolume
+- soundEffectsVolume
+- animationSpeed
+- victoryAnimationsEnabled
+- vibrationEnabled
+- localStatistics
+
+Done evidence: keys persist after app restart.
+
+Phase 1 — Weeks 2–4 — Core Flutter game
+
+T09 — M6
+
+Create placeholder hand PNG assets:
+- placeholder_rock.png
+- placeholder_paper.png
+- placeholder_scissors.png
+
+Done evidence: assets delivered.
+
+T09A — M2
+
+Import placeholder assets into assets/images/placeholders.
+
+Register assets in pubspec.yaml.
+
+Done evidence: StandardGameplayScreen displays three hands.
+
+T10 — M5
+
+Build StandardGameplayScreen widget with exact fields:
+- Player 1 name
+- Player 2 name
+- Player 1 score
+- Player 2 score
+- current round
+- selection timer
+- player hand
+- opponent hand
+- ROCK button
+- PAPER button
+- SCISSORS button
+- exit control
+
+Done evidence: layout matches wireframe.
+
+T10A — M5
+
+Build pause-exit overlay widget:
+- RESUME button
+- EXIT button
+
+Done evidence: overlay accessible from StandardGameplayScreen.
+
+T10B — M2
+
+Implement pause-exit behavior in MatchController:
+- offline pause stops countdown and selection timer
+- online match exit displays ConnectionLostScreen
+- ranked exit after both ready triggers intentional quit loss
+
+Done evidence: behavior passes M1 test.
+
+T10C — M5
+
+Build UnlimitedGameplayScreen widget with exact fields:
+- Player 1 name
+- Player 2 name
+- Player 1 score
+- Player 2 score
+- Rounds Played
+- Draws
+- selection timer
+- player hand
+- opponent hand
+- ROCK button
+- PAPER button
+- SCISSORS button
+- END MATCH button
+- exit control
+
+Done evidence: layout matches wireframe.
+
+T10D — M5
+
+Build End Match confirmation dialog widget:
+- END MATCH?
+- Current Score
+- CANCEL button
+- END MATCH button
+
+Done evidence: dialog accessible from UnlimitedGameplayScreen.
+
+T11 — M2
+
+Implement pure Dart match format system in lib/features/match/domain/match_format.dart.
+
+Supported MatchFormat values:
+- bestOf3
+- bestOf5
+- bestOf7
+- bestOf9
+- custom
+- unlimited
+
+Supported winsRequired values:
+- bestOf3: 2
+- bestOf5: 3
+- bestOf7: 4
+- bestOf9: 5
+- custom: player-selected value
+- unlimited: 0
+
+Rules:
+- standard match ends when any player reaches winsRequired
+- unlimited automatic win threshold disabled
+- unlimited match continues until manual END MATCH
+
+Done evidence: match format selection starts correct match configuration.
+
+T12 — M2
+
+Implement pure Dart round state machine in lib/features/match/domain/match_engine.dart.
+
+Sequence:
+1. Display current score
+2. 3-second countdown
+3. GO!
+4. 10-second selection period
+5. selection lock
+6. hidden opponent selection
+7. reveal
+8. result determination
+9. result animation state
+10. score update
+11. match condition check
+12. next round / match result
+
+Standard match condition:
+- check whether any player reached winsRequired
+
+Unlimited match condition:
+- update accumulated statistics
+- begin next round automatically
+- continue until END MATCH request finalizes match
+
+Done evidence: one round completes in standard mode and Unlimited mode.
+
+T13 — M2
+
+Implement draw handling in MatchEngine.
+
+Standard formats:
+- draw awards no point
+- drawn round replays immediately
+- no maximum draw count
+
+Unlimited format:
+- draw awards no point
+- draw count increases
+- next round begins automatically
+- no maximum draw count
+
+Done evidence: standard draw replay works, Unlimited draw count works.
+
+T14 — M2
+
+Implement countdown timing in MatchEngine:
+- 3 appears one second
+- 2 appears one second
+- 1 appears one second
+- GO! appears one second
+
+Done evidence: countdown state advances correctly.
+
+T14A — M5
+
+Implement CountdownAnimation widget.
+
+Animation requirements:
+- scale 80% → 120% → 0%
+- one second per number
+- uses AnimationController
+- uses theme assets
+
+Done evidence: countdown visible.
+
+T15 — M2
+
+Implement move selection lock in MatchEngine:
+- selected move stored
+- selected move locked
+- other two moves disabled
+- player hand changes
+- selection cannot change
+
+Done evidence: selection cannot change.
+
+T15A — M5
+
+Implement MoveButton widget behavior:
+- selected button scales to 110%
+- selected button receives current app accent
+- selection sound plays
+- other two buttons disable
+- player hand changes
+
+Done evidence: button behavior matches spec.
+
+T16 — M2
+
+Implement selection timer in MatchEngine:
+- starts after GO!
+- total 10 seconds
+- warning state at five seconds
+- at zero client selects random move
+- auto-selected move displays AUTO tag after reveal
+
+Done evidence: timeout works.
+
+T17 — M2
+
+Implement resolution table in lib/features/match/domain/resolution.dart:
+- ROCK beats SCISSORS
+- PAPER beats ROCK
+- SCISSORS beats PAPER
+- same move draw
+
+Done evidence: nine move pairs resolve correctly.
+
+T18 — M2
+
+Add Dart unit tests in test/match/resolution_test.dart for the nine move pairs.
+
+Done evidence: flutter test test/match/resolution_test.dart passes.
+
+T19 — M3
+
+Implement Easy AI in lib/features/match/domain/ai_service.dart:
+- ROCK 33.33%
+- PAPER 33.33%
+- SCISSORS 33.33%
+- no move history
+- no pattern tracking
+- no adaptation
+
+Done evidence: Easy match completes in Best-of-3 and Unlimited.
+
+T20 — M3
+
+Implement Normal AI:
+- record current-match player moves
+- count frequencies
+- no record uses equal random
+- tied frequency uses latest move among tied
+- choose counter to that move
+- counter probability 50%
+- remaining two moves 25% each
+
+Done evidence: Normal match completes in Best-of-3 and Unlimited.
+
+T21 — M3
+
+Implement Hard AI:
+- record all current-match player moves
+- assign weight 4 to latest move
+- assign weight 3 to second latest move
+- assign weight 2 to third latest move
+- assign weight 1 to every older move
+- predicted move equals highest weighted score
+- tied prediction uses latest move among tied
+- counter probability 60%
+- remaining two moves 20% each
+- no history uses equal random
+
+Done evidence: Hard match completes in Best-of-3 and Unlimited.
+
+T22 — M3
+
+Run AI probability test in test/match/ai_probability_test.dart with seeded random and 10,000 simulated selections.
+
+Required tolerance:
+- Easy: ±1% around 33.33%
+- Normal counter: ±1% around 50%
+- Hard counter: ±1% around 60%
+
+Done evidence: flutter test test/match/ai_probability_test.dart passes.
+
+T23 — M5
+
+Build SinglePlayerSetupScreen with exact controls:
+- title: SINGLE PLAYER
+- Difficulty
+- EASY
+- NORMAL
+- HARD
+- Match Length
+- START MATCH
+- BACK
+
+Match Length control opens MatchFormatSelectScreen.
+
+Done evidence: difficulty selection and match length selection start correct match.
+
+T24 — M5
+
+Build MatchFormatSelectScreen with exact controls:
+- title: MATCH LENGTH
+- BEST OF 3
+- BEST OF 5
+- BEST OF 7
+- BEST OF 9
+- CUSTOM
+- UNLIMITED
+- CONFIRM
+- BACK
+
+Done evidence: selected format returns to calling screen.
+
+T25 — M5
+
+Build CustomMatchConfigScreen with exact controls:
+- title: CUSTOM MATCH
+- Wins Required input
+- CONFIRM
+- BACK
+
+Input limits:
+- minimum 2
+- maximum 99
+
+Done evidence: screen accepts valid values, rejects invalid values.
+
+T26 — M2
+
+Implement Custom Match validation in MatchEngine:
+- accepted values are integers 2 through 99
+- selected value becomes winsRequired
+- invalid values display message: INVALID VALUE
+
+Done evidence: custom match starts with selected wins required.
+
+T27 — M2
+
+Implement Unlimited match logic:
+- END MATCH button enabled after first completed round
+- END MATCH button opens confirmation dialog
+- CANCEL returns to match
+- END MATCH finalizes current score
+- higher score wins
+- equal score produces Match Draw
+- total rounds include wins, losses, draws
+
+Done evidence: Unlimited match finalizes correctly.
+
+T28 — M2
+
+Implement Unlimited result calculation:
+Total Rounds = Player 1 wins + Player 2 wins + Draws
+Player 1 Win Rate = Player 1 wins ÷ Total Rounds × 100
+Player 2 Win Rate = Player 2 wins ÷ Total Rounds × 100
+
+Done evidence: Unlimited summary numbers are correct.
+
+T29 — M5
+
+Build StandardResultScreen:
+- victory/defeat title
+- final score line
+- MATCH WON text
+- PLAY AGAIN button
+- MAIN MENU button
+
+Done evidence: standard result displays after standard match.
+
+T30 — M5
+
+Build UnlimitedResultScreen:
+- title: MATCH SUMMARY
+- PLAYER 1 label
+- PLAYER 2 label
+- Player 1 wins
+- Player 2 wins
+- Draws
+- TOTAL ROUNDS
+- Player 1 WIN RATE
+- Player 2 WIN RATE
+- PLAY AGAIN button
+- MAIN MENU button
+
+Done evidence: Unlimited result displays after END MATCH.
+
+T31 — M5
+
+Build SplashScreen:
+- title: RPS ARENA
+- text: Loading...
+- maximum duration two seconds
+- then MainMenuScreen
+- offline modes load without internet
+
+Implementation:
+- Future.delayed(Duration(seconds: 2))
+- GoRouter.go('/main')
+
+Done evidence: splash passes.
+
+T32 — M5
+
+Build MainMenuScreen with buttons:
+- SINGLE PLAYER
+- 2 PLAYERS
+- MULTIPLAYER
+- LEADERBOARD
+- SETTINGS
+- PROFILE
+
+PROFILE button behavior:
+- hidden for guest
+- visible when signed in
+
+Done evidence: navigation works.
+
+T33 — M4
+
+Implement local statistics recording after every offline match in lib/features/stats/local_stats_repository.dart.
+
+Recorded fields:
+- matches played
+- matches won
+- matches lost
+- rounds won
+- rounds lost
+- draws
+- win rate
+- ROCK selections
+- PAPER selections
+- SCISSORS selections
+
+Match recording rules:
+- standard match winner increments matches won
+- standard match loser increments matches lost
+- Unlimited match winner increments matches won
+- Unlimited match loser increments matches lost
+- Unlimited Match Draw increments matches played only
+- round wins increment rounds won
+- round losses increment rounds lost
+- round draws increment draws
+- move selections increment corresponding move count
+
+Win rate formula:
+Matches Won × 100 ÷ Matches Played
+
+Matches Played zero displays 0.0%.
+
+Done evidence: statistics screen shows updated numbers.
+
+T34 — M5
+
+Build Settings > Data screen with:
+- VIEW STATISTICS
+- RESET LOCAL STATISTICS
+- RESET SETTINGS
+
+Done evidence: screen accessible.
+
+T35 — M4
+
+Implement VIEW STATISTICS screen data fields:
+- MATCHES PLAYED
+- MATCHES WON
+- MATCHES LOST
+- ROUNDS WON
+- ROUNDS LOST
+- DRAWS
+- WIN RATE
+- ROCK USED
+- PAPER USED
+- SCISSORS USED
+
+Done evidence: numbers match stored values.
+
+T36 — M4
+
+Implement RESET LOCAL STATISTICS:
+- clears local gameplay statistics
+- preserves online competitive statistics
+
+Done evidence: reset works.
+
+T37 — M4
+
+Implement RESET SETTINGS:
+- app color Blue
+- theme Normal
+- master volume 100%
+- music volume 70%
+- sound effects volume 90%
+- animation speed FULL
+- victory animations ON
+- vibration ON
+
+Done evidence: reset works.
+
+T38 — M1
+
+Execute Phase 1 gate:
+- Best-of-3 match
+- Best-of-5 match
+- Best-of-7 match
+- Best-of-9 match
+- Custom Match value 2
+- Custom Match value 99
+- Custom invalid value test
+- Unlimited match end test
+- Unlimited Match Draw test
+- timeout match
+- draw replay test
+- Easy AI
+- Normal AI
+- Hard AI
+- local statistics update
+- settings reset
+- flutter analyze
+- flutter test
+
+Done evidence: gate marked PASS.
+
+Phase 2 — Week 5 — Local multiplayer
+
+T39 — M5
+
+Build LocalSetupScreen with exact controls:
+- title: 2 PLAYERS
+- Match Length
+- START MATCH
+- BACK
+
+Match Length control opens MatchFormatSelectScreen.
+
+Done evidence: local match starts with selected format.
+
+T40 — M5
+
+Build Player 1 selection screen:
+- PLAYER 1
+- Make your choice.
+- ROCK
+- PAPER
+- SCISSORS
+
+Done evidence: Player 1 selection works.
+
+T41 — M4
+
+Implement Player 1 lock:
+- selected move stored
+- selected move hidden
+- display LOCKED
+- selection cannot change
+
+Done evidence: lock state works.
+
+T42 — M5
+
+Build Pass Device screen:
+- PLAYER 1 LOCKED
+- PASS THE DEVICE
+- READY
+
+Done evidence: screen appears after Player 1 lock.
+
+T43 — M5
+
+Build Player 2 selection screen:
+- PLAYER 2
+- Make your choice.
+- ROCK
+- PAPER
+- SCISSORS
+
+Done evidence: Player 2 selection works.
+
+T44 — M4
+
+Implement local round reveal:
+- after Player 2 selection, display BOTH PLAYERS READY
+- reveal both selections simultaneously
+- calculate result using core resolution
+
+Done evidence: local round resolves.
+
+T45 — M4
+
+Connect local match to:
+- match format system
+- countdown
+- GO! state
+- 10-second selection timer
+- warning state
+- auto-select
+- draw handling
+- standard match completion
+- Unlimited round accumulation
+
+Done evidence: local full match works in every format.
+
+T46 — M4
+
+Implement local Unlimited END MATCH rules:
+- END MATCH enabled after first completed round
+- END MATCH accessible at round start before Player 1 locks a move
+- END MATCH disabled during Player 1 lock
+- END MATCH disabled during Player 2 selection
+- END MATCH disabled during reveal
+- END MATCH confirmation finalizes match
+
+Done evidence: Unlimited local match ends safely without exposing hidden selection.
+
+T47 — M4
+
+Implement privacy requirement:
+- Player 1 selection never appears before Player 2 submits
+- selected move replaced with LOCKED
+- Player 2 cannot access Player 1 selection
+- procedure repeats every round
+
+Done evidence: privacy inspection passes.
+
+T48 — M5
+
+Build local StandardResultScreen reuse:
+- PLAY AGAIN
+- MAIN MENU
+
+Done evidence: local standard result displays.
+
+T49 — M5
+
+Build local UnlimitedResultScreen reuse:
+- MATCH SUMMARY
+- PLAYER 1
+- PLAYER 2
+- wins
+- draws
+- TOTAL ROUNDS
+- WIN RATE
+- PLAY AGAIN
+- MAIN MENU
+
+Done evidence: local Unlimited result displays.
+
+T50 — M1
+
+Execute Phase 2 gate:
+- local Best-of-3
+- local Best-of-5
+- local Best-of-7
+- local Best-of-9
+- local Custom Match
+- local Unlimited
+- hidden selection
+- pass device
+- draw replay
+- Unlimited draw count
+- Unlimited END MATCH
+- local statistics update
+- flutter analyze
+- flutter test
+
+Done evidence: gate PASS.
+
+Phase 3 — Weeks 6–7 — Visual system
+
+T51 — M6
+
+Create Normal theme hand assets:
+- normal_rock.png
+- normal_paper.png
+- normal_scissors.png
+
+Design:
+- cartoon-style human fist
+- cartoon-style open human hand
+- cartoon-style two-finger gesture
+
+Done evidence: assets delivered.
+
+T52 — M6
+
+Create Normal environment assets:
+- clean arena background
+- simple background elements
+- minimal particles
+- standard interface elements
+
+Done evidence: Normal theme pack complete.
+
+T53 — M6
+
+Create Space theme hand assets:
+- space_rock.png
+- space_paper.png
+- space_scissors.png
+
+Design:
+- robotic fist
+- robotic open hand
+- mechanical two-finger hand
+
+Done evidence: assets delivered.
+
+T54 — M6
+
+Create Space environment assets:
+- dark space background
+- stars
+- holographic interface elements
+- blue/purple lighting
+- energy particles
+- futuristic effects
+
+Done evidence: Space theme pack complete.
+
+T55 — M5
+
+Build Settings > Appearance screen with:
+- App Color selector
+- Game Theme selector
+- SAVE button
+
+Customization location rule:
+- customization exists only under Settings → Appearance
+- no separate customization button on Main Menu
+
+Done evidence: screen works.
+
+T56 — M4
+
+Implement App Color list:
+- Blue #2563EB default
+- Purple #7C3AED
+- Red #DC2626
+- Green #16A34A
+- Orange #EA580C
+
+Persist selected value in selectedAppColor.
+
+Done evidence: selected color persists.
+
+T57 — M5
+
+Apply selected app color in Flutter theme:
+- buttons
+- navigation highlights
+- selection indicators
+- score indicators
+- progress indicators
+- primary interface accents
+
+Implementation:
+- update ColorScheme.primary
+- update button style
+- update selected indicators
+
+Done evidence: color change visible across screens.
+
+T58 — M4
+
+Implement Game Theme list:
+- Normal
+- Space
+
+Persist selected value in selectedTheme.
+
+Done evidence: theme selection persists.
+
+T59 — M5
+
+Connect theme selection to:
+- hand designs
+- background
+- arena
+- visual effects
+- selection effects
+- reveal effects
+- victory animations
+- defeat animations
+- draw animations
+- sounds
+- background music
+
+Done evidence: theme switch changes listed elements only; match rules unchanged.
+
+T60 — M6
+
+Deliver countdown animation spec and assets.
+
+Requirements:
+- 3, 2, 1, GO!
+- one second each number
+- scale 80% → 120% → 0%
+- Normal assets
+- Space assets
+
+Done evidence: animation spec and assets delivered.
+
+T60A — M5
+
+Implement themed CountdownAnimation widget using AnimationController.
+
+Done evidence: countdown themed.
+
+T61 — M6
+
+Deliver selection effect spec:
+- button scale 110%
+- accent color
+- selection sound
+- hand change
+
+Done evidence: selection spec delivered.
+
+T61A — M5
+
+Implement themed MoveButton animation:
+- AnimatedScale to 1.1
+- accent color
+- selection sound
+- hand image change
+
+Done evidence: selection themed.
+
+T62 — M6
+
+Deliver reveal animation spec:
+- both hands move toward center simultaneously
+- reveal lasts one second
+- both become visible simultaneously
+
+Done evidence: reveal spec delivered.
+
+T62A — M5
+
+Implement themed RevealAnimation widget.
+
+Done evidence: reveal themed.
+
+T63 — M6
+
+Deliver round victory animation spec:
+- winning hand performs themed victory action
+- losing hand performs short defeat reaction
+- maximum duration two seconds
+- display ROUND WON
+
+Done evidence: round victory spec delivered.
+
+T63A — M5
+
+Implement RoundVictoryAnimation widget.
+
+Done evidence: round animation passes.
+
+T64 — M6
+
+Deliver final finishing animation spec and assets.
+
+Trigger rules:
+- standard match: triggers only on match-winning round
+- Unlimited match: triggers after END MATCH confirmation if final score has a winner
+- Unlimited Match Draw: no finishing animation
+- maximum duration three seconds
+
+Normal theme:
+- winning cartoon hand performs stylized impact
+- losing hand knocked backward
+- winner finishes victory pose
+
+Space theme:
+- winning robotic hand performs energy attack
+- losing robot powers down
+- winner enters victory pose
+
+Animation style: fictional, no realistic injury.
+
+Done evidence: final animation spec and assets delivered.
+
+T64A — M5
+
+Implement FinalFinishAnimation widget.
+
+Done evidence: final animation passes.
+
+T65 — M6
+
+Deliver draw animation spec:
+- display move pair text
+- display DRAW
+- both hands perform short reaction about 1.5 seconds
+- score unchanged
+
+Done evidence: draw spec delivered.
+
+T65A — M5
+
+Implement DrawAnimation widget.
+
+Done evidence: draw animation passes.
+
+T66 — M5
+
+Build Settings > Gameplay screen with:
+- Animation Speed FULL
+- Animation Speed FAST
+- Victory Animations ON/OFF
+- Vibration ON/OFF
+
+Done evidence: screen works.
+
+T67 — M4
+
+Implement Settings > Gameplay controls:
+- Animation Speed FULL
+- Animation Speed FAST
+- Victory Animations ON/OFF
+- Vibration ON/OFF
+
+Vibration control behavior:
+- Gameplay tab and Audio tab control the same stored setting
+
+Done evidence: controls persist.
+
+T68 — M4
+
+Implement FAST animation speed:
+- every standard animation duration becomes 50% of standard duration
+
+Done evidence: timed test passes.
+
+T69 — M4
+
+Implement Victory Animations OFF:
+- final finishing animation skipped
+- match result displays immediately
+
+Done evidence: match-winning round skips finishing animation.
+
+T70 — M6
+
+Create Normal sound files:
+- normal_click.mp3
+- normal_transition.mp3
+- normal_countdown.mp3
+- normal_select.mp3
+- normal_reveal.mp3
+- normal_victory.mp3
+- normal_defeat.mp3
+- normal_draw.mp3
+- normal_opponent_found.mp3
+- normal_connected.mp3
+- normal_disconnected.mp3
+- normal_reconnect.mp3
+
+Done evidence: Normal sound pack complete.
+
+T70A — M6
+
+Create Normal background music file:
+- normal_music.mp3
+
+Done evidence: Normal music imported.
+
+T71 — M6
+
+Create Space sound files:
+- space_click.mp3
+- space_transition.mp3
+- space_countdown.mp3
+- space_select.mp3
+- space_reveal.mp3
+- space_victory.mp3
+- space_defeat.mp3
+- space_draw.mp3
+- space_opponent_found.mp3
+- space_connected.mp3
+- space_disconnected.mp3
+- space_reconnect.mp3
+
+Done evidence: Space sound pack complete.
+
+T71A — M6
+
+Create Space background music file:
+- space_music.mp3
+
+Done evidence: Space music imported.
+
+T72 — M5
+
+Build Settings > Audio screen:
+- MASTER VOLUME
+- MUSIC
+- SOUND EFFECTS
+- VIBRATION
+
+Done evidence: screen works.
+
+T73 — M4
+
+Implement volume sliders range 0% to 100%.
+
+Default values:
+- master volume 100%
+- music volume 70%
+- sound effects volume 90%
+- vibration ON
+
+Done evidence: settings persist.
+
+T73A — M4
+
+Implement vibration events using vibration package:
+- selection vibration 80 ms
+- reveal vibration 80 ms
+- victory vibration 150 ms
+- defeat vibration 150 ms
+- draw vibration 60 ms
+
+Vibration events respect vibration setting.
+
+Done evidence: vibration test passes.
+
+T74 — M4
+
+Implement theme-specific audio replacement in AudioService:
+- Space theme uses Space sound events and Space music
+- Normal theme uses Normal sound events and Normal music
+
+Done evidence: audio changes with theme.
+
+T75 — M3
+
+Rerun AI probability tests with:
+- Normal theme active
+- Space theme active
+- Best-of-3 active
+- Unlimited active
+
+Verify identical AI distributions.
+
+Done evidence: report saved.
+
+T76 — M1
+
+Execute Phase 3 gate:
+- switch Normal/Space
+- change all five app colors
+- run FULL/FAST animation
+- toggle Victory Animations
+- toggle Vibration
+- verify themed countdown
+- verify themed reveal
+- verify themed victory
+- verify themed draw
+- verify finishing animation in standard match
+- verify finishing animation in Unlimited match
+- verify cosmetic neutrality
+- flutter analyze
+- flutter test
+
+Done evidence: gate PASS.
+
+Phase 4 — Weeks 8–10 — Online multiplayer
+
+T77 — M7
+
+Implement Account table fields:
+- player_id
+- username
+- password_hash
+- rating
+- rank
+
+Done evidence: table created.
+
+T78 — M7
+
+Implement username validation:
+- minimum 3 characters
+- maximum 16 characters
+- allowed letters
+- allowed numbers
+- allowed underscores
+- spaces disallowed
+- username unique
+
+Done evidence: invalid names rejected.
+
+T79 — M7
+
+Implement password rule:
+- minimum 8 characters
+- maximum 64 characters
+- stored with bcrypt hash
+
+Done evidence: plaintext password never stored.
+
+T80 — M7
+
+Implement auth endpoints:
+- POST /auth/register
+- POST /auth/login
+- POST /auth/logout
+- POST /auth/refresh
+
+Done evidence: endpoints pass tests.
+
+T80A — M2
+
+Implement Flutter AuthClient using Dio and FlutterSecureStorage.
+
+Behavior:
+- stores JWT access token securely
+- attaches Authorization header
+- refreshes token using /auth/refresh
+- clears token on logout
+
+Done evidence: authenticated API calls pass.
+
+T81 — M5
+
+Build LoginScreen:
+- username field
+- password field
+- submit button
+- message area
+
+Done evidence: screen works.
+
+T82 — M5
+
+Build RegisterScreen:
+- username field
+- password field
+- confirm password field
+- submit button
+- message area
+
+Done evidence: screen works.
+
+T83 — M6
+
+Create online UI asset pack:
+- connection lost icon
+- reconnect spinner
+- opponent found frame
+- room code card
+- rank badge shapes
+
+Done evidence: assets delivered.
+
+T84 — M4
+
+Implement guest access rules.
+
+Enabled:
+- Single Player
+- 2 Players
+- Settings
+- Themes
+- offline statistics
+
+Disabled:
+- Online Multiplayer
+- Ranked Multiplayer
+- Global Leaderboard
+- online profile synchronization
+
+Disabled online entries display:
+ACCOUNT REQUIRED
+
+Done evidence: guest mode passes.
+
+T85 — M5
+
+Build MultiplayerScreen:
+- QUICK MATCH
+- PRIVATE ROOM
+- RANKED MATCH
+- BACK
+
+Done evidence: screen visible after login.
+
+T86 — M5
+
+Build QuickMatchSetupScreen:
+- title: QUICK MATCH
+- MATCH LENGTH control
+- START SEARCH
+- BACK
+
+MATCH LENGTH control opens MatchFormatSelectScreen.
+
+Supported Quick Match formats:
+- BEST OF 3
+- BEST OF 5
+- BEST OF 7
+- BEST OF 9
+- CUSTOM
+- UNLIMITED
+
+Done evidence: selected casual format starts search.
+
+T87 — M7
+
+Implement Quick Match queue.
+
+Queue rules:
+- separate queue per format_type
+- CUSTOM queue also separates by wins_required
+- UNLIMITED queue uses wins_required 0
+- longest-waiting player pairs with next player in same queue
+- queue entry displays SEARCHING FOR OPPONENT...
+- queue entry displays player rating
+- queue entry displays selected MATCH LENGTH
+- queue entry provides CANCEL
+
+Done evidence: two test users pair in same format queue.
+
+T88 — M5
+
+Build QuickMatchSearchingScreen:
+- SEARCHING FOR OPPONENT...
+- Rating display
+- MATCH LENGTH display
+- CANCEL button
+
+Done evidence: screen works.
+
+T89 — M7
+
+Implement opponent found flow:
+- display OPPONENT FOUND
+- display PlayerName
+- display Rating
+- display READY button
+- ready period 15 seconds
+- if any player fails to confirm, match cancelled
+
+Done evidence: ready flow passes.
+
+T90 — M5
+
+Build OpponentFoundScreen:
+- OPPONENT FOUND
+- PlayerName
+- Rating
+- READY button
+- 15-second countdown
+
+Done evidence: screen works.
+
+T91 — M7
+
+Implement Private Room creation:
+- host selects format_type
+- host selects wins_required for CUSTOM
+- generate six-character alphanumeric uppercase code
+- allowed characters: A-Z, 0-9
+- check code uniqueness
+- room state stores host_id, guest_id, status, format_type, wins_required
+
+Supported Private Room formats:
+- BEST_OF_3
+- BEST_OF_5
+- BEST_OF_7
+- BEST_OF_9
+- CUSTOM
+- UNLIMITED
+
+Done evidence: room created.
+
+T92 — M5
+
+Build PrivateRoomCreateScreen:
+- title: ROOM CODE
+- code display
+- COPY CODE button
+- MATCH LENGTH display
+- WAITING FOR PLAYER...
+- CANCEL button
+
+Done evidence: host screen works.
+
+T93 — M7
+
+Implement Join Room:
+- accept six-character code
+- validate existence
+- join room
+- receive room format_type
+- update room state
+
+Done evidence: second player joins.
+
+T94 — M5
+
+Build PrivateRoomJoinScreen:
+- title: JOIN ROOM
+- six-character code input
+- JOIN button
+
+After join, display:
+- room code
+- MATCH LENGTH
+- host name
+
+Done evidence: guest screen works.
+
+T95 — M7
+
+Implement host start permission:
+- only host starts match
+- start enabled after both players joined
+- match starts with stored format_type and wins_required
+
+Done evidence: private match starts with selected casual format.
+
+T96 — M7
+
+Implement Ranked Match configuration:
+- fixed BEST_OF_3
+- wins_required 2
+- no match format selection
+- rating change enabled
+- rank threshold update enabled
+- global leaderboard update enabled
+- competitive statistics recording enabled
+- ranked match history recording enabled
+
+Done evidence: ranked match config passes.
+
+T97 — M7
+
+Implement server-authoritative round endpoint.
+
+Endpoint:
+POST /matches/{matchId}/move
+
+Endpoint accepts:
+- Player ID
+- Match ID
+- Selected Move
+
+Endpoint behavior:
+- validates move as ROCK, PAPER, SCISSORS
+- validates match format
+- stores selection
+- rejects late submission
+- after both submissions determines round result
+- updates match score
+- updates draw count
+- checks standard match completion
+- continues Unlimited match automatically
+- sends result through WebSocket event round_result
+
+Done evidence: endpoint passes nine move-pair tests.
+
+T97A — M2
+
+Implement Flutter MatchSocketClient using web_socket_channel.
+
+Handled events:
+- opponent_connected
+- opponent_found
+- round_result
+- match_completed
+- opponent_disconnected
+- reconnect_state
+
+Done evidence: client receives test events.
+
+T98 — M3
+
+Build test client that submits:
+- all nine move pairs
+- Best-of-3 configuration
+- Best-of-5 configuration
+- Custom configuration
+- Unlimited configuration
+
+Record server results.
+
+Done evidence: test report saved.
+
+T99 — M2
+
+Connect online GameplayScreen to server:
+- send selected move through POST /matches/{matchId}/move
+- wait for WebSocket round_result
+- hide opponent selection until server reveals
+
+Done evidence: online round works.
+
+T100 — M7
+
+Implement online round timeout:
+- if any player fails to submit within 10 seconds, server assigns random move
+- server marks AUTO
+
+Done evidence: timeout match passes.
+
+T101 — M7
+
+Implement online standard match completion:
+- server determines winner when any player reaches wins_required
+- server sends WebSocket event match_completed
+- client cannot independently declare result
+
+Done evidence: Best-of-3, Best-of-5, Best-of-7, Best-of-9, Custom online matches complete correctly.
+
+T102 — M7
+
+Implement online Unlimited match end endpoint.
+
+Endpoint:
+POST /matches/{matchId}/end
+
+Endpoint behavior:
+- accepts Player ID
+- enabled after first completed round
+- if any player already submitted current round move, server completes that round first
+- finalizes current score
+- higher score wins
+- equal score produces Match Draw
+- records total rounds
+- records draw count
+- sends Unlimited summary through WebSocket event match_completed
+
+Done evidence: online Unlimited match finalizes correctly.
+
+T103 — M2
+
+Connect online Unlimited END MATCH button to server endpoint.
+
+Behavior:
+- END MATCH button opens confirmation dialog
+- CANCEL returns to match
+- END MATCH sends end request
+- client waits for server summary
+
+Done evidence: online Unlimited END MATCH works.
+
+T104 — M7
+
+Implement disconnection handling:
+- client loses connection
+- server starts 30-second reconnect window
+- successful reconnect uses GET /matches/{matchId}/state
+- successful reconnect restores latest match state
+- successful reconnect restores score
+- successful reconnect continues match from latest valid state
+- failed reconnect assigns loss
+- opponent receives win
+
+Done evidence: disconnect test passes.
+
+T105 — M5
+
+Build ConnectionLostScreen:
+- CONNECTION LOST
+- Reconnecting...
+- 00:30 countdown
+
+Done evidence: screen works.
+
+T106 — M7
+
+Implement intentional quit in ranked:
+- quitting active ranked match immediately counts as loss
+- opponent receives win
+- quitter receives normal rating penalty
+
+Done evidence: quit test passes.
+
+T107 — M7
+
+Implement ranked readiness lock:
+- after both players confirm readiness, ranked match cannot be cancelled without penalty
+- cancel attempt triggers loss
+
+Done evidence: cancel test passes.
+
+T108 — M5
+
+Implement offline online disabled state.
+
+Visible but disabled:
+- QUICK MATCH
+- PRIVATE ROOM
+- RANKED MATCH
+- LEADERBOARD
+
+Display:
+INTERNET CONNECTION REQUIRED
+
+Done evidence: airplane-mode test passes.
+
+T109 — M1
+
+Execute Phase 4 gate:
+- register two accounts
+- Quick Match Best-of-3
+- Quick Match Best-of-5
+- Quick Match Custom
+- Quick Match Unlimited
+- Private Room Best-of-3
+- Private Room Best-of-7
+- Private Room Custom
+- Private Room Unlimited
+- Ranked fixed Best-of-3
+- server result validation
+- Unlimited online END MATCH
+- disconnect reconnect
+- disconnect fail loss
+- offline disabled state
+- flutter analyze
+- flutter test
+
+Done evidence: gate PASS.
+
+Phase 5 — Week 11 — Competitive system
+
+T110 — M7
+
+Implement rating defaults:
+- new ranked player rating 1000
+
+Done evidence: new account shows 1000.
+
+T111 — M7
+
+Implement rating changes:
+- Ranked Win +20
+- Ranked Loss -20
+- Draw 0
+- rating floor 0
+
+Done evidence: rating tests pass.
+
+T112 — M7
+
+Implement rank thresholds:
+- Bronze: 0–999
+- Silver: 1000–1499
+- Gold: 1500–1999
+- Platinum: 2000–2499
+- Diamond: 2500–2999
+- Master: 3000+
+
+Done evidence: rank updates when rating crosses threshold.
+
+T113 — M7
+
+Implement global leaderboard endpoint:
+- returns one global leaderboard
+- sorted by rating descending
+- endpoint refreshes whenever leaderboard screen opens
+
+Done evidence: endpoint passes.
+
+T114 — M5
+
+Build LeaderboardScreen:
+- title: GLOBAL LEADERBOARD
+- PLAYER
+- RATING
+
+Refresh behavior:
+- calls leaderboard endpoint when screen opens
+
+Done evidence: screen displays sorted rows.
+
+T115 — M6
+
+Create rank tier badges:
+- Bronze
+- Silver
+- Gold
+- Platinum
+- Diamond
+- Master
+
+Done evidence: badges delivered.
+
+T116 — M5
+
+Build Player Profile screen:
+- Username
+- Rank
+- Rating
+- Matches
+- Wins
+- Losses
+- Win Rate
+- MATCH HISTORY button
+- ONLINE STATISTICS button
+
+No profile picture.
+
+Done evidence: profile displays.
+
+T117 — M7
+
+Implement online PlayerStatistic fields:
+- matches played
+- matches won
+- matches lost
+- rounds won
+- rounds lost
+- draws
+- win rate
+- ROCK selections
+- PAPER selections
+- SCISSORS selections
+
+Update rules:
+- Quick Match updates online statistics
+- Private Room updates online statistics
+- Ranked Match updates online statistics
+- Ranked Match updates rating
+- Quick Match does not update rating
+- Private Room does not update rating
+- Unlimited online matches update online statistics
+- Unlimited online matches do not update rating
+
+Win rate formula:
+Matches Won × 100 ÷ Matches Played
+
+Matches Played zero displays 0.0%.
+
+Done evidence: stats update after online match.
+
+T118 — M7
+
+Implement MatchHistory fields:
+- match_id
+- date
+- opponent
+- mode
+- format_type
+- result
+- rating_before
+- rating_after
+- rank_change
+
+Recording rules:
+- Ranked Match records history
+- Quick Match does not record rating change
+- Private Room does not record rating change
+
+Done evidence: history saved.
+
+T119 — M5
+
+Build MatchHistoryScreen:
+- title: MATCH HISTORY
+- date
+- opponent
+- mode
+- format
+- result
+- rating_before
+- rating_after
+- rank_change
+
+Done evidence: ranked history displays.
+
+T120 — M5
+
+Build OnlineStatsScreen:
+- title: ONLINE STATISTICS
+- MATCHES PLAYED
+- MATCHES WON
+- MATCHES LOST
+- ROUNDS WON
+- ROUNDS LOST
+- DRAWS
+- WIN RATE
+- ROCK USED
+- PAPER USED
+- SCISSORS USED
+
+Done evidence: online statistics display.
+
+T121 — M7
+
+Implement online profile synchronization endpoints:
+- GET /profile
+- GET /statistics
+- GET /match-history
+
+Done evidence: profile, statistics, history load while online.
+
+T121A — M2
+
+Implement Flutter online data providers using Dio:
+- profileProvider
+- onlineStatsProvider
+- matchHistoryProvider
+- leaderboardProvider
+
+Done evidence: screens load server data.
+
+T122 — M5
+
+Build ranked StandardResultScreen addition:
+- RATING label
+- rating before
+- rating after
+- rating change
+
+Done evidence: ranked result shows change.
+
+T123 — M3
+
+Build automated ranked simulation test:
+- create two test accounts
+- simulate Best-of-3 ranked match
+- verify server result
+- verify rating change
+- verify rank threshold
+- verify leaderboard update
+- verify match history
+
+Done evidence: test report saved.
+
+T124 — M1
+
+Execute Phase 5 gate:
+- ranked win
+- ranked loss
+- draw
+- disconnect loss
+- quit loss
+- leaderboard refresh
+- profile update
+- rank threshold update
+- online statistics update
+- ranked match history update
+- flutter analyze
+- flutter test
+
+Done evidence: gate PASS.
+
+Release — Week 12
+
+T125 — M1
+
+Create final test matrix with named cases:
+- splash load
+- main menu navigation
+- guest access
+- login
+- register
+- profile visibility
+- Best-of-3
+- Best-of-5
+- Best-of-7
+- Best-of-9
+- Custom minimum
+- Custom maximum
+- Custom invalid value
+- Unlimited end
+- Unlimited Match Draw
+- Unlimited win rate
+- Easy AI
+- Normal AI
+- Hard AI
+- timer expiry
+- draw replay
+- local privacy
+- local match formats
+- local Unlimited
+- Quick Match format queue
+- Private Room format
+- Ranked fixed format
+- server result validation
+- disconnect reconnect
+- disconnect fail
+- offline disabled state
+- theme switch
+- app color switch
+- animation speed
+- victory toggle
+- audio volumes
+- vibration events
+- leaderboard refresh
+- profile stats
+- online statistics
+- ranked match history
+
+Done evidence: matrix executed.
+
+T126 — M2
+
+Close gameplay defects logged from final test matrix:
+- match format selection
+- wins required validation
+- countdown
+- selection lock
+- timer
+- reveal
+- score
+- standard match result
+- Unlimited END MATCH
+- Unlimited result calculation
+- online move submission
+
+Done evidence: listed defects closed.
+
+T127 — M3
+
+Close AI defects logged from final test matrix:
+- Easy probability
+- Normal probability
+- Hard probability
+- AI behavior across match formats
+- no history leakage between matches
+
+Done evidence: listed defects closed.
+
+T128 — M4
+
+Close local flow, settings, storage, audio, animation defects logged from final test matrix:
+- pass device privacy
+- local match formats
+- local Unlimited END MATCH
+- reset local statistics
+- reset settings
+- volume sliders
+- theme persistence
+- vibration synchronization
+- guest access
+
+Done evidence: listed defects closed.
+
+T129 — M5
+
+Close navigation defects logged from final test matrix:
+- splash to main menu
+- back buttons
+- match format selection
+- custom match configuration
+- disabled online states
+- leaderboard refresh
+- profile display
+- online statistics display
+- match history display
+
+Done evidence: listed defects closed.
+
+T130 — M6
+
+Close visual and audio defects logged from final test matrix:
+- Normal assets
+- Space assets
+- countdown scale
+- reveal timing
+- victory animation
+- defeat animation
+- draw animation
+- finishing animation
+- sound events
+- background music
+
+Done evidence: listed defects closed.
+
+T131 — M7
+
+Close backend defects logged from final test matrix:
+- register validation
+- login
+- Quick Match queue
+- Private Room format
+- server result
+- Unlimited END MATCH endpoint
+- disconnect
+- reconnect
+- rating
+- rank
+- leaderboard
+- online statistics
+- ranked match history
+
+Done evidence: listed defects closed.
+
+T132 — M1
+
+Run release commands:
+flutter analyze
+flutter test
+flutter build appbundle --release
+
+Freeze code.
+Tag release version 1.0.0.
+Archive test results.
+Publish release candidate build.
+
+Done evidence: Android App Bundle release candidate available.
+
+Revised member chronology summary
+
+M1
+T01, T02, T38, T50, T76, T109, T124, T125, T132
+
+M2
+T03, T03A, T05A, T09A, T10B, T11, T12, T13, T14, T15, T16, T17, T18, T26, T27, T28, T80A, T97A, T99, T103, T121A, T126
+
+M3
+T07, T19, T20, T21, T22, T75, T98, T123, T127
+
+M4
+T08, T33, T35, T36, T37, T41, T44, T45, T46, T47, T56, T58, T67, T68, T69, T73, T73A, T74, T84, T128
+
+M5
+T04, T10, T10A, T10C, T10D, T14A, T15A, T23, T24, T25, T29, T30, T31, T32, T34, T39, T40, T42, T43, T48, T49, T55, T57, T59, T60A, T61A, T62A, T63A, T64A, T65A, T66, T72, T81, T82, T85, T86, T88, T90, T92, T94, T105, T108, T114, T116, T119, T120, T122, T129
+
+M6
+T05, T09, T51, T52, T53, T54, T60, T61, T62, T63, T64, T65, T70, T70A, T71, T71A, T83, T115, T130
+
+M7
+T06, T06A, T77, T78, T79, T80, T87, T89, T91, T93, T95, T96, T97, T100, T101, T102, T104, T106, T107, T110, T111, T112, T113, T117, T118, T121, T131
+
+Begin with T01.
