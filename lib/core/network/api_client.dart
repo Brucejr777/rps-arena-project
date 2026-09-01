@@ -60,9 +60,7 @@ class AuthClient {
               headers: {'Content-Type': 'application/json'},
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 10),
-            )) {
-    this.dio.interceptors.add(_AuthInterceptor(this));
-  }
+            ));
 
   // ── Token storage ────────────────────────────────────────────────
 
@@ -79,6 +77,14 @@ class AuthClient {
     await _storage.delete(refreshTokenKey);
   }
 
+  /// Attach the current access token to a request options object.
+  Future<void> _attachToken(RequestOptions options) async {
+    final token = await accessToken;
+    if (token != null) {
+      options.headers['Authorization'] = 'Bearer $token';
+    }
+  }
+
   // ── Public API ───────────────────────────────────────────────────
 
   /// Register a new account. Returns player data on success.
@@ -86,10 +92,13 @@ class AuthClient {
     required String username,
     required String password,
   }) async {
-    final res = await dio.post('/auth/register', data: {
-      'username': username,
-      'password': password,
-    });
+    final options = RequestOptions(
+      path: '/auth/register',
+      method: 'POST',
+      data: {'username': username, 'password': password},
+    );
+    await _attachToken(options);
+    final res = await dio.fetch(options);
     final data = res.data as Map<String, dynamic>;
     await _saveTokens(
         data['accessToken'] as String, data['refreshToken'] as String);
@@ -101,10 +110,13 @@ class AuthClient {
     required String username,
     required String password,
   }) async {
-    final res = await dio.post('/auth/login', data: {
-      'username': username,
-      'password': password,
-    });
+    final options = RequestOptions(
+      path: '/auth/login',
+      method: 'POST',
+      data: {'username': username, 'password': password},
+    );
+    await _attachToken(options);
+    final res = await dio.fetch(options);
     final data = res.data as Map<String, dynamic>;
     await _saveTokens(
         data['accessToken'] as String, data['refreshToken'] as String);
@@ -116,7 +128,13 @@ class AuthClient {
     final rt = await refreshToken;
     if (rt != null) {
       try {
-        await dio.post('/auth/logout', data: {'refreshToken': rt});
+        final options = RequestOptions(
+          path: '/auth/logout',
+          method: 'POST',
+          data: {'refreshToken': rt},
+        );
+        await _attachToken(options);
+        await dio.fetch(options);
       } catch (_) {
         // Best-effort — clear local tokens even if server call fails.
       }
@@ -140,63 +158,75 @@ class AuthClient {
   /// Whether the user currently has a stored access token.
   Future<bool> get isAuthenticated async => (await accessToken) != null;
 
-  /// Make an authenticated GET request.
-  Future<Response> get(String path, {Map<String, dynamic>? queryParameters}) {
-    return dio.get(path, queryParameters: queryParameters);
+  /// Make an authenticated GET request, with automatic 401 retry.
+  Future<Response> get(String path, {Map<String, dynamic>? queryParameters}) async {
+    final options = RequestOptions(
+      path: path,
+      method: 'GET',
+      queryParameters: queryParameters,
+    );
+    await _attachToken(options);
+
+    try {
+      return await dio.fetch(options);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        // Try token refresh and retry once
+        try {
+          await refreshTokens();
+          final retryOptions = RequestOptions(
+            path: path,
+            method: 'GET',
+            queryParameters: queryParameters,
+          );
+          await _attachToken(retryOptions);
+          return await dio.fetch(retryOptions);
+        } catch (_) {
+          // Refresh failed — rethrow original error
+          rethrow;
+        }
+      }
+      rethrow;
+    }
   }
 
-  /// Make an authenticated POST request.
-  Future<Response> post(String path, {dynamic data}) {
-    return dio.post(path, data: data);
+  /// Make an authenticated POST request, with automatic 401 retry.
+  Future<Response> post(String path, {dynamic data}) async {
+    final options = RequestOptions(
+      path: path,
+      method: 'POST',
+      data: data,
+    );
+    await _attachToken(options);
+
+    try {
+      return await dio.fetch(options);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        try {
+          await refreshTokens();
+          final retryOptions = RequestOptions(
+            path: path,
+            method: 'POST',
+            data: data,
+          );
+          await _attachToken(retryOptions);
+          return await dio.fetch(retryOptions);
+        } catch (_) {
+          rethrow;
+        }
+      }
+      rethrow;
+    }
   }
 
   /// Make an authenticated DELETE request.
-  Future<Response> delete(String path) {
-    return dio.delete(path);
-  }
-}
-
-/// Dio interceptor that attaches the access token to every outgoing request
-/// and transparently retries once after a 401 using a refreshed token.
-class _AuthInterceptor extends Interceptor {
-  final AuthClient _client;
-  _AuthInterceptor(this._client);
-
-  @override
-  void onRequest(
-      RequestOptions options, RequestInterceptorHandler handler) {
-    _client.accessToken.then((token) {
-      if (token != null) {
-        options.headers['Authorization'] = 'Bearer $token';
-      }
-      handler.next(options);
-    }).catchError((_) {
-      handler.next(options);
-    });
-  }
-
-  @override
-  void onError(DioException err, ErrorInterceptorHandler handler) {
-    // If we got a 401 and haven't already retried, attempt a token refresh.
-    if (err.response?.statusCode == 401 &&
-        err.requestOptions.extra['_retried'] != true) {
-      _client.refreshTokens().then((_) {
-        return _client.accessToken;
-      }).then((newToken) {
-        // Retry the original request with the fresh token.
-        final opts = err.requestOptions;
-        opts.extra['_retried'] = true;
-        opts.headers['Authorization'] = 'Bearer $newToken';
-
-        return _client.dio.fetch(opts);
-      }).then((res) {
-        handler.resolve(res);
-      }).catchError((_) {
-        // Refresh failed — let the original 401 propagate.
-        handler.next(err);
-      });
-      return;
-    }
-    handler.next(err);
+  Future<Response> delete(String path) async {
+    final options = RequestOptions(
+      path: path,
+      method: 'DELETE',
+    );
+    await _attachToken(options);
+    return await dio.fetch(options);
   }
 }
