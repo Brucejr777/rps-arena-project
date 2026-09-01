@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/network/api_client.dart';
+import '../widgets/rank_badge.dart';
 
 /// Leaderboard Screen (T114).
 ///
@@ -259,14 +260,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                                                 ),
                                               ),
                                               if (tier != null)
-                                                Text(
-                                                  tier.toUpperCase(),
-                                                  style: TextStyle(
-                                                    color: color,
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.bold,
-                                                    letterSpacing: 0.5,
-                                                  ),
+                                                RankBadge(
+                                                  rank: tier,
+                                                  fontSize: 9,
+                                                  showIcon: false,
                                                 ),
                                             ],
                                           ),
