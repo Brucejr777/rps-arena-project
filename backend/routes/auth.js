@@ -72,6 +72,12 @@ function createAuthRouter(pool) {
         [player.player_id]
       );
 
+      // Create initial leaderboard entry with default rating 1000
+      await pool.query(
+        'INSERT INTO leaderboard (player_id, rating) VALUES ($1, $2)',
+        [player.player_id, player.rating]
+      );
+
       const accessToken = signAccessToken(player.player_id, player.username);
       const refreshToken = signRefreshToken(player.player_id);
       refreshTokens.set(refreshToken, player.player_id);

@@ -33,6 +33,11 @@ function mockQuery(sql, params) {
     return Promise.resolve({ rows: [] });
   }
 
+  // INSERT INTO leaderboard
+  if (sql.includes('INSERT INTO leaderboard')) {
+    return Promise.resolve({ rows: [] });
+  }
+
   // SELECT player_id FROM account WHERE username (uniqueness check)
   if (sql.includes('SELECT player_id FROM account') && sql.includes('WHERE username')) {
     const found = accounts.filter((a) => a.username === params[0]);
@@ -153,6 +158,13 @@ describe('POST /auth/register', () => {
   it('creates initial player_statistic row', async () => {
     // The register for NewPlayer above should have created a stat row
     assert.ok(stats.some((s) => s.player_id > 0));
+  });
+
+  it('sets default rating to 1000 and rank to Bronze for new accounts', async () => {
+    const res = await post('/auth/register', { username: 'DefaultRating', password: 'StrongPass1' });
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.body.player.rating, 1000, 'new account should have rating 1000');
+    assert.strictEqual(res.body.player.rank, 'Bronze', 'new account should have rank Bronze');
   });
 });
 
