@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/network/api_client.dart';
+import '../../auth/controllers/auth_controller.dart';
 
 /// Online Statistics Screen (T120).
 ///
@@ -8,15 +9,14 @@ import '../../../core/network/api_client.dart';
 /// Title: ONLINE STATISTICS
 /// Fields: MATCHES PLAYED, MATCHES WON, MATCHES LOST, ROUNDS WON, ROUNDS LOST,
 ///         DRAWS, WIN RATE, ROCK USED, PAPER USED, SCISSORS USED
-class OnlineStatsScreen extends StatefulWidget {
+class OnlineStatsScreen extends ConsumerStatefulWidget {
   const OnlineStatsScreen({super.key});
 
   @override
-  State<OnlineStatsScreen> createState() => _OnlineStatsScreenState();
+  ConsumerState<OnlineStatsScreen> createState() => _OnlineStatsScreenState();
 }
 
-class _OnlineStatsScreenState extends State<OnlineStatsScreen> {
-  final AuthClient _client = AuthClient();
+class _OnlineStatsScreenState extends ConsumerState<OnlineStatsScreen> {
   Map<String, dynamic>? _stats;
   bool _isLoading = true;
   String? _error;
@@ -34,7 +34,8 @@ class _OnlineStatsScreenState extends State<OnlineStatsScreen> {
     });
 
     try {
-      final response = await _client.get('/auth/profile');
+      final client = ref.read(authControllerProvider.notifier).client;
+      final response = await client.get('/auth/profile');
       final data = response.data as Map<String, dynamic>;
       setState(() {
         _stats = data['stats'] as Map<String, dynamic>?;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/network/api_client.dart';
+import '../../auth/controllers/auth_controller.dart';
 import '../widgets/rank_badge.dart';
 
 /// Match History Screen (T119).
@@ -8,15 +9,14 @@ import '../widgets/rank_badge.dart';
 /// Displays the player's online match history.
 /// Title: MATCH HISTORY
 /// Fields: date, opponent, mode, format, result, rating_before, rating_after, rank_change
-class MatchHistoryScreen extends StatefulWidget {
+class MatchHistoryScreen extends ConsumerStatefulWidget {
   const MatchHistoryScreen({super.key});
 
   @override
-  State<MatchHistoryScreen> createState() => _MatchHistoryScreenState();
+  ConsumerState<MatchHistoryScreen> createState() => _MatchHistoryScreenState();
 }
 
-class _MatchHistoryScreenState extends State<MatchHistoryScreen> {
-  final AuthClient _client = AuthClient();
+class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
   List<Map<String, dynamic>> _history = [];
   bool _isLoading = true;
   String? _error;
@@ -34,7 +34,8 @@ class _MatchHistoryScreenState extends State<MatchHistoryScreen> {
     });
 
     try {
-      final response = await _client.get('/matches/history');
+      final client = ref.read(authControllerProvider.notifier).client;
+      final response = await client.get('/matches/history');
       final data = response.data as Map<String, dynamic>;
       final entries = (data['history'] as List)
           .map((e) => Map<String, dynamic>.from(e))
