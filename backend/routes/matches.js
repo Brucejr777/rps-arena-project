@@ -18,7 +18,7 @@ const { Router } = require('express');
 const { requireAuth } = require('../lib/auth_middleware');
 const { resolveRound } = require('../lib/resolution');
 const { roundTimeoutManager } = require('../lib/round_timeout');
-const { calculateRatingChanges, applyRatingChanges, updatePlayerStatistics } = require('../lib/rating');
+const { calculateRatingChanges, applyRatingChanges, updatePlayerStatistics, trackMoveSelection } = require('../lib/rating');
 
 const VALID_MOVES = ['rock', 'paper', 'scissors'];
 
@@ -134,6 +134,10 @@ function createMatchesRouter(pool, wss) {
       // Both moves submitted — cancel timeout and resolve (T100)
       roundTimeoutManager.cancelTimer(parseInt(matchId), currentRound);
 
+      // T117: Track move selections for both players
+      await trackMoveSelection(pool, match.player_a_id, round.player_a_move);
+      await trackMoveSelection(pool, match.player_b_id, round.player_b_move);
+
       const result = resolveRound(round.player_a_move, round.player_b_move);
 
       // Update round result
@@ -189,10 +193,14 @@ function createMatchesRouter(pool, wss) {
           [matchWinner, matchId]
         );
 
-        // T111: Apply rating changes for ranked matches
+        // T111/T117: Apply rating changes for ranked matches
         if (match.mode === 'ranked') {
           const { ratingChangeA, ratingChangeB } = calculateRatingChanges(false, matchWinner, match.player_a_id, match.player_b_id);
-          const { newRatingA, newRatingB } = await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, ratingChangeA, ratingChangeB);
+          await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, ratingChangeA, ratingChangeB);
+        }
+
+        // T117: Update statistics for ALL online match modes
+        if (match.mode !== 'local') {
           await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, matchWinner, playerAScore, playerBScore);
         }
       }
@@ -411,10 +419,14 @@ function createMatchesRouter(pool, wss) {
         [winnerId, matchDraw, matchId]
       );
 
-      // T111: Apply rating changes for ranked matches
+      // T111/T117: Apply rating changes for ranked matches
       if (match.mode === 'ranked') {
         const { ratingChangeA, ratingChangeB } = calculateRatingChanges(matchDraw, winnerId, match.player_a_id, match.player_b_id);
         await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, ratingChangeA, ratingChangeB);
+      }
+
+      // T117: Update statistics for ALL online match modes
+      if (match.mode !== 'local') {
         await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, matchDraw, winnerId, aWins, bWins);
       }
 
@@ -532,6 +544,9 @@ function createMatchesRouter(pool, wss) {
         [matchId]
       );
 
+      // T117: Update stats for non-ranked online matches on cancel
+      await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, true, null, 0, 0);
+
       // Send match_completed via WebSocket
       if (wss) {
         const completedPayload = {
@@ -610,7 +625,6 @@ function createMatchesRouter(pool, wss) {
       // T111: Apply rating changes for ranked quit
       const { ratingChangeA: quitRatingA, ratingChangeB: quitRatingB } = calculateRatingChanges(false, winnerId, match.player_a_id, match.player_b_id);
       await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, quitRatingA, quitRatingB);
-      await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, winnerId, 0, 0);
 
       // Send match_completed via WebSocket
       if (wss) {
@@ -672,6 +686,9 @@ function createMatchesRouter(pool, wss) {
           [autoMove, round.id]
         );
       }
+
+      // T117: Track auto-move selection
+      await trackMoveSelection(pool, playerId, autoMove);
 
       // Now resolve the round as if both submitted
       const updatedRound = await pool.query(

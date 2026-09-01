@@ -166,4 +166,19 @@ async function updatePlayerStatistics(pool, playerAId, playerBId, matchDraw, win
   }
 }
 
-module.exports = { calculateRatingChanges, applyRatingChanges, updatePlayerStatistics };
+/**
+ * Track a move selection in player statistics.
+ *
+ * @param {Pool} pool - Database pool
+ * @param {number} playerId - Player's ID
+ * @param {string} move - The move: 'rock', 'paper', or 'scissors'
+ */
+async function trackMoveSelection(pool, playerId, move) {
+  const column = `${move}_selections`;
+  await pool.query(
+    `UPDATE player_statistic SET ${column} = ${column} + 1 WHERE player_id = $1`,
+    [playerId]
+  );
+}
+
+module.exports = { calculateRatingChanges, applyRatingChanges, updatePlayerStatistics, trackMoveSelection };
