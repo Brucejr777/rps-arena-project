@@ -77,12 +77,16 @@ class AuthClient {
     await _storage.delete(refreshTokenKey);
   }
 
-  /// Attach the current access token to a request options object.
-  Future<void> _attachToken(RequestOptions options) async {
+  /// Build Options with the current access token attached.
+  Future<Options> _authOptions() async {
     final token = await accessToken;
+    final headers = <String, dynamic>{
+      'Content-Type': 'application/json',
+    };
     if (token != null) {
-      options.headers['Authorization'] = 'Bearer $token';
+      headers['Authorization'] = 'Bearer $token';
     }
+    return Options(headers: headers);
   }
 
   // ── Public API ───────────────────────────────────────────────────
@@ -92,13 +96,9 @@ class AuthClient {
     required String username,
     required String password,
   }) async {
-    final options = RequestOptions(
-      path: '/auth/register',
-      method: 'POST',
-      data: {'username': username, 'password': password},
-    );
-    await _attachToken(options);
-    final res = await dio.fetch(options);
+    final opts = await _authOptions();
+    final res = await dio.post('/auth/register',
+        data: {'username': username, 'password': password}, options: opts);
     final data = res.data as Map<String, dynamic>;
     await _saveTokens(
         data['accessToken'] as String, data['refreshToken'] as String);
@@ -110,13 +110,9 @@ class AuthClient {
     required String username,
     required String password,
   }) async {
-    final options = RequestOptions(
-      path: '/auth/login',
-      method: 'POST',
-      data: {'username': username, 'password': password},
-    );
-    await _attachToken(options);
-    final res = await dio.fetch(options);
+    final opts = await _authOptions();
+    final res = await dio.post('/auth/login',
+        data: {'username': username, 'password': password}, options: opts);
     final data = res.data as Map<String, dynamic>;
     await _saveTokens(
         data['accessToken'] as String, data['refreshToken'] as String);
@@ -128,13 +124,9 @@ class AuthClient {
     final rt = await refreshToken;
     if (rt != null) {
       try {
-        final options = RequestOptions(
-          path: '/auth/logout',
-          method: 'POST',
-          data: {'refreshToken': rt},
-        );
-        await _attachToken(options);
-        await dio.fetch(options);
+        final opts = await _authOptions();
+        await dio.post('/auth/logout',
+            data: {'refreshToken': rt}, options: opts);
       } catch (_) {
         // Best-effort — clear local tokens even if server call fails.
       }
@@ -159,30 +151,19 @@ class AuthClient {
   Future<bool> get isAuthenticated async => (await accessToken) != null;
 
   /// Make an authenticated GET request, with automatic 401 retry.
-  Future<Response> get(String path, {Map<String, dynamic>? queryParameters}) async {
-    final options = RequestOptions(
-      path: path,
-      method: 'GET',
-      queryParameters: queryParameters,
-    );
-    await _attachToken(options);
-
+  Future<Response> get(String path,
+      {Map<String, dynamic>? queryParameters}) async {
+    final opts = await _authOptions();
     try {
-      return await dio.fetch(options);
+      return await dio.get(path, queryParameters: queryParameters, options: opts);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
-        // Try token refresh and retry once
         try {
           await refreshTokens();
-          final retryOptions = RequestOptions(
-            path: path,
-            method: 'GET',
-            queryParameters: queryParameters,
-          );
-          await _attachToken(retryOptions);
-          return await dio.fetch(retryOptions);
+          final retryOpts = await _authOptions();
+          return await dio.get(path,
+              queryParameters: queryParameters, options: retryOpts);
         } catch (_) {
-          // Refresh failed — rethrow original error
           rethrow;
         }
       }
@@ -192,26 +173,15 @@ class AuthClient {
 
   /// Make an authenticated POST request, with automatic 401 retry.
   Future<Response> post(String path, {dynamic data}) async {
-    final options = RequestOptions(
-      path: path,
-      method: 'POST',
-      data: data,
-    );
-    await _attachToken(options);
-
+    final opts = await _authOptions();
     try {
-      return await dio.fetch(options);
+      return await dio.post(path, data: data, options: opts);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
         try {
           await refreshTokens();
-          final retryOptions = RequestOptions(
-            path: path,
-            method: 'POST',
-            data: data,
-          );
-          await _attachToken(retryOptions);
-          return await dio.fetch(retryOptions);
+          final retryOpts = await _authOptions();
+          return await dio.post(path, data: data, options: retryOpts);
         } catch (_) {
           rethrow;
         }
@@ -222,11 +192,7 @@ class AuthClient {
 
   /// Make an authenticated DELETE request.
   Future<Response> delete(String path) async {
-    final options = RequestOptions(
-      path: path,
-      method: 'DELETE',
-    );
-    await _attachToken(options);
-    return await dio.fetch(options);
+    final opts = await _authOptions();
+    return await dio.delete(path, options: opts);
   }
 }
