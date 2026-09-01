@@ -18,6 +18,22 @@ app.use(express.json());
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+// Auto-migrate: create refresh_token table if it doesn't exist
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS refresh_token (
+        token TEXT PRIMARY KEY,
+        player_id INTEGER NOT NULL REFERENCES account(player_id),
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    console.log('Migration: refresh_token table ready');
+  } catch (err) {
+    console.error('Migration failed:', err.message);
+  }
+})();
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
