@@ -32,10 +32,9 @@ class MatchSocketClient {
   bool _isConnected = false;
   Timer? _reconnectTimer;
   int _matchId = 0;
-  String _baseUrl;
+  final String _baseUrl;
 
-  MatchSocketClient({String baseUrl = 'wss://rps-arena-project-3.onrender.com'})
-      : _baseUrl = baseUrl;
+  MatchSocketClient({this._baseUrl = 'wss://rps-arena-project-3.onrender.com'});
 
   /// Stream of parsed socket events.
   Stream<SocketEvent> get events => _controller.stream;

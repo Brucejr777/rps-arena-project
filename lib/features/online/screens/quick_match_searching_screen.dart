@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../match/domain/match_format.dart';
 
 /// Quick Match searching screen (T88).
 ///

@@ -10,7 +10,6 @@ import 'theme_background.dart';
 import 'move_button.dart';
 import 'pause_exit_overlay.dart';
 import 'reveal_animation.dart';
-import 'countdown_animation.dart';
 import '../screens/standard_result_screen.dart';
 import '../screens/unlimited_result_screen.dart';
 import '../../online/screens/connection_lost_screen.dart';
@@ -61,12 +60,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   bool _isWaitingForServer = false;
   bool _isRevealing = false;
   bool _isPaused = false;
-  bool _matchFinished = false;
 
   // Server-revealed data
   String? _serverPlayerAMove;
   String? _serverPlayerBMove;
-  String? _serverResult;
 
   bool get _isPlayerA => widget.playerId == widget.opponentId
       ? true
@@ -120,7 +117,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   void _handleRoundResult(Map<String, dynamic> data) {
-    final result = data['result'] as String?;
     final playerAMove = data['playerAMove'] as String?;
     final playerBMove = data['playerBMove'] as String?;
     final playerAScore = data['playerAScore'] as int? ?? 0;
@@ -134,11 +130,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _isRevealing = true;
       _serverPlayerAMove = playerAMove;
       _serverPlayerBMove = playerBMove;
-      _serverResult = result;
       _playerScore = _isPlayerA ? playerAScore : playerBScore;
       _opponentScore = _isPlayerA ? playerBScore : playerAScore;
       _drawCount = drawCount;
-      _matchFinished = matchFinished;
     });
 
     // Show reveal for 2 seconds, then advance
@@ -148,7 +142,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         _isRevealing = false;
         _serverPlayerAMove = null;
         _serverPlayerBMove = null;
-        _serverResult = null;
       });
 
       if (matchFinished) {
@@ -195,7 +188,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   void _handleMatchCompleted(Map<String, dynamic> data) {
     setState(() {
-      _matchFinished = true;
       _playerScore = _isPlayerA
           ? (data['playerAScore'] as int? ?? 0)
           : (data['playerBScore'] as int? ?? 0);

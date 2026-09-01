@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/network/api_client.dart';
-import '../../../features/auth/controllers/auth_controller.dart';
 import '../widgets/rank_badge.dart';
 
 /// Player Profile Screen (T116).

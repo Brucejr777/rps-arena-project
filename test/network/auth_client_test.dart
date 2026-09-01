@@ -2,9 +2,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
 import 'package:rps_arena/core/network/api_client.dart';
 
-/// Fake Dio adapter that returns canned responses based on request path.
-class FakeAdapter extends HttpAdapterBase {
-  final Map<String, dynamic Function(RequestOptions)> routes = {};
+/// Helper to create a simple MockAdapter from a handler function.
+HttpClientAdapter _mockAdapter(
+    ResponseBody Function(RequestOptions) handler) {
+  return _SimpleMockAdapter(handler);
+}
+
+class _SimpleMockAdapter implements HttpClientAdapter {
+  final ResponseBody Function(RequestOptions) _handler;
+  _SimpleMockAdapter(this._handler);
 
   @override
   Future<ResponseBody> fetch(
@@ -12,31 +18,21 @@ class FakeAdapter extends HttpAdapterBase {
     Stream<List<int>>? requestStream,
     Future<void>? cancelFuture,
   ) async {
-    final handler = routes[options.path];
-    if (handler == null) {
-      throw DioException(
-        requestOptions: options,
-        response: Response(
-          requestOptions: options,
-          statusCode: 404,
-          data: {'error': 'Not found'},
-        ),
-      );
-    }
-
-    try {
-      final data = handler(options);
-      return ResponseBody.fromString(
-        '{}', // placeholder
-        200,
-      );
-    } on DioException catch (e) {
-      return ResponseBody.fromString(
-        e.response?.data.toString() ?? '{}',
-        e.response?.statusCode ?? 500,
-      );
-    }
+    return _handler(options);
   }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+/// Creates a ResponseBody with JSON content type so Dio's transformer
+/// decodes the string into a Map.
+ResponseBody _jsonBody(String json, [int statusCode = 200]) {
+  return ResponseBody.fromString(
+    json,
+    statusCode,
+    headers: {'content-type': ['application/json']},
+  );
 }
 
 void main() {
@@ -92,9 +88,8 @@ void main() {
         expect(options.path, '/auth/login');
         expect(options.data['username'], 'player1');
         expect(options.data['password'], 'secret123');
-        return ResponseBody.fromString(
+        return _jsonBody(
           '{"player":{"playerId":1,"username":"player1","rating":1000,"rank":"Bronze"},"accessToken":"access_tok","refreshToken":"refresh_tok"}',
-          200,
         );
       });
 
@@ -114,9 +109,8 @@ void main() {
         expect(options.path, '/auth/register');
         expect(options.data['username'], 'newplayer');
         expect(options.data['password'], 'strongpass');
-        return ResponseBody.fromString(
+        return _jsonBody(
           '{"player":{"playerId":2,"username":"newplayer","rating":1000,"rank":"Bronze"},"accessToken":"new_at","refreshToken":"new_rt"}',
-          200,
         );
       });
 
@@ -139,7 +133,7 @@ void main() {
       dio.httpClientAdapter = _mockAdapter((options) {
         expect(options.path, '/auth/logout');
         expect(options.data['refreshToken'], 'rt_456');
-        return ResponseBody.fromString('{"message":"Logged out."}', 200);
+        return _jsonBody('{"message":"Logged out."}');
       });
 
       await client.logout();
@@ -175,7 +169,7 @@ void main() {
 
       dio.httpClientAdapter = _mockAdapter((options) {
         expect(options.headers['Authorization'], 'Bearer my_token');
-        return ResponseBody.fromString('{}', 200);
+        return _jsonBody('{}');
       });
 
       await client.get('/some/path');
@@ -184,7 +178,7 @@ void main() {
     test('sends no Authorization header when unauthenticated', () async {
       dio.httpClientAdapter = _mockAdapter((options) {
         expect(options.headers.containsKey('Authorization'), isFalse);
-        return ResponseBody.fromString('{}', 200);
+        return _jsonBody('{}');
       });
 
       await client.get('/some/path');
@@ -204,24 +198,23 @@ void main() {
 
         if (options.path == '/protected' && requestCount == 1) {
           // First request: return 401
-          return ResponseBody.fromString('{"error":"Unauthorized"}', 401);
+          return _jsonBody('{"error":"Unauthorized"}', 401);
         }
 
         if (options.path == '/auth/refresh') {
           // Refresh call: return new tokens
-          return ResponseBody.fromString(
+          return _jsonBody(
             '{"accessToken":"fresh_at","refreshToken":"fresh_rt"}',
-            200,
           );
         }
 
         if (options.path == '/protected' && requestCount == 3) {
           // Retry: should have the new token
           expect(options.headers['Authorization'], 'Bearer fresh_at');
-          return ResponseBody.fromString('{"data":"success"}', 200);
+          return _jsonBody('{"data":"success"}');
         }
 
-        return ResponseBody.fromString('{}', 500);
+        return _jsonBody('{}', 500);
       });
 
       final res = await client.get('/protected');
@@ -229,24 +222,4 @@ void main() {
       expect(requestCount, 3); // original + refresh + retry
     });
   });
-}
-
-/// Helper to create a simple MockAdapter from a handler function.
-HttpAdapterBase _mockAdapter(
-    ResponseBody Function(RequestOptions) handler) {
-  return _SimpleMockAdapter(handler);
-}
-
-class _SimpleMockAdapter extends HttpAdapterBase {
-  final ResponseBody Function(RequestOptions) _handler;
-  _SimpleMockAdapter(this._handler);
-
-  @override
-  Future<ResponseBody> fetch(
-    RequestOptions options,
-    Stream<List<int>>? requestStream,
-    Future<void>? cancelFuture,
-  ) async {
-    return _handler(options);
-  }
 }
