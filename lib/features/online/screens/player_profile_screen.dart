@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/network/api_client.dart';
 import '../widgets/rank_badge.dart';
@@ -280,11 +281,11 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
 
                               // ── Action buttons ───────────────
                               _actionButton('MATCH HISTORY', () {
-                                Navigator.of(context).pushNamed('/match-history');
+                                context.push('/match-history');
                               }),
                               const SizedBox(height: 12),
                               _actionButton('ONLINE STATISTICS', () {
-                                Navigator.of(context).pushNamed('/online-stats');
+                                context.push('/online-stats');
                               }),
                             ],
                           ),

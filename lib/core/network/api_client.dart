@@ -164,34 +164,38 @@ class _AuthInterceptor extends Interceptor {
 
   @override
   void onRequest(
-      RequestOptions options, RequestInterceptorHandler handler) async {
-    final token = await _client.accessToken;
-    if (token != null) {
-      options.headers['Authorization'] = 'Bearer $token';
-    }
-    handler.next(options);
+      RequestOptions options, RequestInterceptorHandler handler) {
+    _client.accessToken.then((token) {
+      if (token != null) {
+        options.headers['Authorization'] = 'Bearer $token';
+      }
+      handler.next(options);
+    }).catchError((_) {
+      handler.next(options);
+    });
   }
 
   @override
-  void onError(DioException err, ErrorInterceptorHandler handler) async {
+  void onError(DioException err, ErrorInterceptorHandler handler) {
     // If we got a 401 and haven't already retried, attempt a token refresh.
     if (err.response?.statusCode == 401 &&
         err.requestOptions.extra['_retried'] != true) {
-      try {
-        await _client.refreshTokens();
-        final newToken = await _client.accessToken;
-
+      _client.refreshTokens().then((_) {
+        return _client.accessToken;
+      }).then((newToken) {
         // Retry the original request with the fresh token.
         final opts = err.requestOptions;
         opts.extra['_retried'] = true;
         opts.headers['Authorization'] = 'Bearer $newToken';
 
-        final res = await _client.dio.fetch(opts);
+        return _client.dio.fetch(opts);
+      }).then((res) {
         handler.resolve(res);
-        return;
-      } catch (_) {
+      }).catchError((_) {
         // Refresh failed — let the original 401 propagate.
-      }
+        handler.next(err);
+      });
+      return;
     }
     handler.next(err);
   }
