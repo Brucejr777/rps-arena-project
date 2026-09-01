@@ -8,6 +8,10 @@ class StandardResultScreen extends StatelessWidget {
   final VoidCallback onPlayAgain;
   final VoidCallback onMainMenu;
 
+  /// T122: Optional rating fields for ranked matches.
+  final int? ratingBefore;
+  final int? ratingAfter;
+
   const StandardResultScreen({
     super.key,
     required this.playerWon,
@@ -15,6 +19,8 @@ class StandardResultScreen extends StatelessWidget {
     required this.opponentScore,
     required this.onPlayAgain,
     required this.onMainMenu,
+    this.ratingBefore,
+    this.ratingAfter,
   });
 
   @override
@@ -62,6 +68,80 @@ class StandardResultScreen extends StatelessWidget {
                     letterSpacing: 1.0,
                   ),
                 ),
+
+              // ── T122: Rating change for ranked matches ─────
+              if (ratingBefore != null && ratingAfter != null) ...[
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'RATING',
+                        style: TextStyle(
+                          color: Colors.white38,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '$ratingBefore',
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: Icon(Icons.arrow_forward, color: Colors.white38, size: 18),
+                          ),
+                          Text(
+                            '$ratingAfter',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Builder(
+                            builder: (context) {
+                              final diff = ratingAfter! - ratingBefore!;
+                              if (diff == 0) return const SizedBox.shrink();
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: (diff > 0 ? AppColors.green : AppColors.red).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  diff > 0 ? '+$diff' : '$diff',
+                                  style: TextStyle(
+                                    color: diff > 0 ? AppColors.green : AppColors.red,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 48),
               SizedBox(
                 width: double.infinity,
