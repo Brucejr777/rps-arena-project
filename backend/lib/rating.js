@@ -181,4 +181,59 @@ async function trackMoveSelection(pool, playerId, move) {
   );
 }
 
-module.exports = { calculateRatingChanges, applyRatingChanges, updatePlayerStatistics, trackMoveSelection };
+/**
+ * Record match history for all online matches (T118).
+ * For ranked matches, this is called from applyRatingChanges instead.
+ * For non-ranked, rating_before = rating_after (no change).
+ *
+ * @param {Pool} pool
+ * @param {number} matchId
+ * @param {number} playerAId
+ * @param {number} playerBId
+ * @param {boolean} matchDraw
+ * @param {number|null} winnerId
+ * @param {number} playerAScore
+ * @param {number} playerBScore
+ */
+async function recordMatchHistory(pool, matchId, playerAId, playerBId, matchDraw, winnerId, playerAScore, playerBScore) {
+  // Get current ratings for both players
+  const ratingsResult = await pool.query(
+    'SELECT player_id, rating FROM account WHERE player_id = $1 OR player_id = $2',
+    [playerAId, playerBId]
+  );
+  const ratings = {};
+  for (const row of ratingsResult.rows) {
+    ratings[row.player_id] = row.rating;
+  }
+
+  const ratingA = ratings[playerAId] || 1000;
+  const ratingB = ratings[playerBId] || 1000;
+
+  // Determine results (win/loss/draw) based on winner
+  let resultA, resultB;
+  if (matchDraw) {
+    resultA = 'draw';
+    resultB = 'draw';
+  } else if (winnerId === playerAId) {
+    resultA = 'win';
+    resultB = 'loss';
+  } else {
+    resultA = 'loss';
+    resultB = 'win';
+  }
+
+  // Non-ranked: no rating change, no rank change
+  await pool.query(
+    `INSERT INTO match_history (player_id, match_id, opponent_id, mode, format_type, result, rating_before, rating_after, rank_change)
+     SELECT $1, $2, $3, mode, format_type, $4, $5, $6, NULL FROM match WHERE match_id = $2`,
+    [playerAId, matchId, playerBId, resultA, ratingA, ratingA]
+  );
+
+  await pool.query(
+    `INSERT INTO match_history (player_id, match_id, opponent_id, mode, format_type, result, rating_before, rating_after, rank_change)
+     SELECT $1, $2, $3, mode, format_type, $4, $5, $6, NULL FROM match WHERE match_id = $2`,
+    [playerBId, matchId, playerAId, resultB, ratingB, ratingB]
+  );
+}
+
+module.exports = { calculateRatingChanges, applyRatingChanges, updatePlayerStatistics, trackMoveSelection, recordMatchHistory };

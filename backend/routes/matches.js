@@ -18,7 +18,7 @@ const { Router } = require('express');
 const { requireAuth } = require('../lib/auth_middleware');
 const { resolveRound } = require('../lib/resolution');
 const { roundTimeoutManager } = require('../lib/round_timeout');
-const { calculateRatingChanges, applyRatingChanges, updatePlayerStatistics, trackMoveSelection } = require('../lib/rating');
+const { calculateRatingChanges, applyRatingChanges, updatePlayerStatistics, trackMoveSelection, recordMatchHistory } = require('../lib/rating');
 
 const VALID_MOVES = ['rock', 'paper', 'scissors'];
 
@@ -193,10 +193,13 @@ function createMatchesRouter(pool, wss) {
           [matchWinner, matchId]
         );
 
-        // T111/T117: Apply rating changes for ranked matches
+        // T111/T117/T118: Apply rating changes for ranked matches (records history)
         if (match.mode === 'ranked') {
           const { ratingChangeA, ratingChangeB } = calculateRatingChanges(false, matchWinner, match.player_a_id, match.player_b_id);
           await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, ratingChangeA, ratingChangeB);
+        } else if (match.mode !== 'local') {
+          // T118: Record match history for non-ranked online matches
+          await recordMatchHistory(pool, matchId, match.player_a_id, match.player_b_id, false, matchWinner, playerAScore, playerBScore);
         }
 
         // T117: Update statistics for ALL online match modes
@@ -419,10 +422,13 @@ function createMatchesRouter(pool, wss) {
         [winnerId, matchDraw, matchId]
       );
 
-      // T111/T117: Apply rating changes for ranked matches
+      // T111/T117/T118: Apply rating changes for ranked matches (records history)
       if (match.mode === 'ranked') {
         const { ratingChangeA, ratingChangeB } = calculateRatingChanges(matchDraw, winnerId, match.player_a_id, match.player_b_id);
         await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, ratingChangeA, ratingChangeB);
+      } else if (match.mode !== 'local') {
+        // T118: Record match history for non-ranked online matches
+        await recordMatchHistory(pool, matchId, match.player_a_id, match.player_b_id, matchDraw, winnerId, aWins, bWins);
       }
 
       // T117: Update statistics for ALL online match modes
@@ -460,6 +466,30 @@ function createMatchesRouter(pool, wss) {
       });
     } catch (err) {
       console.error('Match end error:', err);
+      res.status(500).json({ error: 'Internal server error.' });
+    }
+  });
+
+  // ── GET /matches/history (T118) ──────────────────────────────
+  router.get('/history', async (req, res) => {
+    try {
+      const { playerId } = req.player;
+
+      const result = await pool.query(
+        `SELECT mh.history_id, mh.match_id, mh.opponent_id, a.username AS opponent_name,
+                mh.mode, mh.format_type, mh.result, mh.rating_before, mh.rating_after,
+                mh.rank_change, mh.created_at
+         FROM match_history mh
+         JOIN account a ON mh.opponent_id = a.player_id
+         WHERE mh.player_id = $1
+         ORDER BY mh.created_at DESC
+         LIMIT 50`,
+        [playerId]
+      );
+
+      res.json({ history: result.rows, count: result.rows.length });
+    } catch (err) {
+      console.error('Match history error:', err);
       res.status(500).json({ error: 'Internal server error.' });
     }
   });
@@ -543,6 +573,9 @@ function createMatchesRouter(pool, wss) {
         'UPDATE match SET match_draw = true WHERE match_id = $1',
         [matchId]
       );
+
+      // T118: Record match history for non-ranked cancel
+      await recordMatchHistory(pool, matchId, match.player_a_id, match.player_b_id, true, null, 0, 0);
 
       // T117: Update stats for non-ranked online matches on cancel
       await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, true, null, 0, 0);
