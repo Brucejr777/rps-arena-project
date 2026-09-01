@@ -61,6 +61,12 @@ CREATE TABLE leaderboard (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE refresh_token (
+  token TEXT PRIMARY KEY,
+  player_id INTEGER NOT NULL REFERENCES account(player_id),
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE match_history (
   history_id SERIAL PRIMARY KEY,
   player_id INTEGER REFERENCES account(player_id),

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme_controller.dart';
+import '../../core/theme/game_theme_controller.dart';
 import '../../core/services/audio_service.dart';
 import '../../core/services/internet_service.dart';
 import '../auth/controllers/auth_controller.dart';
+import '../match/widgets/theme_background.dart';
 
 class MainMenuScreen extends ConsumerStatefulWidget {
   final VoidCallback onSinglePlayer;
@@ -39,7 +42,8 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
   }
 
   Widget _menuButton(String label, VoidCallback onPressed,
-      {bool primary = false, bool enabled = true, String? disabledLabel}) {
+      {bool primary = false, bool enabled = true, String? disabledLabel, Color? accent}) {
+    final color = accent ?? AppColors.defaultAccent;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: SizedBox(
@@ -49,7 +53,7 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
                 ? ElevatedButton(
                     onPressed: onPressed,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.defaultAccent,
+                      backgroundColor: color,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -132,10 +136,14 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
     final isSignedIn = auth.isSignedIn;
     final internetService = ref.watch(internetServiceProvider);
     final isConnected = internetService.isConnected;
+    final accent = ref.watch(appAccentColorProvider);
+    final gameTheme = ref.watch(gameThemeProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
+      body: ThemeBackground(
+        theme: gameTheme,
+        child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -159,16 +167,16 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
                       child: OutlinedButton(
                         onPressed: widget.onLogin,
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: AppColors.defaultAccent),
+                          side: BorderSide(color: accent),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: const Text(
+                        child: Text(
                           'LOGIN',
                           style: TextStyle(
-                            color: AppColors.defaultAccent,
+                            color: accent,
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
                             letterSpacing: 1.0,
@@ -181,7 +189,7 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
                       child: ElevatedButton(
                         onPressed: widget.onRegister,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.defaultAccent,
+                          backgroundColor: accent,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -234,9 +242,9 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
               const SizedBox(height: 32),
 
               // ── Menu buttons ────────────────────────────────────
-              _menuButton('SINGLE PLAYER', widget.onSinglePlayer, primary: true),
-              _menuButton('2 PLAYERS', widget.onTwoPlayers),
-              _menuButton('SETTINGS', widget.onSettings),
+              _menuButton('SINGLE PLAYER', widget.onSinglePlayer, primary: true, accent: accent),
+              _menuButton('2 PLAYERS', widget.onTwoPlayers, accent: accent),
+              _menuButton('SETTINGS', widget.onSettings, accent: accent),
 
               // Disabled for guests or when offline
               _menuButton('MULTIPLAYER', widget.onMultiplayer, 
@@ -255,6 +263,7 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 }

@@ -19,10 +19,23 @@ const {
   verifyRefreshToken,
 } = require('../lib/tokens');
 
-// In-memory refresh token store.
-// Maps refresh token string -> playerId (for logout invalidation).
-// Production would use a database table or Redis.
-const refreshTokens = new Map();
+// Refresh token helpers — persisted in database to survive server restarts.
+async function storeRefreshToken(pool, token, playerId) {
+  await pool.query('INSERT INTO refresh_token (token, player_id) VALUES ($1, $2)', [token, playerId]);
+}
+
+async function hasRefreshToken(pool, token) {
+  const result = await pool.query('SELECT 1 FROM refresh_token WHERE token = $1', [token]);
+  return result.rows.length > 0;
+}
+
+async function deleteRefreshToken(pool, token) {
+  await pool.query('DELETE FROM refresh_token WHERE token = $1', [token]);
+}
+
+async function deleteRefreshTokensForPlayer(pool, playerId) {
+  await pool.query('DELETE FROM refresh_token WHERE player_id = $1', [playerId]);
+}
 
 function createAuthRouter(pool) {
   const router = Router();
@@ -82,7 +95,7 @@ function createAuthRouter(pool) {
 
       const accessToken = signAccessToken(player.player_id, player.username);
       const refreshToken = signRefreshToken(player.player_id);
-      refreshTokens.set(refreshToken, player.player_id);
+      await storeRefreshToken(pool, refreshToken, player.player_id);
 
       res.status(201).json({
         player: {
@@ -129,7 +142,7 @@ function createAuthRouter(pool) {
 
       const accessToken = signAccessToken(player.player_id, player.username);
       const refreshToken = signRefreshToken(player.player_id);
-      refreshTokens.set(refreshToken, player.player_id);
+      await storeRefreshToken(pool, refreshToken, player.player_id);
 
       res.json({
         player: {
@@ -148,11 +161,11 @@ function createAuthRouter(pool) {
   });
 
   // ── POST /auth/logout ────────────────────────────────────────────
-  router.post('/logout', (req, res) => {
+  router.post('/logout', async (req, res) => {
     const { refreshToken } = req.body;
 
     if (refreshToken) {
-      refreshTokens.delete(refreshToken);
+      await deleteRefreshToken(pool, refreshToken);
     }
 
     res.json({ message: 'Logged out.' });
@@ -168,7 +181,7 @@ function createAuthRouter(pool) {
       }
 
       // Check if token has been invalidated (logged out)
-      if (!refreshTokens.has(refreshToken)) {
+      if (!(await hasRefreshToken(pool, refreshToken))) {
         return res.status(401).json({ error: 'Invalid refresh token.' });
       }
 
@@ -176,7 +189,7 @@ function createAuthRouter(pool) {
       try {
         payload = verifyRefreshToken(refreshToken);
       } catch {
-        refreshTokens.delete(refreshToken);
+        await deleteRefreshToken(pool, refreshToken);
         return res.status(401).json({ error: 'Invalid refresh token.' });
       }
 
@@ -187,18 +200,18 @@ function createAuthRouter(pool) {
       );
 
       if (result.rows.length === 0) {
-        refreshTokens.delete(refreshToken);
+        await deleteRefreshToken(pool, refreshToken);
         return res.status(401).json({ error: 'Player not found.' });
       }
 
       const player = result.rows[0];
 
       // Rotate: invalidate old refresh token, issue new pair
-      refreshTokens.delete(refreshToken);
+      await deleteRefreshToken(pool, refreshToken);
 
       const newAccessToken = signAccessToken(player.player_id, player.username);
       const newRefreshToken = signRefreshToken(player.player_id);
-      refreshTokens.set(newRefreshToken, player.player_id);
+      await storeRefreshToken(pool, newRefreshToken, player.player_id);
 
       res.json({
         accessToken: newAccessToken,
@@ -316,5 +329,4 @@ function createAuthRouter(pool) {
   return router;
 }
 
-// Export the Map so tests can inspect/seed it
-module.exports = { createAuthRouter, _refreshTokens: refreshTokens };
+module.exports = { createAuthRouter };

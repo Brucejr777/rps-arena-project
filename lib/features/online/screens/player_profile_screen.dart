@@ -56,8 +56,17 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      final msg = e.toString();
+      String errorMsg;
+      if (msg.contains('401') || msg.contains('expired') || msg.contains('Invalid')) {
+        errorMsg = 'Session expired. Please go back and log in again.';
+      } else if (msg.contains('Connection') || msg.contains('timeout')) {
+        errorMsg = 'Connection failed. Please try again.';
+      } else {
+        errorMsg = 'Failed to load profile.';
+      }
       setState(() {
-        _error = 'Failed to load profile: $e';
+        _error = errorMsg;
         _isLoading = false;
       });
     }

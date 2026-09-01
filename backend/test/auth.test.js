@@ -10,6 +10,7 @@ const { hashPassword } = require('../lib/hash_password');
 
 let accounts = [];
 let stats = [];
+let refreshTokensTable = [];
 let nextId = 1;
 
 function mockQuery(sql, params) {
@@ -46,6 +47,30 @@ function mockQuery(sql, params) {
 
   // INSERT INTO leaderboard
   if (sql.includes('INSERT INTO leaderboard')) {
+    return Promise.resolve({ rows: [] });
+  }
+
+  // INSERT INTO refresh_token
+  if (sql.includes('INSERT INTO refresh_token')) {
+    refreshTokensTable.push({ token: params[0], player_id: params[1] });
+    return Promise.resolve({ rows: [] });
+  }
+
+  // SELECT FROM refresh_token
+  if (sql.startsWith('SELECT') && sql.includes('FROM refresh_token WHERE token')) {
+    const found = refreshTokensTable.find((t) => t.token === params[0]);
+    return Promise.resolve({ rows: found ? [found] : [] });
+  }
+
+  // DELETE FROM refresh_token WHERE token
+  if (sql.startsWith('DELETE') && sql.includes('refresh_token WHERE token')) {
+    refreshTokensTable = refreshTokensTable.filter((t) => t.token !== params[0]);
+    return Promise.resolve({ rows: [] });
+  }
+
+  // DELETE FROM refresh_token WHERE player_id
+  if (sql.startsWith('DELETE') && sql.includes('refresh_token WHERE player_id')) {
+    refreshTokensTable = refreshTokensTable.filter((t) => t.player_id !== params[0]);
     return Promise.resolve({ rows: [] });
   }
 
