@@ -246,7 +246,7 @@ function createAuthRouter(pool) {
       };
 
       const winRate = stats.matches_played > 0
-        ? ((stats.matches_won / stats.matches_played) * 100).round()
+        ? Math.round((stats.matches_won / stats.matches_played) * 100)
         : 0;
 
       res.json({
@@ -271,6 +271,44 @@ function createAuthRouter(pool) {
       });
     } catch (err) {
       console.error('Profile error:', err);
+      res.status(500).json({ error: 'Internal server error.' });
+    }
+  });
+
+  // ── GET /auth/statistics (T121) ─────────────────────────────────
+  router.get('/statistics', requireAuth, async (req, res) => {
+    try {
+      const { playerId } = req.player;
+
+      const statsResult = await pool.query(
+        'SELECT * FROM player_statistic WHERE player_id = $1',
+        [playerId]
+      );
+
+      const s = statsResult.rows[0] || {
+        matches_played: 0, matches_won: 0, matches_lost: 0,
+        rounds_won: 0, rounds_lost: 0, draws: 0,
+        rock_selections: 0, paper_selections: 0, scissors_selections: 0,
+      };
+
+      const winRate = s.matches_played > 0
+        ? Math.round((s.matches_won / s.matches_played) * 100)
+        : 0;
+
+      res.json({
+        matchesPlayed: s.matches_played,
+        matchesWon: s.matches_won,
+        matchesLost: s.matches_lost,
+        roundsWon: s.rounds_won,
+        roundsLost: s.rounds_lost,
+        draws: s.draws,
+        winRate,
+        rockSelections: s.rock_selections,
+        paperSelections: s.paper_selections,
+        scissorsSelections: s.scissors_selections,
+      });
+    } catch (err) {
+      console.error('Statistics error:', err);
       res.status(500).json({ error: 'Internal server error.' });
     }
   });
