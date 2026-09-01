@@ -18,6 +18,7 @@ const { Router } = require('express');
 const { requireAuth } = require('../lib/auth_middleware');
 const { resolveRound } = require('../lib/resolution');
 const { roundTimeoutManager } = require('../lib/round_timeout');
+const { calculateRatingChanges, applyRatingChanges, updatePlayerStatistics } = require('../lib/rating');
 
 const VALID_MOVES = ['rock', 'paper', 'scissors'];
 
@@ -187,6 +188,13 @@ function createMatchesRouter(pool, wss) {
           'UPDATE match SET winner_id = $1 WHERE match_id = $2',
           [matchWinner, matchId]
         );
+
+        // T111: Apply rating changes for ranked matches
+        if (match.mode === 'ranked') {
+          const { ratingChangeA, ratingChangeB } = calculateRatingChanges(false, matchWinner, match.player_a_id, match.player_b_id);
+          const { newRatingA, newRatingB } = await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, ratingChangeA, ratingChangeB);
+          await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, matchWinner, playerAScore, playerBScore);
+        }
       }
 
       // Build WebSocket event payload
@@ -403,6 +411,13 @@ function createMatchesRouter(pool, wss) {
         [winnerId, matchDraw, matchId]
       );
 
+      // T111: Apply rating changes for ranked matches
+      if (match.mode === 'ranked') {
+        const { ratingChangeA, ratingChangeB } = calculateRatingChanges(matchDraw, winnerId, match.player_a_id, match.player_b_id);
+        await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, ratingChangeA, ratingChangeB);
+        await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, matchDraw, winnerId, aWins, bWins);
+      }
+
       // Send match_completed via WebSocket
       if (wss) {
         const payload = {
@@ -478,6 +493,11 @@ function createMatchesRouter(pool, wss) {
           'UPDATE match SET winner_id = $1, total_rounds = total_rounds + 1 WHERE match_id = $2',
           [winnerId, matchId]
         );
+
+        // T111: Apply rating changes for ranked cancel
+        const { ratingChangeA: cancelRatingA, ratingChangeB: cancelRatingB } = calculateRatingChanges(false, winnerId, match.player_a_id, match.player_b_id);
+        await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, cancelRatingA, cancelRatingB);
+        await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, winnerId, 0, 0);
 
         // Send match_completed via WebSocket
         if (wss) {
@@ -586,6 +606,11 @@ function createMatchesRouter(pool, wss) {
         'UPDATE match SET winner_id = $1, total_rounds = total_rounds + 1 WHERE match_id = $2',
         [winnerId, matchId]
       );
+
+      // T111: Apply rating changes for ranked quit
+      const { ratingChangeA: quitRatingA, ratingChangeB: quitRatingB } = calculateRatingChanges(false, winnerId, match.player_a_id, match.player_b_id);
+      await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, quitRatingA, quitRatingB);
+      await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, winnerId, 0, 0);
 
       // Send match_completed via WebSocket
       if (wss) {
