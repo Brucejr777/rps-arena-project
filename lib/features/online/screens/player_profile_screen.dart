@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/controllers/auth_controller.dart';
+import '../../stats/local_stats_repository.dart';
 import '../widgets/rank_badge.dart';
 
 /// Player Profile Screen (T116).
@@ -44,14 +45,42 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
     });
 
     try {
+      // Load local stats from SharedPreferences.
+      final localStats = await LocalStatsRepository().load();
+
       // Use the same AuthClient that handled login — shares token storage.
-      final client = ref.read(authControllerProvider.notifier).client;
-      final response = await client.get('/auth/profile');
-      final data = response.data as Map<String, dynamic>;
+      Map<String, dynamic>? serverStats;
+      Map<String, dynamic>? player;
+      try {
+        final client = ref.read(authControllerProvider.notifier).client;
+        final response = await client.get('/auth/profile');
+        final data = response.data as Map<String, dynamic>;
+        player = data['player'] as Map<String, dynamic>?;
+        serverStats = data['stats'] as Map<String, dynamic>?;
+      } catch (_) {
+        // Server unreachable — still show local stats.
+      }
+
       if (!mounted) return;
       setState(() {
-        _player = data['player'] as Map<String, dynamic>?;
-        _stats = data['stats'] as Map<String, dynamic>?;
+        _player = player;
+        // Merge: server + local stats combined
+        _stats = {
+          'matchesPlayed': (serverStats?['matchesPlayed'] ?? 0) + localStats.matchesPlayed,
+          'matchesWon': (serverStats?['matchesWon'] ?? 0) + localStats.matchesWon,
+          'matchesLost': (serverStats?['matchesLost'] ?? 0) + localStats.matchesLost,
+          'roundsWon': (serverStats?['roundsWon'] ?? 0) + localStats.roundsWon,
+          'roundsLost': (serverStats?['roundsLost'] ?? 0) + localStats.roundsLost,
+          'draws': (serverStats?['draws'] ?? 0) + localStats.draws,
+          'winRate': 0,
+          'rockSelections': (serverStats?['rockSelections'] ?? 0) + localStats.rockSelections,
+          'paperSelections': (serverStats?['paperSelections'] ?? 0) + localStats.paperSelections,
+          'scissorsSelections': (serverStats?['scissorsSelections'] ?? 0) + localStats.scissorsSelections,
+        };
+        // Calculate win rate from merged totals
+        final played = _stats!['matchesPlayed'] as int;
+        final won = _stats!['matchesWon'] as int;
+        _stats!['winRate'] = played > 0 ? ((won * 100) / played).round() : 0;
         _isLoading = false;
       });
     } catch (e) {
