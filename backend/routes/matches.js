@@ -80,20 +80,38 @@ function createMatchesRouter(pool, wss) {
       let existingMove = null;
 
       if (existingRound.rows.length === 0) {
-        // Create new round
+        // Create new round — use ON CONFLICT to handle the race where both
+        // players submit at the same instant and both read "no row".
         const insertResult = await pool.query(
           `INSERT INTO round (match_id, round_number, player_a_move, player_b_move, player_a_auto, player_b_auto)
            VALUES ($1, $2, $3, $4, false, false)
+           ON CONFLICT (match_id, round_number) DO NOTHING
            RETURNING id`,
           [matchId, currentRound, isPlayerA ? move : null, isPlayerB ? move : null]
         );
-        roundId = insertResult.rows[0].id;
 
-        // Start 10s timeout for the other player (T100)
-        const waitingPlayerId = isPlayerA ? match.player_b_id : match.player_a_id;
-        const waitingIsPlayerA = !isPlayerA;
-        roundTimeoutManager.startTimer(parseInt(matchId), currentRound, waitingPlayerId, waitingIsPlayerA);
-      } else {
+        if (insertResult.rows.length > 0) {
+          // We won the race — we created the row.
+          roundId = insertResult.rows[0].id;
+
+          // Start 10s timeout for the other player (T100)
+          const waitingPlayerId = isPlayerA ? match.player_b_id : match.player_a_id;
+          const waitingIsPlayerA = !isPlayerA;
+          roundTimeoutManager.startTimer(parseInt(matchId), currentRound, waitingPlayerId, waitingIsPlayerA);
+        } else {
+          // Another player created the row between our SELECT and INSERT.
+          // Fall through to the "round exists" branch below.
+          const retryRound = await pool.query(
+            `SELECT id, player_a_move, player_b_move FROM round
+             WHERE match_id = $1 AND round_number = $2`,
+            [matchId, currentRound]
+          );
+          existingRound.rows = retryRound.rows;
+          // Fall through
+        }
+      }
+
+      if (existingRound.rows.length > 0 && roundId == null) {
         // Round exists — check if this player already submitted
         const round = existingRound.rows[0];
         roundId = round.id;
@@ -226,6 +244,7 @@ function createMatchesRouter(pool, wss) {
       // Broadcast to match participants via WebSocket
       if (wss) {
         const message = JSON.stringify(eventPayload);
+        console.log(`Broadcasting round_result for match ${matchId} round ${currentRound} to ${wss.clients.size} clients: ${result} (scores ${playerAScore}-${playerBScore})`);
         wss.clients.forEach((client) => {
           if (client.readyState === 1) { // WebSocket.OPEN
             client.send(message);

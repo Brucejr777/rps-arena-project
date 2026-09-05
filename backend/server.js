@@ -29,6 +29,26 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
       )
     `);
     console.log('Migration: refresh_token table ready');
+
+    // Fix VARCHAR(10) truncation on result columns — values like
+    // 'player_a_wins' are 15 chars and were silently truncated.
+    await pool.query("ALTER TABLE round ALTER COLUMN result TYPE TEXT");
+    await pool.query("ALTER TABLE match_history ALTER COLUMN result TYPE TEXT");
+    console.log('Migration: result columns widened to TEXT');
+
+    // Ensure a unique constraint exists on (match_id, round_number)
+    // to prevent race-condition duplicate rounds.
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'round_match_number_key'
+        ) THEN
+          ALTER TABLE round ADD CONSTRAINT round_match_number_key
+            UNIQUE (match_id, round_number);
+        END IF;
+      END $$;
+    `);
+    console.log('Migration: round unique constraint ready');
   } catch (err) {
     console.error('Migration failed:', err.message);
   }

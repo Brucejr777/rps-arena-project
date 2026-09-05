@@ -146,7 +146,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 _connectWebSocket();
               },
               onExit: () {
-                if (mounted) GoRouter.of(context).go('/');
+                if (mounted) GoRouter.of(context).go('/main');
               },
             ),
           ),
@@ -205,7 +205,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 player2WinRate: p2Rate,
                 onPlayAgain: () => Navigator.of(context).maybePop(),
                 onMainMenu: () {
-                  if (mounted) GoRouter.of(context).go('/');
+                  if (mounted) GoRouter.of(context).go('/main');
                 },
               ),
             ),
@@ -220,7 +220,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 opponentScore: _opponentScore,
                 onPlayAgain: () => Navigator.of(context).maybePop(),
                 onMainMenu: () {
-                  if (mounted) GoRouter.of(context).go('/');
+                  if (mounted) GoRouter.of(context).go('/main');
                 },
               ),
             ),
@@ -257,7 +257,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           player2WinRate: p2Rate,
           onPlayAgain: () => Navigator.of(context).maybePop(),
           onMainMenu: () {
-            if (mounted) GoRouter.of(context).go('/');
+            if (mounted) GoRouter.of(context).go('/main');
           },
         ),
       ),
@@ -266,6 +266,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   void _startRound() {
     _waitingTimeout?.cancel();
+    _pollRetries = 0;
     setState(() {
       _selectedMove = null;
       _selectionTimer = 10;
@@ -302,9 +303,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _timer?.cancel();
 
     // Start safety-net timer: if the server doesn't deliver a round_result
-    // within 12 seconds, poll the state endpoint to catch up.
+    // within 5 seconds, poll the state endpoint to catch up.
     _waitingTimeout?.cancel();
-    _waitingTimeout = Timer(const Duration(seconds: 12), () {
+    _pollRetries = 0;
+    _waitingTimeout = Timer(const Duration(seconds: 5), () {
       if (!mounted || !_isWaitingForServer) return;
       _pollRoundState();
     });
@@ -338,11 +340,19 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   /// Called when the WAITING timeout fires — poll the server to see if the
   /// current round has been resolved (maybe the WS event was missed).
+  /// Retries up to [maxRetries] times if the round is still pending.
+  int _pollRetries = 0;
+  static const int _maxPollRetries = 3;
+
   Future<void> _pollRoundState() async {
+    _pollRetries++;
     try {
       final res = await _authClient.get('/matches/${widget.matchId}/state');
       final data = res.data;
-      if (data is! Map<String, dynamic>) return;
+      if (data is! Map<String, dynamic>) {
+        _resetWaiting();
+        return;
+      }
 
       final rounds = data['rounds'] as List<dynamic>? ?? [];
       final matchFinished = data['winnerId'] != null ||
@@ -354,7 +364,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           final result = r['result'] as String?;
           if (result != null && result != 'pending') {
             // Round was resolved server-side but the WS event was missed.
-            // Reconstruct a round_result payload from the state data.
             final synthetic = <String, dynamic>{
               'type': 'round_result',
               'matchId': widget.matchId,
@@ -370,29 +379,43 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
               'winnerId': data['winnerId'],
             };
             _waitingTimeout?.cancel();
+            _pollRetries = 0;
             if (mounted) _handleRoundResult(synthetic);
             return;
           }
         }
       }
 
-      // Round not resolved yet — allow the player to retry their move.
-      _waitingTimeout?.cancel();
-      if (mounted) {
-        setState(() {
-          _isWaitingForServer = false;
-          _selectedMove = null;
+      // Round still pending — retry if we haven't exhausted retries.
+      if (_pollRetries < _maxPollRetries) {
+        _waitingTimeout = Timer(const Duration(seconds: 3), () {
+          if (!mounted || !_isWaitingForServer) return;
+          _pollRoundState();
         });
+      } else {
+        _resetWaiting();
       }
     } catch (_) {
-      // Server unreachable — reset so the player can retry manually.
-      _waitingTimeout?.cancel();
-      if (mounted) {
-        setState(() {
-          _isWaitingForServer = false;
-          _selectedMove = null;
+      // Server unreachable — retry if we haven't exhausted retries.
+      if (_pollRetries < _maxPollRetries) {
+        _waitingTimeout = Timer(const Duration(seconds: 3), () {
+          if (!mounted || !_isWaitingForServer) return;
+          _pollRoundState();
         });
+      } else {
+        _resetWaiting();
       }
+    }
+  }
+
+  void _resetWaiting() {
+    _waitingTimeout?.cancel();
+    _pollRetries = 0;
+    if (mounted) {
+      setState(() {
+        _isWaitingForServer = false;
+        _selectedMove = null;
+      });
     }
   }
 
@@ -422,7 +445,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
               onExit: () {
                 // Use go_router to navigate to main menu — popUntil
                 // doesn't work reliably with go_router's route stack.
-                if (mounted) GoRouter.of(context).go('/');
+                if (mounted) GoRouter.of(context).go('/main');
               },
             ),
           ),

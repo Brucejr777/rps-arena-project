@@ -79,7 +79,7 @@ class _ConnectionLostScreenState extends State<ConnectionLostScreen>
     if (widget.onExit != null) {
       widget.onExit!();
     } else if (mounted) {
-      GoRouter.of(context).go('/');
+      GoRouter.of(context).go('/main');
     }
   }
 

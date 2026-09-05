@@ -43,7 +43,7 @@ CREATE TABLE round (
   player_b_move VARCHAR(10),
   player_a_auto BOOLEAN NOT NULL DEFAULT FALSE,
   player_b_auto BOOLEAN NOT NULL DEFAULT FALSE,
-  result VARCHAR(10)
+  result TEXT
 );
 
 CREATE TABLE room (
@@ -74,7 +74,7 @@ CREATE TABLE match_history (
   opponent_id INTEGER REFERENCES account(player_id),
   mode VARCHAR(20) NOT NULL,
   format_type VARCHAR(20) NOT NULL,
-  result VARCHAR(10) NOT NULL,
+  result TEXT NOT NULL,
   rating_before INTEGER,
   rating_after INTEGER,
   rank_change VARCHAR(20),
