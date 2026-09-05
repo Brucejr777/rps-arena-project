@@ -1,17 +1,20 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/network/api_client.dart';
+import '../../../core/network/room_service.dart';
 import '../../../core/theme/app_colors.dart';
 
 /// Private Room guest screen (T94).
 ///
 /// Step 1: Enter 6-character room code + JOIN button.
 /// Step 2: After join, display room code, match length, host name.
+/// Step 3: Poll for match start, then navigate to gameplay.
 class PrivateRoomJoinScreen extends StatefulWidget {
-  final Future<Map<String, dynamic>?> Function(String code) onJoin;
   final VoidCallback onCancel;
 
   const PrivateRoomJoinScreen({
     super.key,
-    required this.onJoin,
     required this.onCancel,
   });
 
@@ -26,9 +29,13 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
 
   // Set after a successful join
   Map<String, dynamic>? _roomInfo;
+  Timer? _pollTimer;
+  RoomService? _roomService;
+  String _roomCode = '';
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _codeController.dispose();
     super.dispose();
   }
@@ -49,37 +56,65 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
     });
 
     try {
-      final result = await widget.onJoin(code);
+      final auth = AuthClient();
+      final isAuth = await auth.isAuthenticated;
+      if (!isAuth) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _error = 'Please log in to join a room.';
+        });
+        return;
+      }
+
+      _roomService = RoomService(auth);
+      final result = await _roomService!.joinRoom(roomCode: code);
       if (!mounted) return;
 
-      if (result == null) {
-        setState(() {
-          _isLoading = false;
-          _error = 'Room not found.';
-        });
-      } else {
-        setState(() {
-          _isLoading = false;
-          _roomInfo = result;
-        });
-      }
+      setState(() {
+        _isLoading = false;
+        _roomInfo = result;
+        _roomCode = code.toUpperCase();
+      });
+      _startPolling();
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = 'Failed to join room. Please try again.';
+        _error = 'Room not found or already full.';
       });
+    }
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _pollRoom());
+  }
+
+  Future<void> _pollRoom() async {
+    if (_roomService == null || _roomCode.isEmpty) return;
+    try {
+      final status = await _roomService!.getRoomStatus(roomCode: _roomCode);
+      if (!mounted) return;
+
+      final roomStatus = status['status'] as String?;
+      if (roomStatus == 'active') {
+        _pollTimer?.cancel();
+        final matchId = status['matchId'];
+        if (matchId != null) {
+          context.go('/online-gameplay', extra: {'matchId': matchId});
+        }
+      }
+    } catch (_) {
+      // Polling errors are silent.
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // ── Post-join: show room info ──────────────────────────────
     if (_roomInfo != null) {
       return _buildRoomInfo();
     }
-
-    // ── Pre-join: code input ──────────────────────────────────
     return _buildCodeInput();
   }
 
@@ -92,7 +127,6 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header ──────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
@@ -118,15 +152,11 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-
-              // ── Instructions ────────────────────────────────
               const Text(
                 'Enter the room code shared by your opponent',
                 style: TextStyle(color: Colors.white54, fontSize: 13),
               ),
               const SizedBox(height: 16),
-
-              // ── Code input ──────────────────────────────────
               Container(
                 decoration: BoxDecoration(
                   color: AppColors.surface,
@@ -150,22 +180,21 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
                   decoration: InputDecoration(
                     border: InputBorder.none,
                     hintText: '------',
-                    hintStyle: TextStyle(
+                    hintStyle: const TextStyle(
                       color: Colors.white38,
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 8,
                     ),
                     counterText: '',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 20),
                   ),
                   onChanged: (_) {
                     if (_error != null) setState(() => _error = null);
                   },
                 ),
               ),
-
-              // ── Error message ───────────────────────────────
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(
@@ -177,10 +206,7 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
                   ),
                 ),
               ],
-
               const Spacer(),
-
-              // ── Join button ─────────────────────────────────
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -251,7 +277,6 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              // ── Header ──────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
@@ -277,8 +302,6 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
                 ),
               ),
               const Spacer(),
-
-              // ── Room info card ──────────────────────────────
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
@@ -299,7 +322,6 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
                 ),
                 child: Column(
                   children: [
-                    // Room code
                     const Text(
                       'ROOM CODE',
                       style: TextStyle(color: Colors.white54, fontSize: 11),
@@ -317,8 +339,6 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
                     const SizedBox(height: 20),
                     const Divider(color: Colors.white24),
                     const SizedBox(height: 16),
-
-                    // Match length
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -333,8 +353,6 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-
-                    // Host name
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -352,13 +370,10 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-
-              // ── Waiting message ─────────────────────────────
               const Text(
                 'Waiting for host to start the match...',
                 style: TextStyle(color: Colors.white54, fontSize: 13),
               ),
-
               const Spacer(),
             ],
           ),

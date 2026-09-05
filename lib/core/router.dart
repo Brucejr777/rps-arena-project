@@ -8,6 +8,7 @@ import '../features/online/screens/quick_match_searching_screen.dart';
 import '../features/online/screens/opponent_found_screen.dart';
 import '../features/online/screens/private_room_create_screen.dart';
 import '../features/online/screens/private_room_join_screen.dart';
+import '../features/online/screens/private_room_setup_screen.dart';
 import '../features/online/screens/connection_lost_screen.dart';
 import '../features/online/screens/leaderboard_screen.dart';
 import '../features/online/screens/player_profile_screen.dart';
@@ -181,7 +182,7 @@ final GoRouter appRouter = GoRouter(
       path: '/multiplayer',
       builder: (context, state) => MultiplayerScreen(
         onQuickMatch: () => context.push('/quick-match-setup'),
-        onPrivateRoom: () => context.push('/private-room-create'),
+        onPrivateRoom: () => context.push('/private-room-setup'),
         onRankedMatch: () {
           // TODO T96: navigate to Ranked Match setup
         },
@@ -189,11 +190,16 @@ final GoRouter appRouter = GoRouter(
       ),
     ),
     GoRoute(
+      path: '/private-room-setup',
+      builder: (context, state) => const PrivateRoomSetupScreen(),
+    ),
+    GoRoute(
       path: '/private-room-create',
       builder: (context, state) {
         final args = state.extra as Map<String, dynamic>? ?? {};
         return PrivateRoomCreateScreen(
-          roomCode: args['roomCode'] as String? ?? '------',
+          initialRoomCode: args['roomCode'] as String?,
+          formatType: args['formatType'] as String? ?? 'bestOf3',
           formatLabel: args['formatLabel'] as String? ?? 'BEST OF 3',
           onCancel: () => context.go('/main'),
         );
@@ -202,10 +208,6 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/private-room-join',
       builder: (context, state) => PrivateRoomJoinScreen(
-        onJoin: (code) async {
-          // TODO T93: call POST /rooms/join with the code
-          return null;
-        },
         onCancel: () => context.go('/main'),
       ),
     ),

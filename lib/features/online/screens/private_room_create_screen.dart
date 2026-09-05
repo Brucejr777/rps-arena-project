@@ -1,27 +1,164 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/network/api_client.dart';
+import '../../../core/network/room_service.dart';
 import '../../../core/theme/app_colors.dart';
 
 /// Private Room host screen (T92).
 ///
-/// After creating a room, the host sees the room code and waits for a guest.
-/// Controls: code display, COPY CODE, MATCH LENGTH, WAITING FOR PLAYER..., CANCEL.
-class PrivateRoomCreateScreen extends StatelessWidget {
-  final String roomCode;
+/// Creates a room via POST /rooms/create, then polls GET /rooms/:code
+/// every 3 seconds. When a guest joins, shows a START MATCH button
+/// that calls POST /rooms/start and navigates to gameplay.
+class PrivateRoomCreateScreen extends StatefulWidget {
+  final String? initialRoomCode;
+  final String formatType;
   final String formatLabel;
   final VoidCallback onCancel;
-  final VoidCallback? onPlayerJoined;
 
   const PrivateRoomCreateScreen({
     super.key,
-    required this.roomCode,
+    this.initialRoomCode,
+    required this.formatType,
     required this.formatLabel,
     required this.onCancel,
-    this.onPlayerJoined,
   });
 
+  @override
+  State<PrivateRoomCreateScreen> createState() =>
+      _PrivateRoomCreateScreenState();
+}
+
+class _PrivateRoomCreateScreenState extends State<PrivateRoomCreateScreen> {
+  String _roomCode = '';
+  bool _isLoading = true;
+  bool _isStarting = false;
+  String? _error;
+  bool _hasGuest = false;
+  String? _guestName;
+  Timer? _pollTimer;
+  RoomService? _roomService;
+
+  @override
+  void initState() {
+    super.initState();
+    _createRoom();
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _createRoom() async {
+    if (widget.initialRoomCode != null) {
+      setState(() {
+        _roomCode = widget.initialRoomCode!;
+        _isLoading = false;
+      });
+      _startPolling();
+      return;
+    }
+
+    try {
+      final auth = AuthClient();
+      final isAuth = await auth.isAuthenticated;
+      if (!isAuth) {
+        _fallbackCode();
+        return;
+      }
+
+      _roomService = RoomService(auth);
+      final result =
+          await _roomService!.createRoom(formatType: widget.formatType);
+      if (!mounted) return;
+
+      setState(() {
+        _roomCode = result['roomCode'] as String? ?? _generateFallback();
+        _isLoading = false;
+      });
+      _startPolling();
+    } catch (e) {
+      if (!mounted) return;
+      _fallbackCode();
+    }
+  }
+
+  void _fallbackCode() {
+    setState(() {
+      _roomCode = _generateFallback();
+      _isLoading = false;
+    });
+  }
+
+  String _generateFallback() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    final rng = DateTime.now().millisecondsSinceEpoch;
+    return List.generate(6, (i) => chars[(rng >> (i * 5)) % chars.length])
+        .join();
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _pollRoom());
+  }
+
+  Future<void> _pollRoom() async {
+    if (_roomService == null || _roomCode.isEmpty) return;
+    try {
+      final status = await _roomService!.getRoomStatus(roomCode: _roomCode);
+      if (!mounted) return;
+
+      final hasGuest = status['hasGuest'] as bool? ?? false;
+      final guestName = status['guestName'] as String?;
+      final roomStatus = status['status'] as String?;
+
+      if (roomStatus == 'active') {
+        _pollTimer?.cancel();
+        final matchId = status['matchId'];
+        if (matchId != null) {
+          context.go('/online-gameplay', extra: {'matchId': matchId});
+        }
+        return;
+      }
+
+      if (hasGuest && !_hasGuest) {
+        setState(() {
+          _hasGuest = true;
+          _guestName = guestName;
+        });
+        _pollTimer?.cancel();
+      }
+    } catch (_) {
+      // Polling errors are silent — keep trying.
+    }
+  }
+
+  Future<void> _startMatch() async {
+    if (_roomService == null) return;
+    setState(() => _isStarting = true);
+
+    try {
+      final result = await _roomService!.startMatch(roomCode: _roomCode);
+      if (!mounted) return;
+
+      final matchId = result['matchId'];
+      if (matchId != null) {
+        context.go('/online-gameplay', extra: {'matchId': matchId});
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isStarting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to start match. Please try again.')),
+      );
+    }
+  }
+
   void _copyCode(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: roomCode));
+    Clipboard.setData(ClipboardData(text: _roomCode));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Room code copied to clipboard'),
@@ -41,12 +178,13 @@ class PrivateRoomCreateScreen extends StatelessWidget {
             children: [
               // ── Header ──────────────────────────────────────────
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
                   children: [
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: onCancel,
+                      onPressed: widget.onCancel,
                     ),
                     const Expanded(
                       child: Text(
@@ -91,38 +229,55 @@ class PrivateRoomCreateScreen extends StatelessWidget {
                       style: TextStyle(color: Colors.white54, fontSize: 12),
                     ),
                     const SizedBox(height: 16),
-                    Text(
-                      roomCode,
-                      style: const TextStyle(
-                        color: AppColors.primaryText,
-                        fontSize: 40,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 8,
+                    if (_isLoading)
+                      const SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          color: AppColors.defaultAccent,
+                        ),
+                      )
+                    else if (_error != null)
+                      Text(
+                        _error!,
+                        style: const TextStyle(
+                            color: AppColors.red, fontSize: 14),
+                      )
+                    else
+                      Text(
+                        _roomCode,
+                        style: const TextStyle(
+                          color: AppColors.primaryText,
+                          fontSize: 40,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 8,
+                        ),
                       ),
-                    ),
                     const SizedBox(height: 20),
-                    // Copy code button
-                    OutlinedButton.icon(
-                      onPressed: () => _copyCode(context),
-                      icon: const Icon(Icons.copy, size: 16, color: Colors.white70),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.white38),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    if (!_isLoading && _error == null)
+                      OutlinedButton.icon(
+                        onPressed: () => _copyCode(context),
+                        icon: const Icon(Icons.copy,
+                            size: 16, color: Colors.white70),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.white38),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        label: const Text(
+                          'COPY CODE',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            letterSpacing: 1.0,
+                          ),
                         ),
                       ),
-                      label: const Text(
-                        'COPY CODE',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -144,8 +299,9 @@ class PrivateRoomCreateScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('MATCH LENGTH',
-                        style: TextStyle(color: Colors.white54, fontSize: 13)),
-                    Text(formatLabel,
+                        style:
+                            TextStyle(color: Colors.white54, fontSize: 13)),
+                    Text(widget.formatLabel,
                         style: const TextStyle(
                             color: AppColors.primaryText,
                             fontSize: 14,
@@ -155,30 +311,116 @@ class PrivateRoomCreateScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              // ── Waiting indicator ───────────────────────────────
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.defaultAccent.withValues(alpha: 0.6),
+              // ── Status / Start Match ────────────────────────────
+              if (_hasGuest)
+                Column(
+                  children: [
+                    // Guest joined indicator
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.green.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.green.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.check_circle,
+                              color: AppColors.green, size: 20),
+                          const SizedBox(width: 10),
+                          Text(
+                            '${_guestName ?? "Player"} joined!',
+                            style: const TextStyle(
+                              color: AppColors.green,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'WAITING FOR PLAYER...',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.0,
+                    const SizedBox(height: 16),
+                    // Start Match button
+                    SizedBox(
+                      width: double.infinity,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(18.5),
+                          gradient: const LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [
+                              Color(0xFF86EFAC),
+                              Color(0xFF22C55E),
+                            ],
+                            stops: [0.2, 0.8],
+                          ),
+                          border: Border.all(
+                            color: const Color(0xFF00E676),
+                            width: 3,
+                          ),
+                        ),
+                        child: ElevatedButton(
+                          onPressed: _isStarting ? null : _startMatch,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18.5),
+                            ),
+                          ),
+                          child: _isStarting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  'START MATCH',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                )
+              else
+                // Waiting indicator
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color:
+                            AppColors.defaultAccent.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'WAITING FOR PLAYER...',
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
+                ),
 
               const Spacer(),
 
@@ -186,7 +428,7 @@ class PrivateRoomCreateScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: onCancel,
+                  onPressed: widget.onCancel,
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Colors.white38),
                     padding: const EdgeInsets.symmetric(vertical: 16),

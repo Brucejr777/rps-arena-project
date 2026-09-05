@@ -210,6 +210,48 @@ function createRoomsRouter(pool) {
     }
   });
 
+  // ── GET /rooms/:code — poll room status ──────────────────────────
+  router.get('/:code', async (req, res) => {
+    try {
+      const { code } = req.params;
+      const result = await pool.query(
+        `SELECT r.room_code, r.status, r.format_type, r.wins_required,
+                r.host_id, r.guest_id,
+                h.username AS host_name,
+                g.username AS guest_name,
+                m.match_id
+         FROM room r
+         LEFT JOIN account h ON r.host_id = h.player_id
+         LEFT JOIN account g ON r.guest_id = g.player_id
+         LEFT JOIN match m ON m.player_a_id = r.host_id
+           AND m.player_b_id = r.guest_id
+           AND m.mode = 'private'
+           AND m.created_at >= r.created_at
+         WHERE r.room_code = $1`,
+        [code.toUpperCase()]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Room not found.' });
+      }
+
+      const room = result.rows[0];
+      res.json({
+        roomCode: room.room_code,
+        status: room.status,
+        formatType: room.format_type,
+        winsRequired: room.wins_required,
+        hostName: room.host_name ?? 'Host',
+        guestName: room.guest_name,
+        hasGuest: room.guest_id != null,
+        matchId: room.match_id ?? null,
+      });
+    } catch (err) {
+      console.error('Room status error:', err);
+      res.status(500).json({ error: 'Internal server error.' });
+    }
+  });
+
   return router;
 }
 
