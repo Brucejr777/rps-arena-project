@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/game_theme_controller.dart';
-import '../../../core/network/api_client.dart';
 import '../../../core/network/socket_client.dart';
+import '../../auth/controllers/auth_controller.dart';
 import '../controllers/match_controller.dart';
 import 'theme_background.dart';
 import 'move_button.dart';
@@ -65,9 +65,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   String? _serverPlayerAMove;
   String? _serverPlayerBMove;
 
-  bool get _isPlayerA => widget.playerId == widget.opponentId
-      ? true
-      : widget.playerId < widget.opponentId;
+  bool get _isPlayerA => widget.playerId < widget.opponentId;
 
   bool get _isUnlimited => widget.formatType == 'unlimited';
   bool get _canEndMatch => _isUnlimited && _drawCount + _playerScore + _opponentScore > 0;
@@ -75,7 +73,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   @override
   void initState() {
     super.initState();
-    _authClient = AuthClient();
+    _authClient = ref.read(authControllerProvider.notifier).client;
     _socketClient = MatchSocketClient();
     _connectWebSocket();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -108,7 +106,17 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         break;
       case SocketEventType.opponentDisconnected:
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ConnectionLostScreen()),
+          MaterialPageRoute(
+            builder: (_) => ConnectionLostScreen(
+              onReconnect: () {
+                Navigator.of(context).pop();
+                _connectWebSocket();
+              },
+              onExit: () {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              },
+            ),
+          ),
         );
         break;
       default:
@@ -425,7 +433,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                                 color: _selectionTimer <= 5
                                     ? AppColors.red
                                     : AppColors.primaryText,
-                                fontSize: 28,
+                                fontSize: 32,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -481,24 +489,27 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                       children: [
                         MoveButton(
                           move: 'rock',
-                          icon: Icons.circle,
+                          iconAsset: 'assets/icons/icon_rock.svg',
                           isSelected: _selectedMove == 'rock',
                           isDisabled: _selectedMove != null || _isWaitingForServer,
                           onSelected: () => _selectMove('rock'),
+                          frameColor: const Color(0xFFF97316),
                         ),
                         MoveButton(
                           move: 'paper',
-                          icon: Icons.square,
+                          iconAsset: 'assets/icons/icon_paper.svg',
                           isSelected: _selectedMove == 'paper',
                           isDisabled: _selectedMove != null || _isWaitingForServer,
                           onSelected: () => _selectMove('paper'),
+                          frameColor: const Color(0xFF06B6D4),
                         ),
                         MoveButton(
                           move: 'scissors',
-                          icon: Icons.content_cut,
+                          iconAsset: 'assets/icons/icon_scissors.svg',
                           isSelected: _selectedMove == 'scissors',
                           isDisabled: _selectedMove != null || _isWaitingForServer,
                           onSelected: () => _selectMove('scissors'),
+                          frameColor: const Color(0xFFEC4899),
                         ),
                       ],
                     ),

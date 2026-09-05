@@ -93,22 +93,29 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // ── Header ──────────────────────────────────────
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white70),
-                    onPressed: widget.onCancel,
-                  ),
-                  const Text(
-                    'JOIN ROOM',
-                    style: TextStyle(
-                      color: AppColors.primaryText,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                      onPressed: widget.onCancel,
                     ),
-                  ),
-                ],
+                    const Expanded(
+                      child: Text(
+                        'JOIN ROOM',
+                        style: TextStyle(
+                          color: AppColors.primaryText,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
               ),
               const SizedBox(height: 32),
 
@@ -120,38 +127,42 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
               const SizedBox(height: 16),
 
               // ── Code input ──────────────────────────────────
-              TextField(
-                controller: _codeController,
-                style: const TextStyle(
-                  color: AppColors.primaryText,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 8,
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    width: 1.5,
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
                 ),
-                textAlign: TextAlign.center,
-                textCapitalization: TextCapitalization.characters,
-                maxLength: 6,
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: AppColors.surface,
-                  hintText: '------',
-                  hintStyle: TextStyle(
-                    color: Colors.white38,
+                child: TextField(
+                  controller: _codeController,
+                  style: const TextStyle(
+                    color: AppColors.primaryText,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 8,
                   ),
-                  counterText: '',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
+                  textAlign: TextAlign.center,
+                  textCapitalization: TextCapitalization.characters,
+                  maxLength: 6,
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    hintText: '------',
+                    hintStyle: TextStyle(
+                      color: Colors.white38,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 8,
+                    ),
+                    counterText: '',
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
                   ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                  onChanged: (_) {
+                    if (_error != null) setState(() => _error = null);
+                  },
                 ),
-                onChanged: (_) {
-                  if (_error != null) setState(() => _error = null);
-                },
               ),
 
               // ── Error message ───────────────────────────────
@@ -241,23 +252,29 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
           child: Column(
             children: [
               // ── Header ──────────────────────────────────────
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: widget.onCancel,
-                  ),
-                  const Text(
-                    'JOIN ROOM',
-                    style: TextStyle(
-                      color: AppColors.primaryText,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: widget.onCancel,
                     ),
-                  ),
-                  const SizedBox(width: 48), // balance
-                ],
+                    const Expanded(
+                      child: Text(
+                        'JOIN ROOM',
+                        style: TextStyle(
+                          color: AppColors.primaryText,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
               ),
               const Spacer(),
 
@@ -267,11 +284,18 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: AppColors.green.withValues(alpha: 0.4),
                     width: 1.5,
+                    color: AppColors.green.withValues(alpha: 0.3),
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.green.withValues(alpha: 0.1),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Column(
                   children: [

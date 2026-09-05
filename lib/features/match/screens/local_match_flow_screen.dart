@@ -67,8 +67,8 @@ class _LocalMatchFlowScreenState
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    AudioService.instance.playMusic();
     super.dispose();
-    AudioService.instance.playMusic(); // resume menu music when leaving a match
   }
 
   void _startRound() {
@@ -142,9 +142,29 @@ class _LocalMatchFlowScreenState
     if (_engine.matchFinished) {
       if (widget.format.isUnlimited) {
         _statsRepo.recordUnlimitedMatchResult(winner: _engine.matchWinner);
+        _statsRepo.recordLocalMatch(
+          opponentName: 'Player 2',
+          mode: 'local',
+          formatType: 'unlimited',
+          result: _engine.matchWinner == 'A'
+              ? 'win'
+              : _engine.matchWinner == null
+                  ? 'draw'
+                  : 'loss',
+        );
       } else {
         _statsRepo.recordStandardMatchResult(
             playerWon: _engine.matchWinner == 'A');
+        _statsRepo.recordLocalMatch(
+          opponentName: 'Player 2',
+          mode: 'local',
+          formatType: widget.format.format.name,
+          result: _engine.matchWinner == 'A'
+              ? 'win'
+              : _engine.matchWinner == null
+                  ? 'draw'
+                  : 'loss',
+        );
       }
       setState(() => _stage = _LocalFlowStage.roundComplete);
     } else {
@@ -376,6 +396,16 @@ class _LocalMatchFlowScreenState
                 _countdownTimer?.cancel();
                 _engine.endUnlimitedMatch();
                 _statsRepo.recordUnlimitedMatchResult(winner: _engine.matchWinner);
+                _statsRepo.recordLocalMatch(
+                  opponentName: 'Player 2',
+                  mode: 'local',
+                  formatType: 'unlimited',
+                  result: _engine.matchWinner == 'A'
+                      ? 'win'
+                      : _engine.matchWinner == null
+                          ? 'draw'
+                          : 'loss',
+                );
 
                 if (_engine.matchWinner != null && _victoryAnimationsEnabled) {
                   setState(() => _stage = _LocalFlowStage.finishing);

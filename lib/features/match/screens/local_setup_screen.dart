@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/hero_title.dart';
+import '../../../core/widgets/mode_card.dart';
+import '../../../core/widgets/input_card.dart';
 import '../domain/match_format.dart';
-
 
 class LocalSetupScreen extends StatefulWidget {
   const LocalSetupScreen({super.key});
@@ -33,13 +35,13 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
 
   Future<void> _openMatchLengthSelect() async {
     final result = await context.push<MatchFormatConfig>('/match-format-select');
-    if (!mounted) return; // add this line
+    if (!mounted) return;
     if (result == null) return;
 
     if (result.format == MatchFormat.custom) {
       final customResult =
           await context.push<MatchFormatConfig>('/custom-match-config');
-      if (!mounted) return; // add this line too
+      if (!mounted) return;
       if (customResult != null) {
         setState(() => selectedFormat = customResult);
       }
@@ -56,71 +58,140 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white70),
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  ),
-                  const Text(
-                    '2 PLAYERS',
+              // ── Header ──────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    ),
+                    const Expanded(
+                      child: Text(
+                        '2 PLAYERS',
+                        style: TextStyle(
+                          color: AppColors.primaryText,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+
+              // ── Hero title ─────────────────────────────────────
+              const Center(child: HeroTitle(first: 'RPS', second: 'ARENA', fontSize: 26)),
+              const SizedBox(height: 8),
+
+              // ── Subtitle ──────────────────────────────────────
+              Center(
+                child: ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFF03BBE8), Color(0xFFC631E0)],
+                    stops: [0.2, 0.8],
+                  ).createShader(bounds),
+                  child: const Text(
+                    'LOCAL',
                     style: TextStyle(
-                      color: AppColors.primaryText,
+                      color: Colors.white,
                       fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3,
                     ),
                   ),
-                ],
+                ),
               ),
-              const SizedBox(height: 32),
-              const Text('Match Length',
-                  style: TextStyle(color: Colors.white54, fontSize: 13)),
-              const SizedBox(height: 12),
-              GestureDetector(
-                onTap: _openMatchLengthSelect,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 16, horizontal: 20),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              const SizedBox(height: 24),
+
+              // ── Mode cards ─────────────────────────────────────
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
                     children: [
-                      Text(_formatLabel,
-                          style: const TextStyle(
-                              color: AppColors.primaryText, fontSize: 14)),
-                      const Icon(Icons.chevron_right, color: Colors.white38),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_bolt.svg',
+                        title: 'QUICK MATCH',
+                        subtitle: _formatLabel,
+                        subtitle2: 'Fastest pairing',
+                        badgeLabel: 'LOCAL',
+                        badgeColor: AppColors.badgeGreen,
+                        iconColor: AppColors.svgGreen,
+                        onTap: () {
+                          context.push('/local-match', extra: selectedFormat);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_calendar.svg',
+                        title: 'CUSTOM MATCH',
+                        subtitle: 'Flexible rules',
+                        subtitle2: 'Invite friends',
+                        badgeLabel: 'ONLINE',
+                        badgeColor: AppColors.svgCyan,
+                        iconColor: AppColors.svgCyan,
+                        onTap: _openMatchLengthSelect,
+                      ),
+                      const SizedBox(height: 16),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_timer.svg',
+                        title: 'TIME ATTACK',
+                        subtitle: '30 seconds per move',
+                        subtitle2: 'Race the clock',
+                        badgeLabel: 'LIVE',
+                        badgeColor: AppColors.svgOrange,
+                        iconColor: AppColors.svgOrange,
+                        onTap: () {
+                          context.push('/time-attack');
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_trophy.svg',
+                        title: 'TOURNAMENT',
+                        subtitle: 'Elimination rounds',
+                        subtitle2: '8 players',
+                        badgeLabel: 'NEW',
+                        badgeColor: AppColors.svgDarkRed,
+                        iconColor: AppColors.svgDarkRed,
+                        onTap: () {
+                          context.push('/tournament');
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_rocket.svg',
+                        title: 'ACHIEVEMENTS',
+                        subtitle: 'Unlock badges',
+                        subtitle2: 'Track progress',
+                        badgeLabel: 'NEW',
+                        badgeColor: AppColors.svgPink,
+                        iconColor: AppColors.svgPink,
+                        onTap: () {
+                          context.push('/achievements');
+                        },
+                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
               ),
-              const Spacer(),
+
+              // ── Start button ───────────────────────────────────
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
+                child: GradientPillButton(
+                  label: 'START MATCH',
+                  isLoading: false,
                   onPressed: () {
                     context.push('/local-match', extra: selectedFormat);
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.defaultAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: const Text(
-                    'START MATCH',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
                 ),
               ),
             ],

@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/network/api_client.dart';
 import '../../auth/controllers/auth_controller.dart';
 
 /// Online data providers (T121A).
@@ -22,7 +21,7 @@ final profileProvider = FutureProvider<ProfileData>((ref) async {
   if (!auth.isSignedIn) return ProfileData.empty();
 
   try {
-    final client = AuthClient();
+    final client = ref.read(authControllerProvider.notifier).client;
     final response = await client.get('/auth/profile');
     final data = response.data as Map<String, dynamic>;
     return ProfileData(
@@ -40,7 +39,7 @@ final onlineStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   if (!auth.isSignedIn) return {};
 
   try {
-    final client = AuthClient();
+    final client = ref.read(authControllerProvider.notifier).client;
     final response = await client.get('/auth/statistics');
     return Map<String, dynamic>.from(response.data as Map);
   } catch (_) {
@@ -54,7 +53,7 @@ final matchHistoryProvider = FutureProvider<List<Map<String, dynamic>>>((ref) as
   if (!auth.isSignedIn) return [];
 
   try {
-    final client = AuthClient();
+    final client = ref.read(authControllerProvider.notifier).client;
     final response = await client.get('/matches/history');
     final data = response.data as Map<String, dynamic>;
     return (data['history'] as List)
@@ -68,7 +67,7 @@ final matchHistoryProvider = FutureProvider<List<Map<String, dynamic>>>((ref) as
 /// Leaderboard
 final leaderboardProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   try {
-    final client = AuthClient();
+    final client = ref.read(authControllerProvider.notifier).client;
     final response = await client.get('/leaderboard');
     final data = response.data as Map<String, dynamic>;
     return (data['leaderboard'] as List)

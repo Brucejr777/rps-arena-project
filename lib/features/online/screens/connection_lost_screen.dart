@@ -82,23 +82,29 @@ class _ConnectionLostScreenState extends State<ConnectionLostScreen>
           child: Column(
             children: [
               // Header
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: widget.onExit,
-                  ),
-                  const Text(
-                    'CONNECTION LOST',
-                    style: TextStyle(
-                      color: AppColors.red,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: widget.onExit,
                     ),
-                  ),
-                  const SizedBox(width: 48),
-                ],
+                    const Expanded(
+                      child: Text(
+                        'CONNECTION LOST',
+                        style: TextStyle(
+                          color: AppColors.red,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
               ),
               const Spacer(),
 
@@ -139,11 +145,12 @@ class _ConnectionLostScreenState extends State<ConnectionLostScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(
+                    width: 1.5,
                     color: _remainingSeconds <= 10
                         ? AppColors.orange
-                        : Colors.white24,
+                        : Colors.white.withValues(alpha: 0.08),
                   ),
                 ),
                 child: Row(

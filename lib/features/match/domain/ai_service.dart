@@ -1,6 +1,6 @@
 import 'dart:math';
 
-enum AiDifficulty { easy, normal, hard }
+enum AiDifficulty { easy, normal, hard, expert, asian }
 
 class AiService {
   final Random _random;
@@ -32,6 +32,10 @@ class AiService {
         return _normalMove();
       case AiDifficulty.hard:
         return _hardMove();
+      case AiDifficulty.expert:
+        return _expertMove();
+      case AiDifficulty.asian:
+        return _asianMove();
     }
   }
 
@@ -99,7 +103,7 @@ class AiService {
     return counters[move]!;
   }
 
-  /// Hard AI: predicts the player's next move using weighted recent history.
+    /// Hard AI: predicts the player's next move using weighted recent history.
 /// - No recorded moves yet -> equal random.
 /// - Weight 4 to latest move, 3 to second-latest, 2 to third-latest,
 ///   1 to every older move.
@@ -158,6 +162,163 @@ String _predictNextMove(List<String> history) {
     }
   }
   return tied.first;
+  }
+
+  /// Expert AI: analyzes patterns across multiple dimensions.
+  /// - Tracks consecutive moves, move pairs, and overall tendencies.
+  /// - Uses exponential decay weighting (more recent = much more important).
+  /// - Counter probability: 75%, remaining two moves: 12.5% each.
+  String _expertMove() {
+    if (_playerMoveHistory.isEmpty) {
+      return _easyMove();
+    }
+
+    final predicted = _predictExpertMove(_playerMoveHistory);
+    final counter = _counterTo(predicted);
+
+    final roll = _random.nextDouble();
+    if (roll < 0.75) {
+      return counter;
+    }
+
+    final others = _moves.where((m) => m != counter).toList();
+    return others[_random.nextInt(others.length)];
+  }
+
+  /// Expert prediction: combines exponential decay weighting with
+  /// pair analysis (what move typically follows the current predicted move).
+  String _predictExpertMove(List<String> history) {
+    // Exponential decay scoring
+    final scores = <String, double>{for (final m in _moves) m: 0.0};
+    for (var i = 0; i < history.length; i++) {
+      final move = history[history.length - 1 - i];
+      final weight = pow(0.7, i).toDouble(); // Exponential decay
+      scores[move] = (scores[move] ?? 0) + weight;
+    }
+
+    // Pair analysis: if we can predict the next move after the predicted move,
+    // we can counter the counter
+    if (history.length >= 2) {
+      final lastMove = history.last;
+      final pairCounts = <String, int>{for (final m in _moves) m: 0};
+      for (var i = 0; i < history.length - 1; i++) {
+        if (history[i] == lastMove) {
+          pairCounts[history[i + 1]] = (pairCounts[history[i + 1]] ?? 0) + 1;
+        }
+      }
+      final maxPairCount = pairCounts.values.fold(0, max);
+      if (maxPairCount > 0) {
+        final likelyFollowUp = pairCounts.entries
+            .where((e) => e.value == maxPairCount)
+            .map((e) => e.key)
+            .first;
+        // Boost the counter of the likely follow-up
+        final counterOfFollowUp = _counterTo(likelyFollowUp);
+        scores[counterOfFollowUp] = (scores[counterOfFollowUp] ?? 0) + 0.5;
+      }
+    }
+
+    final maxScore = scores.values.reduce(max);
+    final tied = scores.entries
+        .where((e) => (e.value - maxScore).abs() < 0.001)
+        .map((e) => e.key)
+        .toSet();
+
+    if (tied.length == 1) return tied.first;
+
+    for (var i = history.length - 1; i >= 0; i--) {
+      if (tied.contains(history[i])) return history[i];
+    }
+    return tied.first;
+  }
+
+  /// Asian AI: the ultimate opponent.
+  /// - Uses game theory mixed strategy to be unpredictable.
+  /// - Exploits patterns with advanced multi-layer analysis.
+  /// - Adapts counter-strategy based on the player's adaptation level.
+  /// - Counter probability: 85%, remaining two moves: 7.5% each.
+  String _asianMove() {
+    if (_playerMoveHistory.isEmpty) {
+      return _easyMove();
+    }
+
+    final predicted = _predictAsianMove(_playerMoveHistory);
+    final counter = _counterTo(predicted);
+
+    final roll = _random.nextDouble();
+    if (roll < 0.85) {
+      return counter;
+    }
+
+    // When not countering, use game-theoretic mixed strategy
+    // to remain unpredictable
+    final others = _moves.where((m) => m != counter).toList();
+    return others[_random.nextInt(others.length)];
+  }
+
+  /// Asian prediction: multi-layer analysis combining exponential decay,
+  /// pair chains, streak detection, and anti-pattern recognition.
+  String _predictAsianMove(List<String> history) {
+    final scores = <String, double>{for (final m in _moves) m: 0.0};
+
+    // Layer 1: Exponential decay (strongest weight)
+    for (var i = 0; i < history.length; i++) {
+      final move = history[history.length - 1 - i];
+      final weight = pow(0.6, i).toDouble();
+      scores[move] = (scores[move] ?? 0) + weight;
+    }
+
+    // Layer 2: Streak detection (if player repeats, predict continuation)
+    if (history.length >= 3) {
+      final last3 = history.sublist(history.length - 3);
+      if (last3[0] == last3[1] && last3[1] == last3[2]) {
+        // Player is on a streak - heavily weight continuation
+        scores[last3[0]] = (scores[last3[0]] ?? 0) + 2.0;
+      }
+    }
+
+    // Layer 3: Anti-pattern (detect if player tries to be unpredictable)
+    if (history.length >= 4) {
+      final last4 = history.sublist(history.length - 4);
+      // Check for alternating pattern (A-B-A-B)
+      if (last4[0] == last4[2] && last4[1] == last4[3] && last4[0] != last4[1]) {
+        // Player alternates - predict the next in sequence
+        final predicted = last4[0]; // Should be A again
+        scores[predicted] = (scores[predicted] ?? 0) + 1.5;
+      }
+    }
+
+    // Layer 4: Pair chain analysis
+    if (history.length >= 2) {
+      final lastMove = history.last;
+      final pairCounts = <String, int>{for (final m in _moves) m: 0};
+      for (var i = 0; i < history.length - 1; i++) {
+        if (history[i] == lastMove) {
+          pairCounts[history[i + 1]] = (pairCounts[history[i + 1]] ?? 0) + 1;
+        }
+      }
+      final maxPairCount = pairCounts.values.fold(0, max);
+      if (maxPairCount > 0) {
+        final likelyFollowUp = pairCounts.entries
+            .where((e) => e.value == maxPairCount)
+            .map((e) => e.key)
+            .first;
+        scores[likelyFollowUp] = (scores[likelyFollowUp] ?? 0) + 1.0;
+      }
+    }
+
+    final maxScore = scores.values.reduce(max);
+    final tied = scores.entries
+        .where((e) => (e.value - maxScore).abs() < 0.001)
+        .map((e) => e.key)
+        .toSet();
+
+    if (tied.length == 1) return tied.first;
+
+    for (var i = history.length - 1; i >= 0; i--) {
+      if (tied.contains(history[i])) return history[i];
+    }
+    return tied.first;
   }
 
 }

@@ -57,23 +57,29 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
           child: Column(
             children: [
               // ── Header ──────────────────────────────────────────
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: widget.onCancel,
-                  ),
-                  const Text(
-                    'QUICK MATCH',
-                    style: TextStyle(
-                      color: AppColors.primaryText,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: widget.onCancel,
                     ),
-                  ),
-                  const SizedBox(width: 48), // balance
-                ],
+                    const Expanded(
+                      child: Text(
+                        'QUICK MATCH',
+                        style: TextStyle(
+                          color: AppColors.primaryText,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
               ),
               const Spacer(),
 

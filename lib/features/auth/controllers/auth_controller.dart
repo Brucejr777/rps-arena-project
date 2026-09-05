@@ -45,14 +45,24 @@ class AuthController extends Notifier<AuthState> {
     return const AuthState();
   }
 
-  /// On app start, check if a stored access token exists.
+  /// On app start, check if a stored access token exists and fetch profile.
   void _checkInitialAuth() async {
     final hasToken = await _client.isAuthenticated;
     if (hasToken) {
-      // Token exists — user is signed in (we don't have player data yet,
-      // but we know they're authenticated). The profile screen will
-      // fetch full details later.
-      state = const AuthState(isSignedIn: true);
+      try {
+        final response = await _client.get('/auth/profile');
+        final data = response.data as Map<String, dynamic>;
+        final player = data['player'] as Map<String, dynamic>?;
+        state = AuthState(
+          isSignedIn: true,
+          username: player?['username'] as String?,
+          playerId: player?['playerId'] as int?,
+          rank: player?['rank'] as String?,
+          rating: player?['rating'] as int?,
+        );
+      } catch (_) {
+        state = const AuthState(isSignedIn: true);
+      }
     }
   }
 

@@ -125,7 +125,7 @@ class _OnlineStatsScreenState extends ConsumerState<OnlineStatsScreen> {
           children: [
             // ── Header ───────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Row(
                 children: [
                   IconButton(
@@ -137,9 +137,9 @@ class _OnlineStatsScreenState extends ConsumerState<OnlineStatsScreen> {
                       'ONLINE STATISTICS',
                       style: TextStyle(
                         color: AppColors.primaryText,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.5,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
                       ),
                       textAlign: TextAlign.center,
                     ),

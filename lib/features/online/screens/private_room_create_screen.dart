@@ -40,23 +40,29 @@ class PrivateRoomCreateScreen extends StatelessWidget {
           child: Column(
             children: [
               // ── Header ──────────────────────────────────────────
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: onCancel,
-                  ),
-                  const Text(
-                    'ROOM CODE',
-                    style: TextStyle(
-                      color: AppColors.primaryText,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: onCancel,
                     ),
-                  ),
-                  const SizedBox(width: 48), // balance
-                ],
+                    const Expanded(
+                      child: Text(
+                        'ROOM CODE',
+                        style: TextStyle(
+                          color: AppColors.primaryText,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
               ),
               const Spacer(),
 
@@ -65,11 +71,18 @@ class PrivateRoomCreateScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(32),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: AppColors.defaultAccent.withValues(alpha: 0.4),
                     width: 1.5,
+                    color: AppColors.defaultAccent.withValues(alpha: 0.2),
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.defaultAccent.withValues(alpha: 0.1),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Column(
                   children: [
@@ -121,7 +134,11 @@ class PrivateRoomCreateScreen extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    width: 1.5,
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,

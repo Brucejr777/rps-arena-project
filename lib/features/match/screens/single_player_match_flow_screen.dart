@@ -72,9 +72,8 @@ class _SinglePlayerMatchFlowScreenState
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    AudioService.instance.playMusic();
     super.dispose();
-    AudioService.instance.playMusic(); // resume menu music when leaving a match
-
   }
 
   void _startRound() {
@@ -148,9 +147,29 @@ class _SinglePlayerMatchFlowScreenState
     if (_engine.matchFinished) {
       if (widget.format.isUnlimited) {
         _statsRepo.recordUnlimitedMatchResult(winner: _engine.matchWinner);
+        _statsRepo.recordLocalMatch(
+          opponentName: 'AI Bot',
+          mode: 'single_player',
+          formatType: 'unlimited',
+          result: _engine.matchWinner == 'A'
+              ? 'win'
+              : _engine.matchWinner == null
+                  ? 'draw'
+                  : 'loss',
+        );
       } else {
         _statsRepo.recordStandardMatchResult(
             playerWon: _engine.matchWinner == 'A');
+        _statsRepo.recordLocalMatch(
+          opponentName: 'AI Bot',
+          mode: 'single_player',
+          formatType: widget.format.format.name,
+          result: _engine.matchWinner == 'A'
+              ? 'win'
+              : _engine.matchWinner == null
+                  ? 'draw'
+                  : 'loss',
+        );
       }
       setState(() => _stage = _SpFlowStage.roundComplete);
     } else {
@@ -195,6 +214,16 @@ class _SinglePlayerMatchFlowScreenState
             _countdownTimer?.cancel();
             _engine.endUnlimitedMatch();
             _statsRepo.recordUnlimitedMatchResult(winner: _engine.matchWinner);
+            _statsRepo.recordLocalMatch(
+              opponentName: 'AI Bot',
+              mode: 'single_player',
+              formatType: 'unlimited',
+              result: _engine.matchWinner == 'A'
+                  ? 'win'
+                  : _engine.matchWinner == null
+                      ? 'draw'
+                      : 'loss',
+            );
 
             if (_engine.matchWinner != null && _victoryAnimationsEnabled) {
               setState(() => _stage = _SpFlowStage.finishing);

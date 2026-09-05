@@ -70,22 +70,29 @@ class _AppearanceScreenState extends ConsumerState<AppearanceScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white70),
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  ),
-                  const Text(
-                    'APPEARANCE',
-                    style: TextStyle(
-                      color: AppColors.primaryText,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                      onPressed: () => Navigator.of(context).maybePop(),
                     ),
-                  ),
-                ],
+                    const Expanded(
+                      child: Text(
+                        'APPEARANCE',
+                        style: TextStyle(
+                          color: AppColors.primaryText,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
               ),
               const SizedBox(height: 24),
               if (settings == null)

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rps_arena/features/match/widgets/theme_background.dart';
@@ -27,15 +28,39 @@ class _StandardGameplayScreenState
   String? selectedMove;
   bool isPaused = false;
 
+  Timer? _selectionCountdown;
+
   @override
-void initState() {
-  super.initState();
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    ref.read(matchControllerProvider.notifier).setMode(mode);
-  });
-}
+  void initState() {
+    super.initState();
+    _startSelectionTimer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(matchControllerProvider.notifier).setMode(mode);
+    });
+  }
+
+  @override
+  void dispose() {
+    _selectionCountdown?.cancel();
+    super.dispose();
+  }
+
+  void _startSelectionTimer() {
+    _selectionCountdown?.cancel();
+    setState(() => selectionTimer = 10);
+    _selectionCountdown = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() {
+        selectionTimer--;
+        if (selectionTimer <= 0) {
+          timer.cancel();
+        }
+      });
+    });
+  }
 
   void _selectMove(String move) {
+    _selectionCountdown?.cancel();
     setState(() {
       selectedMove = move;
     });
@@ -83,7 +108,12 @@ void initState() {
     switch (outcome) {
       case ExitOutcome.connectionLost:
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ConnectionLostScreen()),
+          MaterialPageRoute(
+            builder: (_) => ConnectionLostScreen(
+              onReconnect: () => Navigator.of(context).pop(),
+              onExit: () => Navigator.of(context).popUntil((route) => route.isFirst),
+            ),
+          ),
         );
         break;
       case ExitOutcome.rankedQuitLoss:
@@ -117,12 +147,15 @@ void initState() {
                         icon: const Icon(Icons.close, color: Colors.white70),
                         onPressed: _onExitPressed,
                       ),
-                      Text(
-                        'ROUND $currentRound',
-                        style: const TextStyle(
-                          color: AppColors.primaryText,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
+                      Expanded(
+                        child: Text(
+                          'ROUND $currentRound',
+                          style: const TextStyle(
+                            color: AppColors.primaryText,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
                       ),
                       const SizedBox(width: 48),
@@ -141,7 +174,7 @@ void initState() {
                               color: selectionTimer <= 5
                                   ? AppColors.red
                                   : AppColors.primaryText,
-                              fontSize: 28,
+                              fontSize: 32,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -172,24 +205,27 @@ void initState() {
                     children: [
                       MoveButton(
                         move: 'rock',
-                        icon: Icons.circle,
+                        iconAsset: 'assets/icons/icon_rock.svg',
                         isSelected: selectedMove == 'rock',
                         isDisabled: selectedMove != null,
                         onSelected: () => _selectMove('rock'),
+                        frameColor: const Color(0xFFF97316),
                       ),
                       MoveButton(
                         move: 'paper',
-                        icon: Icons.square,
+                        iconAsset: 'assets/icons/icon_paper.svg',
                         isSelected: selectedMove == 'paper',
                         isDisabled: selectedMove != null,
                         onSelected: () => _selectMove('paper'),
+                        frameColor: const Color(0xFF06B6D4),
                       ),
                       MoveButton(
                         move: 'scissors',
-                        icon: Icons.content_cut,
+                        iconAsset: 'assets/icons/icon_scissors.svg',
                         isSelected: selectedMove == 'scissors',
                         isDisabled: selectedMove != null,
                         onSelected: () => _selectMove('scissors'),
+                        frameColor: const Color(0xFFEC4899),
                       ),
                     ],
                   ),

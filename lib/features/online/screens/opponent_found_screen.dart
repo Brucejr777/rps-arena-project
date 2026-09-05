@@ -82,23 +82,29 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
           child: Column(
             children: [
               // ── Header ──────────────────────────────────────────
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: widget.onCancel,
-                  ),
-                  const Text(
-                    'OPPONENT FOUND',
-                    style: TextStyle(
-                      color: AppColors.green,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: widget.onCancel,
                     ),
-                  ),
-                  const SizedBox(width: 48), // balance
-                ],
+                    const Expanded(
+                      child: Text(
+                        'OPPONENT FOUND',
+                        style: TextStyle(
+                          color: AppColors.green,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
               ),
               const Spacer(),
 
@@ -107,11 +113,18 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: AppColors.green.withValues(alpha: 0.4),
                     width: 1.5,
+                    color: AppColors.green.withValues(alpha: 0.3),
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.green.withValues(alpha: 0.1),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Column(
                   children: [

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/hero_title.dart';
+import '../../../core/widgets/mode_card.dart';
+import '../../../core/widgets/input_card.dart';
 import '../domain/match_format.dart';
 import '../domain/ai_service.dart';
 import 'package:go_router/go_router.dart';
@@ -35,48 +38,19 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
 
   Future<void> _openMatchLengthSelect() async {
     final result = await context.push<MatchFormatConfig>('/match-format-select');
-    if (!mounted) return; // add this line
+    if (!mounted) return;
     if (result == null) return;
 
     if (result.format == MatchFormat.custom) {
       final customResult =
           await context.push<MatchFormatConfig>('/custom-match-config');
-      if (!mounted) return; // add this line too
+      if (!mounted) return;
       if (customResult != null) {
         setState(() => selectedFormat = customResult);
       }
     } else {
       setState(() => selectedFormat = result);
     }
-  }
-
-  Widget _difficultyOption(String label, AiDifficulty value) {
-    final isSelected = selectedDifficulty == value;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => selectedDifficulty = value),
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            gradient: isSelected
-                ? AppColors.accentGradient(AppColors.defaultAccent)
-                : null,
-            color: isSelected ? null : AppColors.surface,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.white60,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -87,89 +61,309 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white70),
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  ),
-                  const Text(
+              // ── Header ──────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'SINGLE PLAYER',
+                        style: TextStyle(
+                          color: AppColors.primaryText,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+
+              // ── Hero title ─────────────────────────────────────
+              const Center(child: HeroTitle(first: 'RPS', second: 'ARENA', fontSize: 26)),
+              const SizedBox(height: 8),
+
+              // ── Subtitle ──────────────────────────────────────
+              Center(
+                child: ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFF03BBE8), Color(0xFFC631E0)],
+                    stops: [0.2, 0.8],
+                  ).createShader(bounds),
+                  child: const Text(
                     'SINGLE PLAYER',
                     style: TextStyle(
-                      color: AppColors.primaryText,
+                      color: Colors.white,
                       fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3,
                     ),
                   ),
-                ],
+                ),
               ),
-              const SizedBox(height: 32),
-              const Text('Difficulty',
-                  style: TextStyle(color: Colors.white54, fontSize: 13)),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  _difficultyOption('EASY', AiDifficulty.easy),
-                  _difficultyOption('NORMAL', AiDifficulty.normal),
-                  _difficultyOption('HARD', AiDifficulty.hard),
-                ],
-              ),
-              const SizedBox(height: 32),
-              const Text('Match Length',
-                  style: TextStyle(color: Colors.white54, fontSize: 13)),
-              const SizedBox(height: 12),
-              GestureDetector(
-                onTap: _openMatchLengthSelect,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 16, horizontal: 20),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              const SizedBox(height: 24),
+
+              // ── Mode cards ─────────────────────────────────────
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
                     children: [
-                      Text(_formatLabel,
-                          style: const TextStyle(
-                              color: AppColors.primaryText, fontSize: 14)),
-                      const Icon(Icons.chevron_right, color: Colors.white38),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_bolt.svg',
+                        title: 'QUICK MATCH',
+                        subtitle: _formatLabel,
+                        subtitle2: 'Fastest pairing',
+                        badgeLabel: 'LOCAL',
+                        badgeColor: AppColors.badgeGreen,
+                        iconColor: AppColors.svgGreen,
+                        onTap: () {
+                          context.push(
+                            '/single-player-match',
+                            extra: (selectedFormat, selectedDifficulty),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_calendar.svg',
+                        title: 'CUSTOM MATCH',
+                        subtitle: 'Flexible rules',
+                        subtitle2: 'Invite friends',
+                        badgeLabel: 'ONLINE',
+                        badgeColor: AppColors.svgCyan,
+                        iconColor: AppColors.svgCyan,
+                        onTap: _openMatchLengthSelect,
+                      ),
+                      const SizedBox(height: 16),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_settings.svg',
+                        title: 'DIFFICULTY',
+                        subtitle: 'Easy / Normal / Hard / Expert / Asian',
+                        subtitle2: 'Choose your challenge',
+                        badgeLabel: 'NEW',
+                        badgeColor: AppColors.svgOrange,
+                        iconColor: AppColors.svgOrange,
+                        onTap: () {
+                          showModalBottomSheet(
+                            context: context,
+                            backgroundColor: Colors.transparent,
+                            builder: (context) => _buildDifficultyPicker(),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_gamepad.svg',
+                        title: 'GAME MODE',
+                        subtitle: 'Standard / Unlimited',
+                        subtitle2: 'Pick your rules',
+                        badgeLabel: 'NEW',
+                        badgeColor: AppColors.svgPink,
+                        iconColor: AppColors.svgPink,
+                        onTap: () {
+                          showModalBottomSheet(
+                            context: context,
+                            backgroundColor: Colors.transparent,
+                            builder: (context) => _buildGameModePicker(),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
               ),
-              const Spacer(),
+
+              // ── Start button ───────────────────────────────────
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
+                child: GradientPillButton(
+                  label: 'START MATCH',
+                  isLoading: false,
                   onPressed: () {
                     context.push(
                       '/single-player-match',
                       extra: (selectedFormat, selectedDifficulty),
                     );
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.defaultAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: const Text(
-                    'START MATCH',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
                 ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDifficultyPicker() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'DIFFICULTY',
+            style: TextStyle(
+              color: AppColors.primaryText,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 20),
+          _buildDifficultyOption('EASY', AiDifficulty.easy, AppColors.green, Icons.star_border),
+          const SizedBox(height: 8),
+          _buildDifficultyOption('NORMAL', AiDifficulty.normal, AppColors.orange, Icons.star_half),
+          const SizedBox(height: 8),
+          _buildDifficultyOption('HARD', AiDifficulty.hard, AppColors.red, Icons.star),
+          const SizedBox(height: 8),
+          _buildDifficultyOption('EXPERT', AiDifficulty.expert, AppColors.purple, Icons.stars),
+          const SizedBox(height: 8),
+          _buildDifficultyOption('ASIAN', AiDifficulty.asian, AppColors.magenta, Icons.whatshot),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDifficultyOption(String label, AiDifficulty value, Color color, IconData icon) {
+    final isSelected = selectedDifficulty == value;
+    return GestureDetector(
+      onTap: () {
+        setState(() => selectedDifficulty = value);
+        Navigator.pop(context);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withValues(alpha: 0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? color.withValues(alpha: 0.4) : Colors.white10,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isSelected ? color : Colors.white38, size: 20),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? color : Colors.white70,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                letterSpacing: 1.0,
+              ),
+            ),
+            const Spacer(),
+            if (isSelected)
+              Icon(Icons.check_circle, color: color, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGameModePicker() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'GAME MODE',
+            style: TextStyle(
+              color: AppColors.primaryText,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 20),
+          _buildGameModeOption('STANDARD', 'Best of N rounds'),
+          const SizedBox(height: 8),
+          _buildGameModeOption('UNLIMITED', 'Play until you quit'),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGameModeOption(String label, String description) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.pop(context);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppColors.primaryText,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.white38, size: 20),
+          ],
         ),
       ),
     );

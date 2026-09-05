@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/controllers/auth_controller.dart';
+import '../../stats/local_stats_repository.dart';
 import '../widgets/rank_badge.dart';
 
 /// Match History Screen (T119).
@@ -34,14 +35,45 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
     });
 
     try {
-      final client = ref.read(authControllerProvider.notifier).client;
-      final response = await client.get('/matches/history');
-      final data = response.data as Map<String, dynamic>;
-      final entries = (data['history'] as List)
-          .map((e) => Map<String, dynamic>.from(e))
+      // Load local match history
+      final localEntries = await LocalStatsRepository().loadMatchHistory();
+      final localHistory = localEntries
+          .map((e) => <String, dynamic>{
+                'opponent_name': e.opponentName,
+                'mode': e.mode,
+                'format_type': e.formatType,
+                'result': e.result,
+                'rating_before': e.ratingBefore,
+                'rating_after': e.ratingAfter,
+                'rank_change': e.rankChange,
+                'created_at': e.createdAt,
+              })
           .toList();
+
+      // Load server match history
+      List<Map<String, dynamic>> serverHistory = [];
+      try {
+        final client = ref.read(authControllerProvider.notifier).client;
+        final response = await client.get('/matches/history');
+        final data = response.data as Map<String, dynamic>;
+        serverHistory = (data['history'] as List)
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      } catch (_) {
+        // Server unreachable — still show local entries.
+      }
+
+      // Merge: server entries first, then local entries
+      final merged = [...serverHistory, ...localHistory];
+      // Sort by date descending (most recent first)
+      merged.sort((a, b) {
+        final dateA = a['created_at'] as String? ?? '';
+        final dateB = b['created_at'] as String? ?? '';
+        return dateB.compareTo(dateA);
+      });
+
       setState(() {
-        _history = entries;
+        _history = merged;
         _isLoading = false;
       });
     } catch (e) {
@@ -122,7 +154,7 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
           children: [
             // ── Header ───────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Row(
                 children: [
                   IconButton(
@@ -134,9 +166,9 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
                       'MATCH HISTORY',
                       style: TextStyle(
                         color: AppColors.primaryText,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.5,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -199,8 +231,11 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
                                       color: AppColors.surface,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: Colors.white12),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        width: 1.0,
+                                        color: Colors.white.withValues(alpha: 0.08),
+                                      ),
                                     ),
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,

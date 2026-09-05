@@ -182,6 +182,8 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = ref.watch(authControllerProvider);
+    final displayName = _player?['username'] ?? auth.username ?? 'Unknown';
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -189,7 +191,7 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
           children: [
             // ── Header ───────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Row(
                 children: [
                   IconButton(
@@ -201,9 +203,9 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
                       'PLAYER PROFILE',
                       style: TextStyle(
                         color: AppColors.primaryText,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.5,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -266,7 +268,7 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
                                   ),
                                   child: Center(
                                     child: Text(
-                                      (_player?['username'] ?? 'P')[0]
+                                      displayName[0]
                                           .toUpperCase(),
                                       style: const TextStyle(
                                         color: Colors.white,
@@ -282,7 +284,7 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
                               // ── Username ──────────────────────
                               Center(
                                 child: Text(
-                                  _player?['username'] ?? 'Unknown',
+                                  displayName,
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 22,

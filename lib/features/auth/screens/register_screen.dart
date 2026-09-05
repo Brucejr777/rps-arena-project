@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/hero_title.dart';
+import '../../../core/widgets/input_card.dart';
 import '../controllers/auth_controller.dart';
 
 /// Register screen (T82).
@@ -98,21 +100,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
   }
 
-  InputDecoration _fieldDecoration(String hint) {
-    return InputDecoration(
-      filled: true,
-      fillColor: AppColors.surface,
-      hintText: hint,
-      hintStyle: const TextStyle(color: Colors.white38),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide.none,
-      ),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -124,70 +111,93 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // ── Header ──────────────────────────────────────────
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white70),
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  ),
-                  const Text(
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'REGISTER',
+                        style: TextStyle(
+                          color: AppColors.primaryText,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // ── Hero title + subtitle ───────────────────────────
+              const Center(child: HeroTitle(first: 'RPS', second: 'ARENA', fontSize: 26)),
+              const SizedBox(height: 8),
+              Center(
+                child: ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFF03BBE8), Color(0xFFC631E0)],
+                    stops: [0.2, 0.8],
+                  ).createShader(bounds),
+                  child: const Text(
                     'REGISTER',
                     style: TextStyle(
-                      color: AppColors.primaryText,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3,
                     ),
                   ),
-                ],
+                ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
-              // ── Username field ──────────────────────────────────
-              const Text('Username',
-                  style: TextStyle(color: Colors.white54, fontSize: 13)),
-              const SizedBox(height: 8),
-              TextField(
+              // ── Username card ───────────────────────────────────
+              InputCard(
+                icon: Icons.person,
+                label: 'USERNAME',
                 controller: _usernameController,
-                style: const TextStyle(color: AppColors.primaryText),
-                textInputAction: TextInputAction.next,
-                decoration: _fieldDecoration('3–16 characters, letters, numbers, underscores'),
-                onChanged: (_) {
+                hint: '3–16 chars, letters, numbers, underscores',
+                obscure: false,
+                onChanged: () {
                   if (_message != null) setState(() => _message = null);
                 },
+                onSubmitted: _submit,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-              // ── Password field ──────────────────────────────────
-              const Text('Password',
-                  style: TextStyle(color: Colors.white54, fontSize: 13)),
-              const SizedBox(height: 8),
-              TextField(
+              // ── Password card ───────────────────────────────────
+              InputCard(
+                icon: Icons.lock,
+                label: 'PASSWORD',
                 controller: _passwordController,
-                obscureText: true,
-                style: const TextStyle(color: AppColors.primaryText),
-                textInputAction: TextInputAction.next,
-                decoration: _fieldDecoration('8–64 characters'),
-                onChanged: (_) {
+                hint: '8–64 characters',
+                obscure: true,
+                onChanged: () {
                   if (_message != null) setState(() => _message = null);
                 },
+                onSubmitted: _submit,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-              // ── Confirm Password field ──────────────────────────
-              const Text('Confirm Password',
-                  style: TextStyle(color: Colors.white54, fontSize: 13)),
-              const SizedBox(height: 8),
-              TextField(
+              // ── Confirm Password card ───────────────────────────
+              InputCard(
+                icon: Icons.lock,
+                label: 'CONFIRM PASSWORD',
                 controller: _confirmPasswordController,
-                obscureText: true,
-                style: const TextStyle(color: AppColors.primaryText),
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _submit(),
-                decoration: _fieldDecoration('Re-enter your password'),
-                onChanged: (_) {
+                hint: 'Re-enter your password',
+                obscure: true,
+                onChanged: () {
                   if (_message != null) setState(() => _message = null);
                 },
+                onSubmitted: _submit,
               ),
 
               // ── Message area ────────────────────────────────────
@@ -206,37 +216,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
               const Spacer(),
 
-              // ── Submit button ───────────────────────────────────
+              // ── Submit button (gradient-border pill) ────────────
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.defaultAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'REGISTER',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
+                child: GradientPillButton(
+                  label: 'REGISTER',
+                  isLoading: _isLoading,
+                  onPressed: _submit,
                 ),
               ),
+              const SizedBox(height: 8),
             ],
           ),
         ),

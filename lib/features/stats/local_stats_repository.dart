@@ -2,6 +2,50 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/local_storage_keys.dart';
 
+class LocalMatchEntry {
+  final String opponentName;
+  final String mode;
+  final String formatType;
+  final String result; // 'win', 'loss', 'draw'
+  final int ratingBefore;
+  final int ratingAfter;
+  final String? rankChange;
+  final String createdAt;
+
+  const LocalMatchEntry({
+    required this.opponentName,
+    required this.mode,
+    required this.formatType,
+    required this.result,
+    this.ratingBefore = 1000,
+    this.ratingAfter = 1000,
+    this.rankChange,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'opponent_name': opponentName,
+        'mode': mode,
+        'format_type': formatType,
+        'result': result,
+        'rating_before': ratingBefore,
+        'rating_after': ratingAfter,
+        'rank_change': rankChange,
+        'created_at': createdAt,
+      };
+
+  factory LocalMatchEntry.fromJson(Map<String, dynamic> json) => LocalMatchEntry(
+        opponentName: json['opponent_name'] ?? 'Unknown',
+        mode: json['mode'] ?? '',
+        formatType: json['format_type'] ?? '',
+        result: json['result'] ?? 'draw',
+        ratingBefore: json['rating_before'] ?? 1000,
+        ratingAfter: json['rating_after'] ?? 1000,
+        rankChange: json['rank_change'] as String?,
+        createdAt: json['created_at'] ?? '',
+      );
+}
+
 class LocalStats {
   final int matchesPlayed;
   final int matchesWon;
@@ -169,5 +213,44 @@ class LocalStatsRepository {
 
   Future<void> resetLocalStatistics() async {
     await _save(const LocalStats());
+  }
+
+  static const _matchHistoryKey = 'local_match_history';
+
+  /// Load local match history entries.
+  Future<List<LocalMatchEntry>> loadMatchHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_matchHistoryKey);
+    if (raw == null) return [];
+    final list = jsonDecode(raw) as List;
+    return list
+        .map((e) => LocalMatchEntry.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Record a local match result.
+  Future<void> recordLocalMatch({
+    required String opponentName,
+    required String mode,
+    required String formatType,
+    required String result,
+  }) async {
+    final entries = await loadMatchHistory();
+    entries.insert(
+      0,
+      LocalMatchEntry(
+        opponentName: opponentName,
+        mode: mode,
+        formatType: formatType,
+        result: result,
+        createdAt: DateTime.now().toIso8601String(),
+      ),
+    );
+    // Keep last 100 entries
+    if (entries.length > 100) {
+      entries.removeRange(100, entries.length);
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_matchHistoryKey, jsonEncode(entries.map((e) => e.toJson()).toList()));
   }
 }

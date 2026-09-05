@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_theme_controller.dart';
 import '../../core/theme/game_theme_controller.dart';
 import '../../core/services/audio_service.dart';
 import '../../core/services/internet_service.dart';
+import '../../core/widgets/hero_title.dart';
+import '../../core/widgets/mode_card.dart';
 import '../auth/controllers/auth_controller.dart';
 import '../match/widgets/theme_background.dart';
 
@@ -41,102 +42,12 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
     AudioService.instance.playMusic();
   }
 
-  Widget _menuButton(String label, VoidCallback onPressed,
-      {bool primary = false, bool enabled = true, String? disabledLabel, Color? accent}) {
-    final color = accent ?? AppColors.defaultAccent;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: SizedBox(
-        width: double.infinity,
-        child: enabled
-            ? primary
-                ? ElevatedButton(
-                    onPressed: onPressed,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                  )
-                : OutlinedButton(
-                    onPressed: onPressed,
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.white24),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                  )
-            : OutlinedButton(
-                onPressed: null,
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.white12),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            color: Colors.white30,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: AppColors.orange.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            disabledLabel ?? 'ACCOUNT REQUIRED',
-                            style: const TextStyle(
-                              color: AppColors.orange,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-              ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     final isSignedIn = auth.isSignedIn;
     final internetService = ref.watch(internetServiceProvider);
     final isConnected = internetService.isConnected;
-    final accent = ref.watch(appAccentColorProvider);
     final gameTheme = ref.watch(gameThemeProvider);
 
     return Scaffold(
@@ -144,126 +55,225 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
       body: ThemeBackground(
         theme: gameTheme,
         child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              const SizedBox(height: 32),
-              const Text(
-                'RPS ARENA',
-                style: TextStyle(
-                  color: AppColors.primaryText,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2,
-                ),
-              ),
-              // ── Auth status + Login/Register buttons ────────────
-              if (!isSignedIn) ...[
-                const SizedBox(height: 24),
-                Row(
+              // ── Top nav: profile chip + settings gear ─────
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: widget.onLogin,
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: accent),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                    // Profile chip (top-left)
+                    GestureDetector(
+                      onTap: isSignedIn ? widget.onProfile : widget.onLogin,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                width: 1.5,
+                                color: AppColors.blue,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.blue.withValues(alpha: 0.35),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.person_outline,
+                              color: Colors.white70,
+                              size: 20,
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          'LOGIN',
-                          style: TextStyle(
-                            color: accent,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            letterSpacing: 1.0,
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'PLAYER',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.45),
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              Text(
+                                isSignedIn ? (auth.username ?? 'Player') : 'Guest',
+                                style: const TextStyle(
+                                  color: AppColors.primaryText,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: widget.onRegister,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: accent,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                    const Spacer(),
+                    // Settings gear (top-right) — wireframe: #334155 border, no glow
+                    GestureDetector(
+                      onTap: widget.onSettings,
+                      child: Container(
+                        width: 39,
+                        height: 39,
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            width: 1.5,
+                            color: const Color(0xFF334155),
                           ),
                         ),
-                        child: const Text(
-                          'REGISTER',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            letterSpacing: 1.0,
-                          ),
+                        child: const Icon(
+                          Icons.settings,
+                          color: Colors.white70,
+                          size: 20,
                         ),
                       ),
                     ),
                   ],
                 ),
-              ],
-              if (isSignedIn) ...[
+              ),
+              const SizedBox(height: 24),
+
+              // ── Hero title ─────────────────────────────────
+              const HeroTitle(first: 'RPS', second: 'ARENA'),
+              const SizedBox(height: 16),
+              const GameModeHeader(),
+
+              // ── Guest auth row (only when not signed in) ──
+              if (!isSignedIn) ...[
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      'Welcome, ${auth.username ?? 'Player'}!',
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 13,
+                    TextButton(
+                      onPressed: widget.onLogin,
+                      child: const Text(
+                        'LOGIN',
+                        style: TextStyle(
+                          color: AppColors.blue,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          letterSpacing: 1.0,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    GestureDetector(
-                      onTap: () async {
-                        await ref.read(authControllerProvider.notifier).signOut();
-                      },
+                    Text(
+                      '·',
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                    ),
+                    TextButton(
+                      onPressed: widget.onRegister,
                       child: const Text(
-                        'SIGN OUT',
+                        'REGISTER',
                         style: TextStyle(
-                          color: AppColors.orange,
-                          fontSize: 11,
+                          color: AppColors.blue,
                           fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
+                          fontSize: 12,
+                          letterSpacing: 1.0,
                         ),
                       ),
                     ),
                   ],
                 ),
+              ] else ...[
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () async {
+                    await ref.read(authControllerProvider.notifier).signOut();
+                  },
+                  child: const Text(
+                    'SIGN OUT',
+                    style: TextStyle(
+                      color: AppColors.orange,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
               ],
-              const SizedBox(height: 32),
+              const SizedBox(height: 20),
 
-              // ── Menu buttons ────────────────────────────────────
-              _menuButton('SINGLE PLAYER', widget.onSinglePlayer, primary: true, accent: accent),
-              _menuButton('2 PLAYERS', widget.onTwoPlayers, accent: accent),
-              _menuButton('SETTINGS', widget.onSettings, accent: accent),
+              // ── Mode cards (wireframe order/copy/badges) ──
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: ListView(
+                    children: [
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_rocket.svg',
+                        title: 'Multiplayer',
+                        subtitle: 'Battle live players worldwide in Ranked Arena',
+                        badgeLabel: isConnected ? 'ONLINE' : 'INTERNET REQUIRED',
+                        badgeColor: AppColors.blue,
+                        iconColor: AppColors.purple,
+                        enabled: isSignedIn && isConnected,
+                        onTap: widget.onMultiplayer,
+                      ),
+                      const SizedBox(height: 16),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_bolt.svg',
+                        title: 'Single Player',
+                        subtitle: 'Sharpen your skills against advanced AI bots',
+                        badgeLabel: 'PRACTICE',
+                        badgeColor: AppColors.badgeGreen,
+                        iconColor: AppColors.blue,
+                        onTap: widget.onSinglePlayer,
+                      ),
+                      const SizedBox(height: 16),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_gamepad.svg',
+                        title: '2 Player',
+                        subtitle: 'Local couch duel on a single screen',
+                        badgeLabel: 'LOCAL',
+                        badgeColor: AppColors.badgeGreen,
+                        iconColor: AppColors.purple,
+                        onTap: widget.onTwoPlayers,
+                      ),
+                      const SizedBox(height: 16),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_trophy.svg',
+                        title: 'Leaderboard',
+                        subtitle: 'View top master competitors & local rankings',
+                        badgeLabel: isConnected ? 'STATS' : 'INTERNET REQUIRED',
+                        badgeColor: AppColors.badgeOrange,
+                        iconColor: AppColors.orange,
+                        enabled: isSignedIn && isConnected,
+                        onTap: widget.onLeaderboard,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+              ),
 
-              // Disabled for guests or when offline
-              _menuButton('MULTIPLAYER', widget.onMultiplayer, 
-                enabled: isSignedIn && isConnected,
-                disabledLabel: !isConnected ? 'INTERNET CONNECTION REQUIRED' : (isSignedIn ? null : 'ACCOUNT REQUIRED')),
-              _menuButton('LEADERBOARD', widget.onLeaderboard, 
-                enabled: isSignedIn && isConnected,
-                disabledLabel: !isConnected ? 'INTERNET CONNECTION REQUIRED' : (isSignedIn ? null : 'ACCOUNT REQUIRED')),
-
-              // Profile only visible when signed in
-              if (isSignedIn)
-                _menuButton('PROFILE', widget.onProfile),
-
-              const Spacer(),
+              // ── Bottom Frame Indicator ─────────────────────
+              Container(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Center(
+                  child: Container(
+                    width: 134,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2.5),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
       ),
-    ),
     );
   }
 }

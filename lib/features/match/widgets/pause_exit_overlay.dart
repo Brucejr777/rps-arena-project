@@ -14,14 +14,17 @@ class PauseExitOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.black.withValues(alpha: 0.6),
-      child: Center(
-        child: Container(
-          width: 280,
+      color: Colors.black.withValues(alpha: 0.2),
+      child: Center(          child: Container(
+          width: 238,
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(19.5),
+            border: Border.all(
+              width: 1.5,
+              color: Colors.white.withValues(alpha: 0.08),
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.4),
@@ -67,10 +70,10 @@ class PauseExitOverlay extends StatelessWidget {
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
-                child: OutlinedButton(
+                child: ElevatedButton(
                   onPressed: onExit,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.white38),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.defaultAccent,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -79,7 +82,7 @@ class PauseExitOverlay extends StatelessWidget {
                   child: const Text(
                     'EXIT',
                     style: TextStyle(
-                      color: Colors.white70,
+                      color: Colors.white,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.0,
                     ),

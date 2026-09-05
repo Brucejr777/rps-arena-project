@@ -57,22 +57,29 @@ class _ViewStatisticsScreenState extends State<ViewStatisticsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white70),
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  ),
-                  const Text(
-                    'STATISTICS',
-                    style: TextStyle(
-                      color: AppColors.primaryText,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                      onPressed: () => Navigator.of(context).maybePop(),
                     ),
-                  ),
-                ],
+                    const Expanded(
+                      child: Text(
+                        'STATISTICS',
+                        style: TextStyle(
+                          color: AppColors.primaryText,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
               ),
               const SizedBox(height: 24),
               if (stats == null)
@@ -85,12 +92,16 @@ class _ViewStatisticsScreenState extends State<ViewStatisticsScreen> {
                 )
               else
                 Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      width: 1.5,
+                      color: Colors.white.withValues(alpha: 0.08),
                     ),
+                  ),
                     child: SingleChildScrollView(
                       child: Column(
                         children: [

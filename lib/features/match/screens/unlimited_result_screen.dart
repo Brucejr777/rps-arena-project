@@ -71,6 +71,10 @@ class UnlimitedResultScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    width: 1.5,
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
                 ),
                 child: Column(
                   children: [

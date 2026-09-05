@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Internet connectivity service (T108).
@@ -24,12 +24,13 @@ class InternetService {
     });
   }
 
-  /// Check internet connectivity by attempting DNS lookup
+  /// Check internet connectivity by attempting an HTTP request
   Future<void> _checkConnectivity() async {
     try {
-      final result = await InternetAddress.lookup('google.com')
+      final dio = Dio();
+      final response = await dio.get('https://www.google.com')
           .timeout(const Duration(seconds: 3));
-      final connected = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+      final connected = response.statusCode == 200;
 
       if (connected != _isConnected) {
         _isConnected = connected;

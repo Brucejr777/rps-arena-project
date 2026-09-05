@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../features/auth/screens/login_screen.dart';
 import '../features/auth/screens/register_screen.dart';
@@ -21,6 +22,8 @@ import '../features/match/widgets/standard_gameplay_screen.dart';
 import '../features/match/widgets/unlimited_gameplay_screen.dart';
 import '../features/match/screens/local_setup_screen.dart';
 import '../features/match/screens/local_match_flow_screen.dart';
+import '../features/match/screens/time_attack_screen.dart';
+import '../features/match/screens/tournament_screen.dart';
 import '../features/match/domain/match_format.dart';
 import '../features/match/screens/single_player_match_flow_screen.dart';
 import '../features/match/domain/ai_service.dart';
@@ -28,7 +31,7 @@ import '../features/settings/screens/settings_home_screen.dart';
 import '../features/settings/screens/appearance_screen.dart';
 import '../features/settings/screens/data_screen.dart';
 import '../features/stats/screens/view_statistics_screen.dart';
-import 'package:flutter/material.dart';
+import '../features/stats/screens/achievements_screen.dart';
 import '../features/settings/screens/gameplay_settings_screen.dart';
 import '../features/settings/screens/audio_settings_screen.dart';
 
@@ -84,6 +87,18 @@ final GoRouter appRouter = GoRouter(
         final format = state.extra as MatchFormatConfig? ?? MatchFormatConfig.bestOf3();
         return LocalMatchFlowScreen(format: format);
       },
+    ),
+    GoRoute(
+      path: '/time-attack',
+      builder: (context, state) => const TimeAttackScreen(),
+    ),
+    GoRoute(
+      path: '/tournament',
+      builder: (context, state) => const TournamentScreen(),
+    ),
+    GoRoute(
+      path: '/achievements',
+      builder: (context, state) => const AchievementsScreen(),
     ),
     GoRoute(
       path: '/single-player-match',
@@ -170,6 +185,7 @@ final GoRouter appRouter = GoRouter(
         onRankedMatch: () {
           // TODO T96: navigate to Ranked Match setup
         },
+        onSettings: () => context.push('/settings'),
       ),
     ),
     GoRoute(

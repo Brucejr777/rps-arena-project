@@ -33,41 +33,69 @@ class StandardResultScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                playerWon ? 'VICTORY' : 'DEFEAT',
-                style: TextStyle(
-                  color: playerWon ? AppColors.green : AppColors.red,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2,
-                  shadows: [
-                    Shadow(
+              // ── Victory/Defeat Card ───────────────────────
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    width: 1.5,
+                    color: (playerWon ? AppColors.green : AppColors.red)
+                        .withValues(alpha: 0.3),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
                       color: (playerWon ? AppColors.green : AppColors.red)
-                          .withValues(alpha: 0.6),
-                      blurRadius: 24,
+                          .withValues(alpha: 0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '$playerScore - $opponentScore',
-                style: const TextStyle(
-                  color: AppColors.primaryText,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+                child: Column(
+                  children: [
+                    Text(
+                      playerWon ? 'VICTORY' : 'DEFEAT',
+                      style: TextStyle(
+                        color: playerWon ? AppColors.green : AppColors.red,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      '$playerScore - $opponentScore',
+                      style: const TextStyle(
+                        color: AppColors.primaryText,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (playerWon) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.green.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'MATCH WON',
+                          style: TextStyle(
+                            color: AppColors.green,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              if (playerWon)
-                const Text(
-                  'MATCH WON',
-                  style: TextStyle(
-                    color: Colors.white60,
-                    fontSize: 14,
-                    letterSpacing: 1.0,
-                  ),
-                ),
 
               // ── T122: Rating change for ranked matches ─────
               if (ratingBefore != null && ratingAfter != null) ...[

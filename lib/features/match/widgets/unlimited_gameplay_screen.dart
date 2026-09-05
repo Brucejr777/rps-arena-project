@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rps_arena/features/match/widgets/theme_background.dart';
@@ -27,17 +28,40 @@ class _UnlimitedGameplayScreenState
   int selectionTimer = 10;
   String? selectedMove;
   bool isPaused = false;
+  Timer? _selectionCountdown;
 
   @override
   void initState() {
     super.initState();
     _engine = MatchEngine(MatchFormatConfig.unlimited());
+    _startSelectionTimer();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(matchControllerProvider.notifier).setMode(mode);
     });
   }
 
+  @override
+  void dispose() {
+    _selectionCountdown?.cancel();
+    super.dispose();
+  }
+
+  void _startSelectionTimer() {
+    _selectionCountdown?.cancel();
+    setState(() => selectionTimer = 10);
+    _selectionCountdown = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() {
+        selectionTimer--;
+        if (selectionTimer <= 0) {
+          timer.cancel();
+        }
+      });
+    });
+  }
+
   void _selectMove(String move) {
+    _selectionCountdown?.cancel();
     setState(() {
       selectedMove = move;
     });
@@ -85,7 +109,12 @@ class _UnlimitedGameplayScreenState
     switch (outcome) {
       case ExitOutcome.connectionLost:
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ConnectionLostScreen()),
+          MaterialPageRoute(
+            builder: (_) => ConnectionLostScreen(
+              onReconnect: () => Navigator.of(context).pop(),
+              onExit: () => Navigator.of(context).popUntil((route) => route.isFirst),
+            ),
+          ),
         );
         break;
       case ExitOutcome.rankedQuitLoss:
@@ -150,25 +179,29 @@ class _UnlimitedGameplayScreenState
                         icon: const Icon(Icons.close, color: Colors.white70),
                         onPressed: _onExitPressed,
                       ),
-                      Column(
-                        children: [
-                          Text(
-                            'ROUNDS PLAYED: ${_engine.totalRounds}',
-                            style: const TextStyle(
-                              color: AppColors.primaryText,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              letterSpacing: 1.0,
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text(
+                              'ROUNDS PLAYED: ${_engine.totalRounds}',
+                              style: const TextStyle(
+                                color: AppColors.primaryText,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                letterSpacing: 1.0,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                          Text(
-                            'DRAWS: ${_engine.drawCount}',
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 11,
+                            Text(
+                              'DRAWS: ${_engine.drawCount}',
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 11,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                       TextButton(
                         onPressed: _engine.totalRounds > 0 ? _onEndMatchPressed : null,
@@ -196,7 +229,7 @@ class _UnlimitedGameplayScreenState
                           color: selectionTimer <= 5
                               ? AppColors.red
                               : AppColors.primaryText,
-                          fontSize: 28,
+                          fontSize: 32,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -225,24 +258,27 @@ class _UnlimitedGameplayScreenState
                     children: [
                       MoveButton(
                         move: 'rock',
-                        icon: Icons.circle,
+                        iconAsset: 'assets/icons/icon_rock.svg',
                         isSelected: selectedMove == 'rock',
                         isDisabled: selectedMove != null,
                         onSelected: () => _selectMove('rock'),
+                        frameColor: const Color(0xFFF97316),
                       ),
                       MoveButton(
                         move: 'paper',
-                        icon: Icons.square,
+                        iconAsset: 'assets/icons/icon_paper.svg',
                         isSelected: selectedMove == 'paper',
                         isDisabled: selectedMove != null,
                         onSelected: () => _selectMove('paper'),
+                        frameColor: const Color(0xFF06B6D4),
                       ),
                       MoveButton(
                         move: 'scissors',
-                        icon: Icons.content_cut,
+                        iconAsset: 'assets/icons/icon_scissors.svg',
                         isSelected: selectedMove == 'scissors',
                         isDisabled: selectedMove != null,
                         onSelected: () => _selectMove('scissors'),
+                        frameColor: const Color(0xFFEC4899),
                       ),
                     ],
                   ),
@@ -301,8 +337,15 @@ class _EndMatchDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            width: 1.5,
+            color: Colors.white.withValues(alpha: 0.08),
+          ),
+        ),
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
