@@ -9,6 +9,7 @@ import '../features/online/screens/opponent_found_screen.dart';
 import '../features/online/screens/private_room_create_screen.dart';
 import '../features/online/screens/private_room_join_screen.dart';
 import '../features/online/screens/private_room_setup_screen.dart';
+import '../features/online/screens/online_match_loader_screen.dart';
 import '../features/online/screens/connection_lost_screen.dart';
 import '../features/online/screens/leaderboard_screen.dart';
 import '../features/online/screens/player_profile_screen.dart';
@@ -210,6 +211,20 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => PrivateRoomJoinScreen(
         onCancel: () => context.go('/main'),
       ),
+    ),
+    GoRoute(
+      path: '/online-gameplay',
+      builder: (context, state) {
+        final args = state.extra as Map<String, dynamic>? ?? {};
+        final rawId = args['matchId'];
+        final matchId =
+            rawId is int ? rawId : int.tryParse('$rawId') ?? 0;
+        return OnlineMatchLoaderScreen(
+          matchId: matchId,
+          playerName: args['playerName'] as String?,
+          opponentName: args['opponentName'] as String?,
+        );
+      },
     ),
     GoRoute(
       path: '/login',

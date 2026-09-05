@@ -104,7 +104,10 @@ class _PrivateRoomJoinScreenState extends ConsumerState<PrivateRoomJoinScreen> {
         _pollTimer?.cancel();
         final matchId = status['matchId'];
         if (matchId != null) {
-          context.go('/online-gameplay', extra: {'matchId': matchId});
+          context.go('/online-gameplay', extra: {
+            'matchId': matchId,
+            'opponentName': _roomInfo?['hostName'] as String?,
+          });
         }
       }
     } catch (e) {

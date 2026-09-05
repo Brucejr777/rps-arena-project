@@ -114,7 +114,10 @@ class _PrivateRoomCreateScreenState
         _pollTimer?.cancel();
         final matchId = status['matchId'];
         if (matchId != null) {
-          context.go('/online-gameplay', extra: {'matchId': matchId});
+          context.go('/online-gameplay', extra: {
+            'matchId': matchId,
+            'opponentName': _guestName,
+          });
         }
         return;
       }
@@ -142,7 +145,10 @@ class _PrivateRoomCreateScreenState
 
       final matchId = result['matchId'];
       if (matchId != null) {
-        context.go('/online-gameplay', extra: {'matchId': matchId});
+        context.go('/online-gameplay', extra: {
+          'matchId': matchId,
+          'opponentName': _guestName,
+        });
       }
     } catch (e) {
       if (!mounted) return;
