@@ -126,8 +126,9 @@ class _PrivateRoomCreateScreenState
         });
         _pollTimer?.cancel();
       }
-    } catch (_) {
-      // Polling errors are silent — keep trying.
+    } catch (e) {
+      // Log poll failures for debugging, but keep retrying.
+      debugPrint('Room poll failed for $_roomCode: $e');
     }
   }
 

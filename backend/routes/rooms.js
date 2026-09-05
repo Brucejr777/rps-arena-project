@@ -218,15 +218,10 @@ function createRoomsRouter(pool) {
         `SELECT r.room_code, r.status, r.format_type, r.wins_required,
                 r.host_id, r.guest_id,
                 h.username AS host_name,
-                g.username AS guest_name,
-                m.match_id
+                g.username AS guest_name
          FROM room r
          LEFT JOIN account h ON r.host_id = h.player_id
          LEFT JOIN account g ON r.guest_id = g.player_id
-         LEFT JOIN match m ON m.player_a_id = r.host_id
-           AND m.player_b_id = r.guest_id
-           AND m.mode = 'private'
-           AND m.created_at >= r.created_at
          WHERE r.room_code = $1`,
         [code.toUpperCase()]
       );
@@ -236,6 +231,25 @@ function createRoomsRouter(pool) {
       }
 
       const room = result.rows[0];
+
+      // If the room is active, fetch the latest private match between
+      // host and guest so clients can navigate to gameplay.
+      let matchId = null;
+      if (room.status === 'active' && room.guest_id != null) {
+        const matchResult = await pool.query(
+          `SELECT match_id FROM match
+           WHERE mode = 'private'
+             AND player_a_id = $1
+             AND player_b_id = $2
+           ORDER BY match_id DESC
+           LIMIT 1`,
+          [room.host_id, room.guest_id]
+        );
+        if (matchResult.rows.length > 0) {
+          matchId = matchResult.rows[0].match_id;
+        }
+      }
+
       res.json({
         roomCode: room.room_code,
         status: room.status,
@@ -244,7 +258,7 @@ function createRoomsRouter(pool) {
         hostName: room.host_name ?? 'Host',
         guestName: room.guest_name,
         hasGuest: room.guest_id != null,
-        matchId: room.match_id ?? null,
+        matchId,
       });
     } catch (err) {
       console.error('Room status error:', err);

@@ -107,8 +107,9 @@ class _PrivateRoomJoinScreenState extends ConsumerState<PrivateRoomJoinScreen> {
           context.go('/online-gameplay', extra: {'matchId': matchId});
         }
       }
-    } catch (_) {
-      // Polling errors are silent.
+    } catch (e) {
+      // Log poll failures for debugging, but keep retrying.
+      debugPrint('Room poll failed for $_roomCode: $e');
     }
   }
 
