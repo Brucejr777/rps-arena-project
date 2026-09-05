@@ -54,6 +54,7 @@ class _OnlineMatchLoaderScreenState
 
       setState(() {
         _resolved = {
+          'isPlayerA': iAmA,
           'playerId': iAmA ? playerAId : playerBId,
           'opponentId': iAmA ? playerBId : playerAId,
           'playerName': widget.playerName ??
@@ -135,6 +136,7 @@ class _OnlineMatchLoaderScreenState
       opponentName: r['opponentName'] as String,
       formatType: r['formatType'] as String,
       winsRequired: r['winsRequired'] as int,
+      isPlayerA: r['isPlayerA'] as bool,
     );
   }
 }

@@ -52,7 +52,7 @@ class _ConnectionLostScreenState extends State<ConnectionLostScreen>
           if (_remainingSeconds <= 0) {
             timer.cancel();
             // Auto-exit when countdown reaches 0
-            widget.onExit?.call();
+            _handleExit();
           }
         });
       }
@@ -72,6 +72,26 @@ class _ConnectionLostScreenState extends State<ConnectionLostScreen>
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  /// Exit always works — fall back to popping to the first route when
+  /// no explicit callback was provided.
+  void _handleExit() {
+    if (widget.onExit != null) {
+      widget.onExit!();
+    } else {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
+  }
+
+  /// Retry always works — fall back to dismissing this screen (the
+  /// underlying gameplay socket reconnects on its own loop).
+  void _handleReconnect() {
+    if (widget.onReconnect != null) {
+      widget.onReconnect!();
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -88,7 +108,7 @@ class _ConnectionLostScreenState extends State<ConnectionLostScreen>
                   children: [
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: widget.onExit,
+                      onPressed: _handleExit,
                     ),
                     const Expanded(
                       child: Text(
@@ -188,7 +208,7 @@ class _ConnectionLostScreenState extends State<ConnectionLostScreen>
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: widget.onReconnect,
+                  onPressed: _handleReconnect,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.defaultAccent,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -212,7 +232,7 @@ class _ConnectionLostScreenState extends State<ConnectionLostScreen>
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: widget.onExit,
+                  onPressed: _handleExit,
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Colors.white38),
                     padding: const EdgeInsets.symmetric(vertical: 16),

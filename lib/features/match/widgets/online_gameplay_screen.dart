@@ -30,6 +30,10 @@ class OnlineGameplayScreen extends ConsumerStatefulWidget {
   final String formatType;
   final int winsRequired;
 
+  /// Whether the local player is player A in the match record.
+  /// Passed explicitly — player ids carry no ordering guarantee.
+  final bool isPlayerA;
+
   const OnlineGameplayScreen({
     super.key,
     required this.matchId,
@@ -39,6 +43,7 @@ class OnlineGameplayScreen extends ConsumerStatefulWidget {
     required this.opponentName,
     required this.formatType,
     required this.winsRequired,
+    required this.isPlayerA,
   });
 
   @override
@@ -66,7 +71,11 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   String? _serverPlayerAMove;
   String? _serverPlayerBMove;
 
-  bool get _isPlayerA => widget.playerId < widget.opponentId;
+  // Guards against handling the same round_result twice (once from the
+  // POST response, once from the WebSocket broadcast).
+  bool _roundResolved = false;
+
+  bool get _isPlayerA => widget.isPlayerA;
 
   bool get _isUnlimited => widget.formatType == 'unlimited';
   bool get _canEndMatch => _isUnlimited && _drawCount + _playerScore + _opponentScore > 0;
@@ -77,6 +86,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _authClient = ref.read(authControllerProvider.notifier).client;
     _socketClient = MatchSocketClient();
     _connectWebSocket();
+    _startRound();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(matchControllerProvider.notifier).setMode(MatchMode.online);
     });
@@ -91,12 +101,27 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   void _connectWebSocket() {
-    _socketClient.connect(widget.matchId);
-    _socketSub = _socketClient.events.listen(_onSocketEvent);
+    _socketClient.connect(widget.matchId, playerId: widget.playerId);
+    _socketSub?.cancel();
+    _socketSub = _socketClient.events.listen(
+      _onSocketEvent,
+      onError: (_) {
+        // Socket errors trigger the client's own reconnect loop.
+      },
+    );
   }
+
+  /// Coerce server numbers defensively (pg COUNT columns arrive as strings).
+  int _asInt(dynamic value) =>
+      value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 
   void _onSocketEvent(SocketEvent event) {
     if (!mounted) return;
+
+    // The server broadcasts to every connected client — ignore events
+    // belonging to other matches.
+    final eventMatchId = event.data['matchId'];
+    if (eventMatchId != null && '$eventMatchId' != '${widget.matchId}') return;
 
     switch (event.type) {
       case SocketEventType.roundResult:
@@ -126,12 +151,15 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   void _handleRoundResult(Map<String, dynamic> data) {
+    if (_roundResolved) return;
+    _roundResolved = true;
+
     final playerAMove = data['playerAMove'] as String?;
     final playerBMove = data['playerBMove'] as String?;
-    final playerAScore = data['playerAScore'] as int? ?? 0;
-    final playerBScore = data['playerBScore'] as int? ?? 0;
-    final drawCount = data['drawCount'] as int? ?? 0;
-    final totalRounds = data['totalRounds'] as int? ?? 0;
+    final playerAScore = _asInt(data['playerAScore']);
+    final playerBScore = _asInt(data['playerBScore']);
+    final drawCount = _asInt(data['drawCount']);
+    final totalRounds = _asInt(data['totalRounds']);
     final matchFinished = data['matchFinished'] as bool? ?? false;
 
     setState(() {
@@ -198,12 +226,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _handleMatchCompleted(Map<String, dynamic> data) {
     setState(() {
       _playerScore = _isPlayerA
-          ? (data['playerAScore'] as int? ?? 0)
-          : (data['playerBScore'] as int? ?? 0);
+          ? _asInt(data['playerAScore'])
+          : _asInt(data['playerBScore']);
       _opponentScore = _isPlayerA
-          ? (data['playerBScore'] as int? ?? 0)
-          : (data['playerAScore'] as int? ?? 0);
-      _drawCount = data['drawCount'] as int? ?? 0;
+          ? _asInt(data['playerBScore'])
+          : _asInt(data['playerAScore']);
+      _drawCount = _asInt(data['drawCount']);
     });
     final total = _playerScore + _opponentScore + _drawCount;
     final p1Rate = total == 0 ? 0.0 : (_playerScore / total) * 100;
@@ -230,6 +258,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _selectedMove = null;
       _selectionTimer = 10;
       _isWaitingForServer = false;
+      _roundResolved = false;
     });
 
     _timer?.cancel();
@@ -261,11 +290,21 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _timer?.cancel();
 
     try {
-      await _authClient.post(
+      final res = await _authClient.post(
         '/matches/${widget.matchId}/move',
         data: {'move': _selectedMove},
       );
-      // Result will arrive via WebSocket
+      // The second submitter gets the resolved round inline in the HTTP
+      // response — handle it directly so a missed socket event can't
+      // leave the screen stuck on WAITING (the duplicate broadcast is
+      // ignored via _roundResolved).
+      final data = res.data;
+      if (data is Map<String, dynamic> && data['type'] == 'round_result') {
+        if (!mounted) return;
+        _handleRoundResult(data);
+        return;
+      }
+      // Otherwise the result will arrive via WebSocket.
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -292,7 +331,17 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     switch (outcome) {
       case ExitOutcome.connectionLost:
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ConnectionLostScreen()),
+          MaterialPageRoute(
+            builder: (_) => ConnectionLostScreen(
+              onReconnect: () {
+                Navigator.of(context).pop();
+                _connectWebSocket();
+              },
+              onExit: () {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              },
+            ),
+          ),
         );
         break;
       case ExitOutcome.rankedQuitLoss:

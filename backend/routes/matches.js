@@ -143,23 +143,21 @@ function createMatchesRouter(pool, wss) {
       // Update round result
       await pool.query('UPDATE round SET result = $1 WHERE id = $2', [result, roundId]);
 
-      // Update match score
-      let playerAScore = match.total_rounds > 0
-        ? (await pool.query(
-            `SELECT COUNT(*) as wins FROM round WHERE match_id = $1 AND result = 'player_a_wins'`,
-            [matchId]
-          )).rows[0].wins
-        : 0;
-      let playerBScore = match.total_rounds > 0
-        ? (await pool.query(
-            `SELECT COUNT(*) as wins FROM round WHERE match_id = $1 AND result = 'player_b_wins'`,
-            [matchId]
-          )).rows[0].wins
-        : 0;
+      // Update match score (pg COUNT returns strings — coerce to numbers)
+      const countWins = async (resultType) => {
+        if (match.total_rounds === 0) return 0;
+        const r = await pool.query(
+          `SELECT COUNT(*) as wins FROM round WHERE match_id = $1 AND result = $2`,
+          [matchId, resultType]
+        );
+        return parseInt(r.rows[0].wins, 10) || 0;
+      };
+      let playerAScore = await countWins('player_a_wins');
+      let playerBScore = await countWins('player_b_wins');
 
       // Add this round's result
-      if (result === 'player_a_wins') playerAScore = parseInt(playerAScore) + 1;
-      if (result === 'player_b_wins') playerBScore = parseInt(playerBScore) + 1;
+      if (result === 'player_a_wins') playerAScore += 1;
+      if (result === 'player_b_wins') playerBScore += 1;
 
       const newDrawCount = result === 'draw'
         ? match.draw_count + 1
@@ -396,13 +394,13 @@ function createMatchesRouter(pool, wss) {
         }
       }
 
-      // Calculate final scores
-      const aWins = (await pool.query(
+      // Calculate final scores (pg COUNT returns strings — coerce to numbers)
+      const aWins = parseInt((await pool.query(
         `SELECT COUNT(*) as c FROM round WHERE match_id = $1 AND result = 'player_a_wins'`, [matchId]
-      )).rows[0].c;
-      const bWins = (await pool.query(
+      )).rows[0].c, 10) || 0;
+      const bWins = parseInt((await pool.query(
         `SELECT COUNT(*) as c FROM round WHERE match_id = $1 AND result = 'player_b_wins'`, [matchId]
-      )).rows[0].c;
+      )).rows[0].c, 10) || 0;
 
       // Determine winner
       let winnerId = null;

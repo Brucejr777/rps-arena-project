@@ -32,6 +32,7 @@ class MatchSocketClient {
   bool _isConnected = false;
   Timer? _reconnectTimer;
   int _matchId = 0;
+  int? _playerId;
   final String _baseUrl;
 
   MatchSocketClient({this._baseUrl = 'wss://rps-arena-project-3.onrender.com'});
@@ -43,13 +44,19 @@ class MatchSocketClient {
   bool get isConnected => _isConnected;
 
   /// Connect to the match event stream.
-  void connect(int matchId) {
+  ///
+  /// The server requires `playerId` as a query parameter and closes
+  /// connections without it, so it must be provided.
+  void connect(int matchId, {int? playerId}) {
     _matchId = matchId;
+    if (playerId != null) _playerId = playerId;
     _doConnect();
   }
 
   void _doConnect() {
-    final url = '$_baseUrl/matches/$_matchId/events';
+    final url = _playerId != null
+        ? '$_baseUrl/matches/$_matchId/events?playerId=$_playerId'
+        : '$_baseUrl/matches/$_matchId/events';
 
     try {
       _channel = WebSocketChannel.connect(Uri.parse(url));
