@@ -1,17 +1,18 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/network/api_client.dart';
 import '../../../core/network/room_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../auth/controllers/auth_controller.dart';
 
 /// Private Room host screen (T92).
 ///
 /// Creates a room via POST /rooms/create, then polls GET /rooms/:code
 /// every 3 seconds. When a guest joins, shows a START MATCH button
 /// that calls POST /rooms/start and navigates to gameplay.
-class PrivateRoomCreateScreen extends StatefulWidget {
+class PrivateRoomCreateScreen extends ConsumerStatefulWidget {
   final String? initialRoomCode;
   final String formatType;
   final String formatLabel;
@@ -26,11 +27,12 @@ class PrivateRoomCreateScreen extends StatefulWidget {
   });
 
   @override
-  State<PrivateRoomCreateScreen> createState() =>
+  ConsumerState<PrivateRoomCreateScreen> createState() =>
       _PrivateRoomCreateScreenState();
 }
 
-class _PrivateRoomCreateScreenState extends State<PrivateRoomCreateScreen> {
+class _PrivateRoomCreateScreenState
+    extends ConsumerState<PrivateRoomCreateScreen> {
   String _roomCode = '';
   bool _isLoading = true;
   bool _isStarting = false;
@@ -58,51 +60,44 @@ class _PrivateRoomCreateScreenState extends State<PrivateRoomCreateScreen> {
         _roomCode = widget.initialRoomCode!;
         _isLoading = false;
       });
-      _startPolling();
       return;
     }
 
     try {
-      final auth = AuthClient();
-      final isAuth = await auth.isAuthenticated;
+      final authClient = ref.read(authControllerProvider.notifier).client;
+      final isAuth = await authClient.isAuthenticated;
       if (!isAuth) {
-        _fallbackCode();
+        if (!mounted) return;
+        setState(() {
+          _error = 'Please log in to create a room.';
+          _isLoading = false;
+        });
         return;
       }
 
-      _roomService = RoomService(auth);
+      _roomService = RoomService(authClient);
       final result =
           await _roomService!.createRoom(formatType: widget.formatType);
       if (!mounted) return;
 
       setState(() {
-        _roomCode = result['roomCode'] as String? ?? _generateFallback();
+        _roomCode = result['roomCode'] as String? ?? '';
         _isLoading = false;
       });
       _startPolling();
     } catch (e) {
       if (!mounted) return;
-      _fallbackCode();
+      setState(() {
+        _error = 'Failed to create room. Please try again.';
+        _isLoading = false;
+      });
     }
-  }
-
-  void _fallbackCode() {
-    setState(() {
-      _roomCode = _generateFallback();
-      _isLoading = false;
-    });
-  }
-
-  String _generateFallback() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final rng = DateTime.now().millisecondsSinceEpoch;
-    return List.generate(6, (i) => chars[(rng >> (i * 5)) % chars.length])
-        .join();
   }
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _pollRoom());
+    _pollTimer =
+        Timer.periodic(const Duration(seconds: 3), (_) => _pollRoom());
   }
 
   Future<void> _pollRoom() async {
@@ -151,9 +146,12 @@ class _PrivateRoomCreateScreenState extends State<PrivateRoomCreateScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isStarting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to start match. Please try again.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Failed to start match. Please try again.')),
+        );
+      }
     }
   }
 
@@ -315,7 +313,6 @@ class _PrivateRoomCreateScreenState extends State<PrivateRoomCreateScreen> {
               if (_hasGuest)
                 Column(
                   children: [
-                    // Guest joined indicator
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -343,7 +340,6 @@ class _PrivateRoomCreateScreenState extends State<PrivateRoomCreateScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Start Match button
                     SizedBox(
                       width: double.infinity,
                       child: Container(
@@ -396,7 +392,6 @@ class _PrivateRoomCreateScreenState extends State<PrivateRoomCreateScreen> {
                   ],
                 )
               else
-                // Waiting indicator
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

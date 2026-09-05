@@ -1,16 +1,17 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/network/api_client.dart';
 import '../../../core/network/room_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../auth/controllers/auth_controller.dart';
 
 /// Private Room guest screen (T94).
 ///
 /// Step 1: Enter 6-character room code + JOIN button.
 /// Step 2: After join, display room code, match length, host name.
 /// Step 3: Poll for match start, then navigate to gameplay.
-class PrivateRoomJoinScreen extends StatefulWidget {
+class PrivateRoomJoinScreen extends ConsumerStatefulWidget {
   final VoidCallback onCancel;
 
   const PrivateRoomJoinScreen({
@@ -19,10 +20,11 @@ class PrivateRoomJoinScreen extends StatefulWidget {
   });
 
   @override
-  State<PrivateRoomJoinScreen> createState() => _PrivateRoomJoinScreenState();
+  ConsumerState<PrivateRoomJoinScreen> createState() =>
+      _PrivateRoomJoinScreenState();
 }
 
-class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
+class _PrivateRoomJoinScreenState extends ConsumerState<PrivateRoomJoinScreen> {
   final _codeController = TextEditingController();
   bool _isLoading = false;
   String? _error;
@@ -56,8 +58,8 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
     });
 
     try {
-      final auth = AuthClient();
-      final isAuth = await auth.isAuthenticated;
+      final authClient = ref.read(authControllerProvider.notifier).client;
+      final isAuth = await authClient.isAuthenticated;
       if (!isAuth) {
         if (!mounted) return;
         setState(() {
@@ -67,7 +69,7 @@ class _PrivateRoomJoinScreenState extends State<PrivateRoomJoinScreen> {
         return;
       }
 
-      _roomService = RoomService(auth);
+      _roomService = RoomService(authClient);
       final result = await _roomService!.joinRoom(roomCode: code);
       if (!mounted) return;
 

@@ -3,7 +3,6 @@ import '../theme/app_colors.dart';
 
 /// Common scaffold wrapper matching the wireframe layout:
 /// - SafeArea with consistent padding
-/// - Status bar at top
 /// - Bottom frame indicator (pill bar)
 /// - Screen title with back button
 class WireframeScaffold extends StatelessWidget {
