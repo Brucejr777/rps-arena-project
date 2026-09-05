@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 
 /// Connection Lost Screen (T105).
@@ -72,13 +73,13 @@ class _ConnectionLostScreenState extends State<ConnectionLostScreen>
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
-  /// Exit always works — fall back to popping to the first route when
-  /// no explicit callback was provided.
+  /// Exit always works — fall back to navigating to main menu via
+  /// go_router when no explicit callback was provided.
   void _handleExit() {
     if (widget.onExit != null) {
       widget.onExit!();
-    } else {
-      Navigator.of(context).popUntil((route) => route.isFirst);
+    } else if (mounted) {
+      GoRouter.of(context).go('/');
     }
   }
 

@@ -143,9 +143,10 @@ function createMatchesRouter(pool, wss) {
       // Update round result
       await pool.query('UPDATE round SET result = $1 WHERE id = $2', [result, roundId]);
 
-      // Update match score (pg COUNT returns strings — coerce to numbers)
+      // Update match score — always query the round table (pg COUNT returns
+      // strings, so coerce to numbers). Never short-circuit; the round row
+      // for the current round already exists in the DB at this point.
       const countWins = async (resultType) => {
-        if (match.total_rounds === 0) return 0;
         const r = await pool.query(
           `SELECT COUNT(*) as wins FROM round WHERE match_id = $1 AND result = $2`,
           [matchId, resultType]

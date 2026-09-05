@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/game_theme_controller.dart';
 import '../../../core/network/api_client.dart';
@@ -67,6 +68,11 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   bool _isRevealing = false;
   bool _isPaused = false;
 
+  // Safety net: if the server doesn't respond within 12 seconds,
+  // poll the match state endpoint and either resolve the round or
+  // let the player retry.
+  Timer? _waitingTimeout;
+
   // Server-revealed data
   String? _serverPlayerAMove;
   String? _serverPlayerBMove;
@@ -95,6 +101,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _waitingTimeout?.cancel();
     _socketSub?.cancel();
     _socketClient.dispose();
     super.dispose();
@@ -139,7 +146,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 _connectWebSocket();
               },
               onExit: () {
-                Navigator.of(context).popUntil((route) => route.isFirst);
+                if (mounted) GoRouter.of(context).go('/');
               },
             ),
           ),
@@ -153,6 +160,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _handleRoundResult(Map<String, dynamic> data) {
     if (_roundResolved) return;
     _roundResolved = true;
+    _waitingTimeout?.cancel();
 
     final playerAMove = data['playerAMove'] as String?;
     final playerBMove = data['playerBMove'] as String?;
@@ -196,8 +204,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 player1WinRate: p1Rate,
                 player2WinRate: p2Rate,
                 onPlayAgain: () => Navigator.of(context).maybePop(),
-                onMainMenu: () =>
-                    Navigator.of(context).popUntil((route) => route.isFirst),
+                onMainMenu: () {
+                  if (mounted) GoRouter.of(context).go('/');
+                },
               ),
             ),
           );
@@ -210,8 +219,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 playerScore: _playerScore,
                 opponentScore: _opponentScore,
                 onPlayAgain: () => Navigator.of(context).maybePop(),
-                onMainMenu: () =>
-                    Navigator.of(context).popUntil((route) => route.isFirst),
+                onMainMenu: () {
+                  if (mounted) GoRouter.of(context).go('/');
+                },
               ),
             ),
           );
@@ -246,14 +256,16 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           player1WinRate: p1Rate,
           player2WinRate: p2Rate,
           onPlayAgain: () => Navigator.of(context).maybePop(),
-          onMainMenu: () =>
-              Navigator.of(context).popUntil((route) => route.isFirst),
+          onMainMenu: () {
+            if (mounted) GoRouter.of(context).go('/');
+          },
         ),
       ),
     );
   }
 
   void _startRound() {
+    _waitingTimeout?.cancel();
     setState(() {
       _selectedMove = null;
       _selectionTimer = 10;
@@ -289,6 +301,14 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     setState(() => _isWaitingForServer = true);
     _timer?.cancel();
 
+    // Start safety-net timer: if the server doesn't deliver a round_result
+    // within 12 seconds, poll the state endpoint to catch up.
+    _waitingTimeout?.cancel();
+    _waitingTimeout = Timer(const Duration(seconds: 12), () {
+      if (!mounted || !_isWaitingForServer) return;
+      _pollRoundState();
+    });
+
     try {
       final res = await _authClient.post(
         '/matches/${widget.matchId}/move',
@@ -300,17 +320,79 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       // ignored via _roundResolved).
       final data = res.data;
       if (data is Map<String, dynamic> && data['type'] == 'round_result') {
+        _waitingTimeout?.cancel();
         if (!mounted) return;
         _handleRoundResult(data);
         return;
       }
       // Otherwise the result will arrive via WebSocket.
     } catch (e) {
+      _waitingTimeout?.cancel();
       if (!mounted) return;
       setState(() {
         _isWaitingForServer = false;
         _selectedMove = null;
       });
+    }
+  }
+
+  /// Called when the WAITING timeout fires — poll the server to see if the
+  /// current round has been resolved (maybe the WS event was missed).
+  Future<void> _pollRoundState() async {
+    try {
+      final res = await _authClient.get('/matches/${widget.matchId}/state');
+      final data = res.data;
+      if (data is! Map<String, dynamic>) return;
+
+      final rounds = data['rounds'] as List<dynamic>? ?? [];
+      final matchFinished = data['winnerId'] != null ||
+          (data['matchDraw'] as bool? ?? false);
+
+      // Find the round matching the one we're waiting on.
+      for (final r in rounds) {
+        if (r is Map<String, dynamic> && r['roundNumber'] == _currentRound) {
+          final result = r['result'] as String?;
+          if (result != null && result != 'pending') {
+            // Round was resolved server-side but the WS event was missed.
+            // Reconstruct a round_result payload from the state data.
+            final synthetic = <String, dynamic>{
+              'type': 'round_result',
+              'matchId': widget.matchId,
+              'roundNumber': _currentRound,
+              'playerAMove': r['playerAMove'],
+              'playerBMove': r['playerBMove'],
+              'result': result,
+              'playerAScore': data['playerAScore'] ?? 0,
+              'playerBScore': data['playerBScore'] ?? 0,
+              'drawCount': data['drawCount'] ?? 0,
+              'totalRounds': data['totalRounds'] ?? _currentRound,
+              'matchFinished': matchFinished,
+              'winnerId': data['winnerId'],
+            };
+            _waitingTimeout?.cancel();
+            if (mounted) _handleRoundResult(synthetic);
+            return;
+          }
+        }
+      }
+
+      // Round not resolved yet — allow the player to retry their move.
+      _waitingTimeout?.cancel();
+      if (mounted) {
+        setState(() {
+          _isWaitingForServer = false;
+          _selectedMove = null;
+        });
+      }
+    } catch (_) {
+      // Server unreachable — reset so the player can retry manually.
+      _waitingTimeout?.cancel();
+      if (mounted) {
+        setState(() {
+          _isWaitingForServer = false;
+          _selectedMove = null;
+        });
+      }
     }
   }
 
@@ -338,7 +420,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 _connectWebSocket();
               },
               onExit: () {
-                Navigator.of(context).popUntil((route) => route.isFirst);
+                // Use go_router to navigate to main menu — popUntil
+                // doesn't work reliably with go_router's route stack.
+                if (mounted) GoRouter.of(context).go('/');
               },
             ),
           ),
