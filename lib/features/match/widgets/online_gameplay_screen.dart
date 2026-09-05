@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/game_theme_controller.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/network/socket_client.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../controllers/match_controller.dart';
