@@ -312,35 +312,33 @@ function createMatchesRouter(pool, wss, matchConnections) {
       };
 
       // Broadcast to match participants via WebSocket
-      if (wss || matchConnections) {
-        console.log(`Broadcasting round_result for match ${matchId} round ${currentRound}: ${result} (scores ${playerAScore}-${playerBScore})`);
-        broadcastToMatch(parseInt(matchId), eventPayload);
+      console.log(`Broadcasting round_result for match ${matchId} round ${currentRound}: ${result} (scores ${playerAScore}-${playerBScore})`);
+      broadcastToMatch(parseInt(matchId), eventPayload);
 
-        // T101: send dedicated match_completed event when match finishes
-        if (matchFinished) {
-          const completedPayload = {
-            type: 'match_completed',
+      // T101: send dedicated match_completed event when match finishes
+      if (matchFinished) {
+        const completedPayload = {
+          type: 'match_completed',
+          matchId: parseInt(matchId),
+          winnerId: matchWinner,
+          playerAScore,
+          playerBScore,
+          drawCount: newDrawCount,
+          totalRounds: newTotalRounds,
+          formatType: match.format_type,
+          winsRequired: match.wins_required,
+        };
+        broadcastToMatch(parseInt(matchId), completedPayload);
+      } else {
+        // Send round_start after 1.5s so both players begin the next
+        // round together (1s reveal + 0.5s grace for WS delivery).
+        setTimeout(() => {
+          broadcastToMatch(parseInt(matchId), {
+            type: 'round_start',
             matchId: parseInt(matchId),
-            winnerId: matchWinner,
-            playerAScore,
-            playerBScore,
-            drawCount: newDrawCount,
-            totalRounds: newTotalRounds,
-            formatType: match.format_type,
-            winsRequired: match.wins_required,
-          };
-          broadcastToMatch(parseInt(matchId), completedPayload);
-        } else {
-          // Send round_start after 1.5s so both players begin the next
-          // round together (1s reveal + 0.5s grace for WS delivery).
-          setTimeout(() => {
-            broadcastToMatch(parseInt(matchId), {
-              type: 'round_start',
-              matchId: parseInt(matchId),
-              serverTime: Date.now(),
-            });
-          }, 1500);
-        }
+            serverTime: Date.now(),
+          });
+        }, 1500);
       }
 
       res.json(eventPayload);
@@ -527,20 +525,18 @@ function createMatchesRouter(pool, wss, matchConnections) {
       }
 
       // Send match_completed via WebSocket
-      if (wss || matchConnections) {
-        broadcastToMatch(parseInt(matchId), {
-          type: 'match_completed',
-          matchId: parseInt(matchId),
-          winnerId,
-          matchDraw,
-          playerAScore: aWins,
-          playerBScore: bWins,
-          drawCount: match.draw_count,
-          totalRounds: match.total_rounds,
-          formatType: 'unlimited',
-          winsRequired: 0,
-        });
-      }
+      broadcastToMatch(parseInt(matchId), {
+        type: 'match_completed',
+        matchId: parseInt(matchId),
+        winnerId,
+        matchDraw,
+        playerAScore: aWins,
+        playerBScore: bWins,
+        drawCount: match.draw_count,
+        totalRounds: match.total_rounds,
+        formatType: 'unlimited',
+        winsRequired: 0,
+      });
 
       res.json({
         matchId: parseInt(matchId),
@@ -606,17 +602,15 @@ function createMatchesRouter(pool, wss, matchConnections) {
         await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, winnerId, 0, 0);
 
         // Send match_completed via WebSocket
-        if (wss || matchConnections) {
-          broadcastToMatch(parseInt(matchId), {
-            type: 'match_completed',
-            matchId: parseInt(matchId),
-            winnerId,
-            reason: 'cancel',
-            message: 'Opponent cancelled the ranked match.',
-            formatType: match.format_type,
-            winsRequired: match.wins_required,
-          });
-        }
+        broadcastToMatch(parseInt(matchId), {
+          type: 'match_completed',
+          matchId: parseInt(matchId),
+          winnerId,
+          reason: 'cancel',
+          message: 'Opponent cancelled the ranked match.',
+          formatType: match.format_type,
+          winsRequired: match.wins_required,
+        });
 
         return res.json({
           matchId: parseInt(matchId),
@@ -640,18 +634,16 @@ function createMatchesRouter(pool, wss, matchConnections) {
       await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, true, null, 0, 0);
 
       // Send match_completed via WebSocket
-      if (wss || matchConnections) {
-        broadcastToMatch(parseInt(matchId), {
-          type: 'match_completed',
-          matchId: parseInt(matchId),
-          winnerId: null,
-          matchDraw: true,
-          reason: 'cancel',
-          message: 'Match cancelled.',
-          formatType: match.format_type,
-          winsRequired: match.wins_required,
-        });
-      }
+      broadcastToMatch(parseInt(matchId), {
+        type: 'match_completed',
+        matchId: parseInt(matchId),
+        winnerId: null,
+        matchDraw: true,
+        reason: 'cancel',
+        message: 'Match cancelled.',
+        formatType: match.format_type,
+        winsRequired: match.wins_required,
+      });
 
       res.json({
         matchId: parseInt(matchId),
@@ -714,17 +706,15 @@ function createMatchesRouter(pool, wss, matchConnections) {
       await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, quitRatingA, quitRatingB);
 
       // Send match_completed via WebSocket
-      if (wss || matchConnections) {
-        broadcastToMatch(parseInt(matchId), {
-          type: 'match_completed',
-          matchId: parseInt(matchId),
-          winnerId,
-          reason: 'quit',
-          message: 'Opponent quit the match.',
-          formatType: match.format_type,
-          winsRequired: match.wins_required,
-        });
-      }
+      broadcastToMatch(parseInt(matchId), {
+        type: 'match_completed',
+        matchId: parseInt(matchId),
+        winnerId,
+        reason: 'quit',
+        message: 'Opponent quit the match.',
+        formatType: match.format_type,
+        winsRequired: match.wins_required,
+      });
 
       res.json({
         matchId: parseInt(matchId),
@@ -738,51 +728,29 @@ function createMatchesRouter(pool, wss, matchConnections) {
     }
   });
 
-  // ── POST /matches/:matchId/rematch/request ────────────────
+  // ── POST /matches/:matchId/rematch/request ─────────────────
   router.post('/:matchId/rematch/request', async (req, res) => {
     try {
-      const { playerId } = req.player;
-      const { matchId } = req.params;
+      const matchId = parseInt(req.params.matchId, 10);
+      const playerId = req.player.playerId;
 
-      const matchResult = await pool.query(
-        'SELECT * FROM match WHERE match_id = $1',
-        [matchId]
-      );
-      if (matchResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Match not found.' });
-      }
+      const matchResult = await pool.query('SELECT * FROM match WHERE match_id = $1', [matchId]);
+      if (matchResult.rows.length === 0) return res.status(404).json({ error: 'Match not found.' });
       const match = matchResult.rows[0];
 
-      if (!match.winner_id && !match.match_draw) {
-        return res.status(400).json({ error: 'Match is not finished yet.' });
-      }
-
-      const isPlayerA = match.player_a_id === playerId;
-      const isPlayerB = match.player_b_id === playerId;
-      if (!isPlayerA && !isPlayerB) {
+      if (match.player_a_id !== playerId && match.player_b_id !== playerId)
         return res.status(403).json({ error: 'You are not part of this match.' });
-      }
 
-      // Fetch requester name
-      const requesterResult = await pool.query(
-        'SELECT username FROM account WHERE player_id = $1',
-        [playerId]
-      );
+      const requesterResult = await pool.query('SELECT username FROM account WHERE player_id = $1', [playerId]);
       const requesterName = requesterResult.rows[0]?.username ?? 'Opponent';
 
-      // Persist BEFORE broadcast so pollers see committed state
+      // Reset stale state so the requester's poller never sees an old 'declined'/'accepted'
       await pool.query(
-        `UPDATE match SET rematch_status = $1, rematch_new_match_id = NULL
-         WHERE match_id = $2`,
-        ['pending', matchId]
-      );
+        'UPDATE match SET rematch_status = $1, rematch_new_match_id = NULL WHERE match_id = $2',
+        ['pending', matchId]);
 
-      // Broadcast rematch request to opponent via tracked connections
       broadcastToMatch(matchId, {
-        type: 'rematch_requested',
-        matchId,
-        requesterId: playerId,
-        requesterName,
+        type: 'rematch_requested', matchId, requesterId: playerId, requesterName,
       });
 
       res.json({ status: 'requested' });
@@ -792,35 +760,30 @@ function createMatchesRouter(pool, wss, matchConnections) {
     }
   });
 
-  // ── POST /matches/:matchId/rematch/accept ─────────────────
+  // ── POST /matches/:matchId/rematch/accept ──────────────────
   router.post('/:matchId/rematch/accept', async (req, res) => {
     try {
       const matchId = parseInt(req.params.matchId, 10);
-      const { playerId } = req.player;
+      const playerId = req.player.playerId;
 
-      const origRes = await pool.query(
-        'SELECT * FROM match WHERE match_id = $1', [matchId]);
-      if (origRes.rows.length === 0)
-        return res.status(404).json({ error: 'Match not found.' });
+      const origRes = await pool.query('SELECT * FROM match WHERE match_id = $1', [matchId]);
+      if (origRes.rows.length === 0) return res.status(404).json({ error: 'Match not found.' });
       const orig = origRes.rows[0];
 
       if (orig.player_a_id !== playerId && orig.player_b_id !== playerId)
         return res.status(403).json({ error: 'You are not part of this match.' });
 
-      // Idempotent: second accept (or retry) returns the existing new match
+      // Idempotent: retry/second accept returns the existing new match
       if (orig.rematch_status === 'accepted' && orig.rematch_new_match_id)
-        return res.json({ status: 'accepted',
-          newMatchId: orig.rematch_new_match_id,
+        return res.json({ status: 'accepted', newMatchId: orig.rematch_new_match_id,
           formatType: orig.format_type, winsRequired: orig.wins_required });
 
       const insertResult = await pool.query(
         `INSERT INTO match (mode, format_type, wins_required, player_a_id, player_b_id)
          VALUES ($1,$2,$3,$4,$5) RETURNING match_id`,
-        [orig.mode, orig.format_type, orig.wins_required,
-         orig.player_a_id, orig.player_b_id]);
+        [orig.mode, orig.format_type, orig.wins_required, orig.player_a_id, orig.player_b_id]);
       const newMatchId = insertResult.rows[0].match_id;
 
-      // Persist BEFORE broadcast so pollers see committed state
       await pool.query(
         'UPDATE match SET rematch_status = $1, rematch_new_match_id = $2 WHERE match_id = $3',
         ['accepted', newMatchId, matchId]);
@@ -830,66 +793,32 @@ function createMatchesRouter(pool, wss, matchConnections) {
         formatType: orig.format_type, winsRequired: orig.wins_required,
       });
 
-      return res.json({ status: 'accepted', newMatchId,
+      res.json({ status: 'accepted', newMatchId,
         formatType: orig.format_type, winsRequired: orig.wins_required });
     } catch (err) {
-      console.error('Rematch accept error:', err.message, err.stack);
-      return res.status(500).json({ error: 'Failed to accept rematch.' });
-    }
-  });
-
-  // ── GET /matches/:matchId/rematch-status ──────────────────
-  router.get('/:matchId/rematch-status', async (req, res) => {
-    try {
-      const { matchId } = req.params;
-      const result = await pool.query(
-        'SELECT rematch_status, rematch_new_match_id FROM match WHERE match_id = $1',
-        [matchId]
-      );
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Match not found.' });
-      }
-      res.json({
-        rematchStatus: result.rows[0].rematch_status,
-        newMatchId: result.rows[0].rematch_new_match_id,
-      });
-    } catch (err) {
-      console.error('Rematch status error:', err);
+      console.error('Rematch accept error:', err);
       res.status(500).json({ error: 'Internal server error.' });
     }
   });
 
-  // ── POST /matches/:matchId/rematch/decline ────────────────
+  // ── POST /matches/:matchId/rematch/decline ─────────────────
   router.post('/:matchId/rematch/decline', async (req, res) => {
     try {
-      const { playerId } = req.player;
-      const { matchId } = req.params;
+      const matchId = parseInt(req.params.matchId, 10);
+      const playerId = req.player.playerId;
 
-      const matchResult = await pool.query(
-        'SELECT * FROM match WHERE match_id = $1',
-        [matchId]
-      );
-      if (matchResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Match not found.' });
-      }
+      const matchResult = await pool.query('SELECT * FROM match WHERE match_id = $1', [matchId]);
+      if (matchResult.rows.length === 0) return res.status(404).json({ error: 'Match not found.' });
       const match = matchResult.rows[0];
 
-      const isPlayerA = match.player_a_id === playerId;
-      const isPlayerB = match.player_b_id === playerId;
-      if (!isPlayerA && !isPlayerB) {
+      if (match.player_a_id !== playerId && match.player_b_id !== playerId)
         return res.status(403).json({ error: 'You are not part of this match.' });
-      }
 
-      // Persist BEFORE broadcast
       await pool.query(
-        `UPDATE match SET rematch_status = $1, rematch_new_match_id = NULL WHERE match_id = $2`,
-        ['declined', matchId]
-      );
+        'UPDATE match SET rematch_status = $1, rematch_new_match_id = NULL WHERE match_id = $2',
+        ['declined', matchId]);
 
-      broadcastToMatch(matchId, {
-        type: 'rematch_declined',
-        matchId,
-      });
+      broadcastToMatch(matchId, { type: 'rematch_declined', matchId });
 
       res.json({ status: 'declined' });
     } catch (err) {
@@ -989,32 +918,30 @@ function createMatchesRouter(pool, wss, matchConnections) {
       }
 
       // Broadcast via WebSocket
-      if (wss || matchConnections) {
-        broadcastToMatch(matchId, {
-          type: 'round_result',
-          matchId,
-          roundNumber,
-          playerAMove: r.player_a_move,
-          playerBMove: r.player_b_move,
-          result,
-          playerAScore: aWins,
-          playerBScore: bWins,
-          drawCount: newDrawCount,
-          totalRounds: newTotalRounds,
-          matchFinished,
-          winnerId: matchWinner,
-          autoMove: true,
-        });
+      broadcastToMatch(matchId, {
+        type: 'round_result',
+        matchId,
+        roundNumber,
+        playerAMove: r.player_a_move,
+        playerBMove: r.player_b_move,
+        result,
+        playerAScore: aWins,
+        playerBScore: bWins,
+        drawCount: newDrawCount,
+        totalRounds: newTotalRounds,
+        matchFinished,
+        winnerId: matchWinner,
+        autoMove: true,
+      });
 
-        if (!matchFinished) {
-          setTimeout(() => {
-            broadcastToMatch(matchId, {
-              type: 'round_start',
-              matchId,
-              serverTime: Date.now(),
-            });
-          }, 1500);
-        }
+      if (!matchFinished) {
+        setTimeout(() => {
+          broadcastToMatch(matchId, {
+            type: 'round_start',
+            matchId,
+            serverTime: Date.now(),
+          });
+        }, 1500);
       }
     } catch (err) {
       console.error('Round timeout error:', err);
