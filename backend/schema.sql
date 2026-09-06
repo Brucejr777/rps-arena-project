@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS match (
   draw_count INTEGER NOT NULL DEFAULT 0,
   rating_change_a INTEGER,
   rating_change_b INTEGER,
+  rematch_status VARCHAR(20) DEFAULT NULL,
+  rematch_new_match_id INTEGER DEFAULT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 

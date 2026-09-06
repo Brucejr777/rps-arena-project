@@ -138,6 +138,18 @@ wss.on('connection', (ws, req) => {
   }
   matchConnections.get(matchId).set(playerId, ws);
 
+  // Keep connection alive with ping/pong heartbeat
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
+  const pingInterval = setInterval(() => {
+    if (ws.isAlive === false) {
+      clearInterval(pingInterval);
+      return ws.terminate();
+    }
+    ws.isAlive = false;
+    ws.ping();
+  }, 20000);
+
   console.log(`Player ${playerId} connected to match ${matchId} (ws id=${ws._ulid || 'n/a'})`);
 
   // Cancel any disconnect timer (reconnected successfully)
@@ -171,6 +183,7 @@ wss.on('connection', (ws, req) => {
   }
 
   ws.on('close', () => {
+    clearInterval(pingInterval);
     console.log(`Player ${playerId} disconnected from match ${matchId}`);
 
     // Remove from tracking — but ONLY if this ws is still the active one.

@@ -767,6 +767,13 @@ function createMatchesRouter(pool, wss, matchConnections) {
         }
       }
 
+      // Persist rematch status so client can poll if WS is dead
+      await pool.query(
+        `UPDATE match SET rematch_status = 'requested', rematch_new_match_id = NULL
+         WHERE match_id = $1`,
+        [matchId]
+      );
+
       res.json({ status: 'requested' });
     } catch (err) {
       console.error('Rematch request error:', err);
@@ -815,6 +822,13 @@ function createMatchesRouter(pool, wss, matchConnections) {
         });
       }
 
+      // Persist rematch status
+      await pool.query(
+        `UPDATE match SET rematch_status = 'accepted', rematch_new_match_id = $1
+         WHERE match_id = $2`,
+        [newMatchId, matchId]
+      );
+
       res.json({
         status: 'accepted',
         newMatchId,
@@ -823,6 +837,27 @@ function createMatchesRouter(pool, wss, matchConnections) {
       });
     } catch (err) {
       console.error('Rematch accept error:', err);
+      res.status(500).json({ error: 'Internal server error.' });
+    }
+  });
+
+  // ── GET /matches/:matchId/rematch-status ──────────────────
+  router.get('/:matchId/rematch-status', async (req, res) => {
+    try {
+      const { matchId } = req.params;
+      const result = await pool.query(
+        'SELECT rematch_status, rematch_new_match_id FROM match WHERE match_id = $1',
+        [matchId]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Match not found.' });
+      }
+      res.json({
+        rematchStatus: result.rows[0].rematch_status,
+        newMatchId: result.rows[0].rematch_new_match_id,
+      });
+    } catch (err) {
+      console.error('Rematch status error:', err);
       res.status(500).json({ error: 'Internal server error.' });
     }
   });
@@ -862,6 +897,12 @@ function createMatchesRouter(pool, wss, matchConnections) {
           }
         }
       }
+
+      // Persist rematch status
+      await pool.query(
+        `UPDATE match SET rematch_status = 'declined' WHERE match_id = $1`,
+        [matchId]
+      );
 
       res.json({ status: 'declined' });
     } catch (err) {

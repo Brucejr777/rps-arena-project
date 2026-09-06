@@ -94,6 +94,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   int? _rematchRequesterId;
   String? _rematchRequesterName;
   Timer? _rematchCountdown;
+  Timer? _rematchPollTimer;
 
   bool get _isPlayerA => widget.isPlayerA;
 
@@ -124,6 +125,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _timer?.cancel();
     _waitingTimeout?.cancel();
     _rematchCountdown?.cancel();
+    _rematchPollTimer?.cancel();
     _socketSub?.cancel();
     _socketClient.dispose();
     super.dispose();
@@ -199,6 +201,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         _handleRematchAccepted(event.data);
         break;
       case SocketEventType.rematchDeclined:
+        _rematchPollTimer?.cancel();
         setState(() {
           _isRematchWaiting = false;
           _showRematchRequest = false;
@@ -552,21 +555,33 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   // ── Rematch methods ──────────────────────────────────────
   void _requestRematch() async {
-    setState(() => _isRematchWaiting = true);
+    setState(() {
+      _isRematchWaiting = true;
+      _showRematchRequest = false;
+    });
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/request');
+      _startRematchPolling();
     } catch (e) {
+      debugPrint('[Rematch] Request failed: $e');
       if (!mounted) return;
       setState(() => _isRematchWaiting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Rematch request failed: $e')),
+        );
+      }
     }
   }
 
   void _acceptRematch() async {
     _rematchCountdown?.cancel();
+    _rematchPollTimer?.cancel();
     try {
       final res = await _authClient.post('/matches/${widget.matchId}/rematch/accept');
+      debugPrint('[Rematch] Accept response: ${res.data}');
       final data = res.data as Map<String, dynamic>;
-      final newMatchId = data['newMatchId'] as int;
+      final newMatchId = (data['newMatchId'] as num).toInt();
       if (!mounted) return;
       GoRouter.of(context).go('/online-gameplay', extra: {
         'matchId': newMatchId,
@@ -574,28 +589,38 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         'opponentName': widget.opponentName,
       });
     } catch (e) {
+      debugPrint('[Rematch] Accept failed: $e');
       if (!mounted) return;
       setState(() {
         _showRematchRequest = false;
         _isRematchWaiting = false;
       });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Accept failed: $e')),
+        );
+      }
     }
   }
 
   void _declineRematch() async {
     _rematchCountdown?.cancel();
+    _rematchPollTimer?.cancel();
     setState(() {
       _showRematchRequest = false;
       _isRematchWaiting = false;
     });
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/decline');
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Rematch] Decline failed: $e');
+    }
   }
 
   void _handleRematchAccepted(Map<String, dynamic> data) {
     _rematchCountdown?.cancel();
-    final newMatchId = data['newMatchId'] as int;
+    _rematchPollTimer?.cancel();
+    final newMatchId = (data['newMatchId'] as num).toInt();
     if (!mounted) return;
     GoRouter.of(context).go('/online-gameplay', extra: {
       'matchId': newMatchId,
@@ -616,6 +641,45 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       if (remaining <= 0) {
         timer.cancel();
         _declineRematch();
+      }
+    });
+  }
+
+  void _startRematchPolling() {
+    _rematchPollTimer?.cancel();
+    _rematchPollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (!mounted || !_isRematchWaiting) {
+        _rematchPollTimer?.cancel();
+        return;
+      }
+      try {
+        final res = await _authClient.get(
+          '/matches/${widget.matchId}/rematch-status',
+        );
+        final data = res.data as Map<String, dynamic>;
+        final status = data['rematchStatus'] as String?;
+        final newMatchId = (data['newMatchId'] as num?)?.toInt();
+
+        if (status == 'accepted' && newMatchId != null) {
+          _rematchPollTimer?.cancel();
+          if (!mounted) return;
+          GoRouter.of(context).go('/online-gameplay', extra: {
+            'matchId': newMatchId,
+            'playerName': widget.playerName,
+            'opponentName': widget.opponentName,
+          });
+        } else if (status == 'declined') {
+          _rematchPollTimer?.cancel();
+          if (!mounted) return;
+          setState(() => _isRematchWaiting = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Opponent declined the rematch.')),
+            );
+          }
+        }
+      } catch (_) {
+        // Polling failed, will retry on next tick
       }
     });
   }
@@ -1029,6 +1093,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 child: OutlinedButton(
                   onPressed: () {
                     _rematchCountdown?.cancel();
+                    _rematchPollTimer?.cancel();
                     setState(() => _isRematchWaiting = false);
                   },
                   style: OutlinedButton.styleFrom(
