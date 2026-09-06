@@ -391,6 +391,8 @@ function createMatchesRouter(pool, wss, matchConnections) {
         totalRounds: match.total_rounds,
         winnerId: match.winner_id,
         matchDraw: match.match_draw,
+        rematchStatus: match.rematch_status ?? 'none',
+        newMatchId: match.rematch_new_match_id ?? null,
         rounds: roundsResult.rows.map((r) => ({
           roundNumber: r.round_number,
           playerAMove: r.player_a_move,
@@ -761,8 +763,6 @@ function createMatchesRouter(pool, wss, matchConnections) {
         return res.status(403).json({ error: 'You are not part of this match.' });
       }
 
-      const opponentId = isPlayerA ? match.player_b_id : match.player_a_id;
-
       // Fetch requester name
       const requesterResult = await pool.query(
         'SELECT username FROM account WHERE player_id = $1',
@@ -770,28 +770,20 @@ function createMatchesRouter(pool, wss, matchConnections) {
       );
       const requesterName = requesterResult.rows[0]?.username ?? 'Opponent';
 
-      // Broadcast rematch request to opponent
-      if (wss || matchConnections) {
-        const conns = matchConnections.get(parseInt(matchId));
-        if (conns) {
-          const oppWs = conns.get(opponentId);
-          if (oppWs && oppWs.readyState === 1) {
-            oppWs.send(JSON.stringify({
-              type: 'rematch_requested',
-              matchId: parseInt(matchId),
-              requesterId: playerId,
-              requesterName,
-            }));
-          }
-        }
-      }
-
-      // Persist rematch status so client can poll if WS is dead
+      // Persist BEFORE broadcast so pollers see committed state
       await pool.query(
-        `UPDATE match SET rematch_status = 'requested', rematch_new_match_id = NULL
-         WHERE match_id = $1`,
-        [matchId]
+        `UPDATE match SET rematch_status = $1, rematch_new_match_id = NULL
+         WHERE match_id = $2`,
+        ['pending', matchId]
       );
+
+      // Broadcast rematch request to opponent via tracked connections
+      broadcastToMatch(matchId, {
+        type: 'rematch_requested',
+        matchId,
+        requesterId: playerId,
+        requesterName,
+      });
 
       res.json({ status: 'requested' });
     } catch (err) {
@@ -803,70 +795,46 @@ function createMatchesRouter(pool, wss, matchConnections) {
   // ── POST /matches/:matchId/rematch/accept ─────────────────
   router.post('/:matchId/rematch/accept', async (req, res) => {
     try {
+      const matchId = parseInt(req.params.matchId, 10);
       const { playerId } = req.player;
-      const { matchId } = req.params;
 
-      const matchResult = await pool.query(
-        'SELECT * FROM match WHERE match_id = $1',
-        [matchId]
-      );
-      if (matchResult.rows.length === 0) {
+      const origRes = await pool.query(
+        'SELECT * FROM match WHERE match_id = $1', [matchId]);
+      if (origRes.rows.length === 0)
         return res.status(404).json({ error: 'Match not found.' });
-      }
-      const orig = matchResult.rows[0];
+      const orig = origRes.rows[0];
 
-      const isPlayerA = orig.player_a_id === playerId;
-      const isPlayerB = orig.player_b_id === playerId;
-      if (!isPlayerA && !isPlayerB) {
+      if (orig.player_a_id !== playerId && orig.player_b_id !== playerId)
         return res.status(403).json({ error: 'You are not part of this match.' });
-      }
 
-      // Idempotent: if a rematch was already accepted, return the existing new match
-      if (orig.rematch_status === 'accepted' && orig.rematch_new_match_id) {
-        return res.json({
-          status: 'accepted',
+      // Idempotent: second accept (or retry) returns the existing new match
+      if (orig.rematch_status === 'accepted' && orig.rematch_new_match_id)
+        return res.json({ status: 'accepted',
           newMatchId: orig.rematch_new_match_id,
-          formatType: orig.format_type,
-          winsRequired: orig.wins_required,
-        });
-      }
+          formatType: orig.format_type, winsRequired: orig.wins_required });
 
-      // Create new match with same config
       const insertResult = await pool.query(
         `INSERT INTO match (mode, format_type, wins_required, player_a_id, player_b_id)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING match_id`,
-        [orig.mode, orig.format_type, orig.wins_required, orig.player_a_id, orig.player_b_id]
-      );
+         VALUES ($1,$2,$3,$4,$5) RETURNING match_id`,
+        [orig.mode, orig.format_type, orig.wins_required,
+         orig.player_a_id, orig.player_b_id]);
       const newMatchId = insertResult.rows[0].match_id;
 
-      // Broadcast to both players
-      if (wss || matchConnections) {
-        broadcastToMatch(parseInt(matchId), {
-          type: 'rematch_accepted',
-          matchId: parseInt(matchId),
-          newMatchId,
-          formatType: orig.format_type,
-          winsRequired: orig.wins_required,
-        });
-      }
-
-      // Persist rematch status
+      // Persist BEFORE broadcast so pollers see committed state
       await pool.query(
-        `UPDATE match SET rematch_status = 'accepted', rematch_new_match_id = $1
-         WHERE match_id = $2`,
-        [newMatchId, matchId]
-      );
+        'UPDATE match SET rematch_status = $1, rematch_new_match_id = $2 WHERE match_id = $3',
+        ['accepted', newMatchId, matchId]);
 
-      res.json({
-        status: 'accepted',
-        newMatchId,
-        formatType: orig.format_type,
-        winsRequired: orig.wins_required,
+      broadcastToMatch(matchId, {
+        type: 'rematch_accepted', matchId, newMatchId,
+        formatType: orig.format_type, winsRequired: orig.wins_required,
       });
+
+      return res.json({ status: 'accepted', newMatchId,
+        formatType: orig.format_type, winsRequired: orig.wins_required });
     } catch (err) {
-      console.error('Rematch accept error:', err);
-      res.status(500).json({ error: 'Internal server error.' });
+      console.error('Rematch accept error:', err.message, err.stack);
+      return res.status(500).json({ error: 'Failed to accept rematch.' });
     }
   });
 
@@ -912,26 +880,16 @@ function createMatchesRouter(pool, wss, matchConnections) {
         return res.status(403).json({ error: 'You are not part of this match.' });
       }
 
-      const opponentId = isPlayerA ? match.player_b_id : match.player_a_id;
-
-      if (wss || matchConnections) {
-        const conns = matchConnections.get(parseInt(matchId));
-        if (conns) {
-          const oppWs = conns.get(opponentId);
-          if (oppWs && oppWs.readyState === 1) {
-            oppWs.send(JSON.stringify({
-              type: 'rematch_declined',
-              matchId: parseInt(matchId),
-            }));
-          }
-        }
-      }
-
-      // Persist rematch status
+      // Persist BEFORE broadcast
       await pool.query(
-        `UPDATE match SET rematch_status = 'declined' WHERE match_id = $1`,
-        [matchId]
+        `UPDATE match SET rematch_status = $1, rematch_new_match_id = NULL WHERE match_id = $2`,
+        ['declined', matchId]
       );
+
+      broadcastToMatch(matchId, {
+        type: 'rematch_declined',
+        matchId,
+      });
 
       res.json({ status: 'declined' });
     } catch (err) {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -574,11 +575,13 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     } catch (e) {
       debugPrint('[Rematch] Request failed: $e');
       if (!mounted) return;
+      final serverMsg = (e is DioException && e.response?.data is Map<String, dynamic>)
+          ? (e.response!.data as Map<String, dynamic>)['error'] as String?
+          : null;
       setState(() => _isRematchWaiting = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Rematch request failed: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(serverMsg ?? 'Rematch request failed. Please try again.')));
       }
     }
   }
@@ -588,10 +591,14 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _rematchPollTimer?.cancel();
     try {
       final res = await _authClient.post('/matches/${widget.matchId}/rematch/accept');
-      debugPrint('[Rematch] Accept response: ${res.data}');
       final data = res.data as Map<String, dynamic>;
-      final newMatchId = (data['newMatchId'] as num).toInt();
+      final newMatchId = (data['newMatchId'] as num?)?.toInt();
       if (!mounted) return;
+      if (newMatchId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Rematch accepted, but no match id returned.')));
+        return;
+      }
       GoRouter.of(context).go('/online-gameplay', extra: {
         'matchId': newMatchId,
         'playerName': widget.playerName,
@@ -600,14 +607,16 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     } catch (e) {
       debugPrint('[Rematch] Accept failed: $e');
       if (!mounted) return;
+      final serverMsg = (e is DioException && e.response?.data is Map<String, dynamic>)
+          ? (e.response!.data as Map<String, dynamic>)['error'] as String?
+          : null;
       setState(() {
         _showRematchRequest = false;
         _isRematchWaiting = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Accept failed: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(serverMsg ?? 'Failed to accept rematch. Please try again.')));
       }
     }
   }
@@ -629,8 +638,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _handleRematchAccepted(Map<String, dynamic> data) {
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
-    final newMatchId = (data['newMatchId'] as num).toInt();
-    if (!mounted) return;
+    final newMatchId = (data['newMatchId'] as num?)?.toInt();
+    if (!mounted || newMatchId == null) return;
     GoRouter.of(context).go('/online-gameplay', extra: {
       'matchId': newMatchId,
       'playerName': widget.playerName,
