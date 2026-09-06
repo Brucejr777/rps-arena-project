@@ -218,10 +218,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 player1WinRate: p1Rate,
                 player2WinRate: p2Rate,
                 onPlayAgain: () {
-                  if (mounted) GoRouter.of(context).go('/online-match');
+                  GoRouter.of(context).go('/quick-match-setup');
                 },
                 onMainMenu: () {
-                  if (mounted) GoRouter.of(context).go('/main');
+                  GoRouter.of(context).go('/main');
                 },
               ),
             ),
@@ -235,10 +235,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 playerScore: _playerScore,
                 opponentScore: _opponentScore,
                 onPlayAgain: () {
-                  if (mounted) GoRouter.of(context).go('/online-match');
+                  GoRouter.of(context).go('/quick-match-setup');
                 },
                 onMainMenu: () {
-                  if (mounted) GoRouter.of(context).go('/main');
+                  GoRouter.of(context).go('/main');
                 },
               ),
             ),
@@ -274,10 +274,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           player1WinRate: p1Rate,
           player2WinRate: p2Rate,
           onPlayAgain: () {
-            if (mounted) GoRouter.of(context).go('/online-match');
+            GoRouter.of(context).go('/quick-match-setup');
           },
           onMainMenu: () {
-            if (mounted) GoRouter.of(context).go('/main');
+            GoRouter.of(context).go('/main');
           },
         ),
       ),
@@ -634,8 +634,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                         _serverPlayerAMove != null &&
                         _serverPlayerBMove != null)
                       RevealAnimation(
-                        playerAMove: _serverPlayerAMove!,
-                        playerBMove: _serverPlayerBMove!,
+                        playerAMove: _isPlayerA ? _serverPlayerAMove! : _serverPlayerBMove!,
+                        playerBMove: _isPlayerA ? _serverPlayerBMove! : _serverPlayerAMove!,
                         handAssetFor: themeController.handAssetFor,
                         playerALabel: widget.playerName,
                         playerBLabel: widget.opponentName,
