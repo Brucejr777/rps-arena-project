@@ -1,3 +1,4 @@
+console.log('[boot] matches routes v3');
 /**
  * Match routes (T97).
  *
