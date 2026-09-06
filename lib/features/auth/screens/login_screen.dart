@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -74,9 +75,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
 
       String errorMsg;
-      if (e.toString().contains('401') || e.toString().contains('Invalid')) {
+      final msg = e.toString();
+      if (e is DioException) {
+        if (e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.sendTimeout ||
+            e.type == DioExceptionType.receiveTimeout) {
+          errorMsg = 'Server is waking up. Please try again in 30 seconds.';
+        } else if (e.type == DioExceptionType.connectionError) {
+          errorMsg = 'Cannot reach server. Check your internet connection.';
+        } else if (e.response?.statusCode == 401 ||
+            msg.contains('Invalid')) {
+          errorMsg = 'Invalid username or password.';
+        } else if (e.response?.statusCode == 400) {
+          errorMsg = 'Please check your input.';
+        } else {
+          errorMsg = 'Server error (${e.response?.statusCode ?? "unknown"}). Please try again.';
+        }
+      } else if (msg.contains('401') || msg.contains('Invalid')) {
         errorMsg = 'Invalid username or password.';
-      } else if (e.toString().contains('400')) {
+      } else if (msg.contains('400')) {
         errorMsg = 'Please check your input.';
       } else {
         errorMsg = 'Connection failed. Please try again.';

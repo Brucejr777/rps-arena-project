@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
@@ -84,9 +85,24 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       if (!mounted) return;
 
       String errorMsg;
-      if (e.toString().contains('409') || e.toString().contains('already taken')) {
+      final msg = e.toString();
+      if (e is DioException) {
+        if (e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.sendTimeout ||
+            e.type == DioExceptionType.receiveTimeout) {
+          errorMsg = 'Server is waking up. Please try again in 30 seconds.';
+        } else if (e.type == DioExceptionType.connectionError) {
+          errorMsg = 'Cannot reach server. Check your internet connection.';
+        } else if (e.response?.statusCode == 409 || msg.contains('already taken')) {
+          errorMsg = 'Username already taken.';
+        } else if (e.response?.statusCode == 400) {
+          errorMsg = 'Please check your input (username 3–16 chars, password 8–64 chars).';
+        } else {
+          errorMsg = 'Server error (${e.response?.statusCode ?? "unknown"}). Please try again.';
+        }
+      } else if (msg.contains('409') || msg.contains('already taken')) {
         errorMsg = 'Username already taken.';
-      } else if (e.toString().contains('400')) {
+      } else if (msg.contains('400')) {
         errorMsg = 'Please check your input (username 3–16 chars, password 8–64 chars).';
       } else {
         errorMsg = 'Connection failed. Please try again.';

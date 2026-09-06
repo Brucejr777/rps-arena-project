@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -14,6 +15,7 @@ const { createLeaderboardRouter } = require('./routes/leaderboard');
 const { disconnectManager } = require('./lib/disconnect_manager');
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
