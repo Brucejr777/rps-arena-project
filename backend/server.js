@@ -93,6 +93,27 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
       END $$;
     `);
     console.log('Migration: round unique constraint ready');
+
+    // Ensure rematch columns exist on match table
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns WHERE table_name = 'match' AND column_name = 'rematch_status'
+        ) THEN
+          ALTER TABLE match ADD COLUMN rematch_status VARCHAR(20) DEFAULT NULL;
+        END IF;
+      END $$;
+    `);
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns WHERE table_name = 'match' AND column_name = 'rematch_new_match_id'
+        ) THEN
+          ALTER TABLE match ADD COLUMN rematch_new_match_id INTEGER DEFAULT NULL;
+        END IF;
+      END $$;
+    `);
+    console.log('Migration: match rematch columns checked');
   } catch (err) {
     console.error('Migration warning:', err.message);
   }
