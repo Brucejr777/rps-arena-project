@@ -58,8 +58,8 @@ class AuthClient {
             Dio(BaseOptions(
               baseUrl: baseUrl,
               headers: {'Content-Type': 'application/json'},
-              connectTimeout: const Duration(seconds: 10),
-              receiveTimeout: const Duration(seconds: 10),
+              connectTimeout: const Duration(seconds: 30),
+              receiveTimeout: const Duration(seconds: 30),
             ));
 
   // ── Token storage ────────────────────────────────────────────────
