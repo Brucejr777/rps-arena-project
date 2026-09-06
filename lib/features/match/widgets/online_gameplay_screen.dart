@@ -587,6 +587,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   void _acceptRematch() async {
+    debugPrint('[Rematch] Accept tapped');
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
     try {
@@ -599,7 +600,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           const SnackBar(content: Text('Rematch accepted, but no match id returned.')));
         return;
       }
-      GoRouter.of(context).go('/online-gameplay', extra: {
+      debugPrint('[Rematch] navigating to new match $newMatchId');
+      GoRouter.of(context).pushReplacement('/online-gameplay', extra: {
         'matchId': newMatchId,
         'playerName': widget.playerName,
         'opponentName': widget.opponentName,
@@ -636,11 +638,13 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   void _handleRematchAccepted(Map<String, dynamic> data) {
+    debugPrint('[Rematch] socket rematch_accepted: $data');
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
     final newMatchId = (data['newMatchId'] as num?)?.toInt();
     if (!mounted || newMatchId == null) return;
-    GoRouter.of(context).go('/online-gameplay', extra: {
+    debugPrint('[Rematch] navigating to new match $newMatchId');
+    GoRouter.of(context).pushReplacement('/online-gameplay', extra: {
       'matchId': newMatchId,
       'playerName': widget.playerName,
       'opponentName': widget.opponentName,
@@ -681,7 +685,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         if (status == 'accepted' && newMatchId != null) {
           _rematchPollTimer?.cancel();
           if (!mounted) return;
-          GoRouter.of(context).go('/online-gameplay', extra: {
+          debugPrint('[Rematch] poll accepted → navigating to new match $newMatchId');
+          GoRouter.of(context).pushReplacement('/online-gameplay', extra: {
             'matchId': newMatchId,
             'playerName': widget.playerName,
             'opponentName': widget.opponentName,
