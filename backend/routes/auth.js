@@ -108,8 +108,8 @@ function createAuthRouter(pool) {
         refreshToken,
       });
     } catch (err) {
-      console.error('Register error:', err);
-      res.status(500).json({ error: 'Internal server error.' });
+      console.error('Register error:', err.message, err.stack);
+      res.status(500).json({ error: 'Internal server error.', detail: err.message });
     }
   });
 
@@ -155,8 +155,8 @@ function createAuthRouter(pool) {
         refreshToken,
       });
     } catch (err) {
-      console.error('Login error:', err);
-      res.status(500).json({ error: 'Internal server error.' });
+      console.error('Login error:', err.message, err.stack);
+      res.status(500).json({ error: 'Internal server error.', detail: err.message });
     }
   });
 
