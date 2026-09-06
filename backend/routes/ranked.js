@@ -63,6 +63,7 @@ function createRankedRouter(pool) {
         rating,
         formatType: RANKED_FORMAT,
         winsRequired: RANKED_WINS_REQUIRED,
+        mode: 'ranked',
       });
 
       if (match) {

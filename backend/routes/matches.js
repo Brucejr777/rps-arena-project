@@ -26,6 +26,30 @@ function createMatchesRouter(pool, wss) {
   const router = Router();
   router.use(requireAuth);
 
+  // ── GET /matches/history (T118) ──────────────────────────────
+  router.get('/history', async (req, res) => {
+    try {
+      const { playerId } = req.player;
+
+      const result = await pool.query(
+        `SELECT mh.history_id, mh.match_id, mh.opponent_id, a.username AS opponent_name,
+                mh.mode, mh.format_type, mh.result, mh.rating_before, mh.rating_after,
+                mh.rank_change, mh.created_at
+         FROM match_history mh
+         JOIN account a ON mh.opponent_id = a.player_id
+         WHERE mh.player_id = $1
+         ORDER BY mh.created_at DESC
+         LIMIT 50`,
+        [playerId]
+      );
+
+      res.json({ history: result.rows, count: result.rows.length });
+    } catch (err) {
+      console.error('Match history error:', err);
+      res.status(500).json({ error: 'Internal server error.' });
+    }
+  });
+
   // ── POST /matches/:matchId/move ──────────────────────────────
   router.post('/:matchId/move', async (req, res) => {
     try {
@@ -488,30 +512,6 @@ function createMatchesRouter(pool, wss) {
     }
   });
 
-  // ── GET /matches/history (T118) ──────────────────────────────
-  router.get('/history', async (req, res) => {
-    try {
-      const { playerId } = req.player;
-
-      const result = await pool.query(
-        `SELECT mh.history_id, mh.match_id, mh.opponent_id, a.username AS opponent_name,
-                mh.mode, mh.format_type, mh.result, mh.rating_before, mh.rating_after,
-                mh.rank_change, mh.created_at
-         FROM match_history mh
-         JOIN account a ON mh.opponent_id = a.player_id
-         WHERE mh.player_id = $1
-         ORDER BY mh.created_at DESC
-         LIMIT 50`,
-        [playerId]
-      );
-
-      res.json({ history: result.rows, count: result.rows.length });
-    } catch (err) {
-      console.error('Match history error:', err);
-      res.status(500).json({ error: 'Internal server error.' });
-    }
-  });
-
   // ── POST /matches/:matchId/cancel (T107) ──────────────────
   router.post('/:matchId/cancel', async (req, res) => {
     try {
@@ -782,6 +782,20 @@ function createMatchesRouter(pool, wss) {
       }
       if (matchFinished) {
         await pool.query('UPDATE match SET winner_id = $1 WHERE match_id = $2', [matchWinner, matchId]);
+
+        // T111/T117/T118: Apply rating changes for ranked matches (records history)
+        if (match.mode === 'ranked') {
+          const { ratingChangeA, ratingChangeB } = calculateRatingChanges(false, matchWinner, match.player_a_id, match.player_b_id);
+          await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, ratingChangeA, ratingChangeB);
+        } else if (match.mode !== 'local') {
+          // T118: Record match history for non-ranked online matches
+          await recordMatchHistory(pool, matchId, match.player_a_id, match.player_b_id, false, matchWinner, parseInt(aWins), parseInt(bWins));
+        }
+
+        // T117: Update statistics for ALL online match modes
+        if (match.mode !== 'local') {
+          await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, matchWinner, parseInt(aWins), parseInt(bWins));
+        }
       }
 
       // Broadcast via WebSocket

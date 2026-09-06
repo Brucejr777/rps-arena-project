@@ -50,9 +50,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
 
   void _startTimer() {
     _timer?.cancel();
-    _timeRemaining = 30;
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_isPaused) return;
       setState(() {
         _timeRemaining--;
         if (_timeRemaining <= 0) {
@@ -139,6 +137,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
           _showOpponentMove = false;
           _lastResult = null;
           _isRoundActive = true;
+          _timeRemaining = 30;
         });
         _startTimer();
       }
@@ -168,6 +167,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
       _showOpponentMove = false;
       _isRoundActive = true;
       _isGameComplete = false;
+      _timeRemaining = 30;
     });
     _startTimer();
   }
@@ -209,7 +209,10 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
                       const Spacer(),
                       IconButton(
                         icon: const Icon(Icons.pause, color: Colors.white),
-                        onPressed: () => setState(() => _isPaused = true),
+                        onPressed: () {
+                          _timer?.cancel();
+                          setState(() => _isPaused = true);
+                        },
                       ),
                     ],
                   ),
@@ -351,7 +354,10 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
           ),
           if (_isPaused)
             PauseExitOverlay(
-              onResume: () => setState(() => _isPaused = false),
+              onResume: () {
+                setState(() => _isPaused = false);
+                _startTimer();
+              },
               onExit: () => context.go('/local-setup'),
             ),
         ],

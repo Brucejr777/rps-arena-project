@@ -31,16 +31,6 @@ class _AppearanceScreenState extends ConsumerState<AppearanceScreen> {
     setState(() => _settings = settings);
   }
 
-  Future<void> _save() async {
-    if (_settings == null) return;
-    await _repository.save(_settings!);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Settings saved')),
-      );
-    }
-  }
-
   Color _colorFor(String name) {
     switch (name) {
       case 'Blue':
@@ -195,28 +185,6 @@ class _AppearanceScreenState extends ConsumerState<AppearanceScreen> {
                           }).toList(),
                         ),
                       ],
-                    ),
-                  ),
-                ),
-              if (settings != null)
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _save,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.defaultAccent,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: const Text(
-                      'SAVE',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                      ),
                     ),
                   ),
                 ),

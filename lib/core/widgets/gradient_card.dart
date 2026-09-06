@@ -25,7 +25,10 @@ class GradientCard extends StatelessWidget {
     this.icon,
     this.width,
     this.height,
-  });
+  }) : assert(
+          !showIconContainer || icon != null,
+          'icon must be provided when showIconContainer is true',
+        );
 
   @override
   Widget build(BuildContext context) {

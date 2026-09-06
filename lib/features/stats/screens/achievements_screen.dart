@@ -50,7 +50,7 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> {
     final matchesPlayed = stats.matchesPlayed;
     final wins = stats.matchesWon;
     final roundsWon = stats.roundsWon;
-    final streak = 0; // TODO: track streak in LocalStats
+    final streak = stats.currentStreak;
 
     _achievements = [
       Achievement(

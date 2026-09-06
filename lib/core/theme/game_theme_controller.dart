@@ -3,14 +3,12 @@ import '../../features/match/widgets/theme_background.dart';
 import '../../features/settings/settings_repository.dart';
 import '../services/audio_service.dart';
 
-
 class GameThemeController extends Notifier<GameTheme> {
   @override
   GameTheme build() {
     _loadInitial();
     return GameTheme.normal;
   }
-  
 
   Future<void> _loadInitial() async {
     final settings = await SettingsRepository().load();

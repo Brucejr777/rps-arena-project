@@ -21,16 +21,16 @@ const {
 
 // Refresh token helpers — persisted in database to survive server restarts.
 async function storeRefreshToken(pool, token, playerId) {
-  await pool.query('INSERT INTO refresh_token (token, player_id) VALUES ($1, $2)', [token, playerId]);
+  await pool.query('INSERT INTO refresh_token (token_hash, player_id) VALUES ($1, $2)', [token, playerId]);
 }
 
 async function hasRefreshToken(pool, token) {
-  const result = await pool.query('SELECT 1 FROM refresh_token WHERE token = $1', [token]);
+  const result = await pool.query('SELECT 1 FROM refresh_token WHERE token_hash = $1', [token]);
   return result.rows.length > 0;
 }
 
 async function deleteRefreshToken(pool, token) {
-  await pool.query('DELETE FROM refresh_token WHERE token = $1', [token]);
+  await pool.query('DELETE FROM refresh_token WHERE token_hash = $1', [token]);
 }
 
 async function deleteRefreshTokensForPlayer(pool, playerId) {

@@ -31,6 +31,8 @@ class MatchSocketClient {
 
   bool _isConnected = false;
   Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
+  static const int _maxReconnectAttempts = 10;
   int _matchId = 0;
   int? _playerId;
   final String _baseUrl;
@@ -48,8 +50,16 @@ class MatchSocketClient {
   /// The server requires `playerId` as a query parameter and closes
   /// connections without it, so it must be provided.
   void connect(int matchId, {int? playerId}) {
+    // Guard: disconnect existing connection before reconnecting.
+    if (_channel != null) {
+      _reconnectTimer?.cancel();
+      _channel?.sink.close();
+      _channel = null;
+      _isConnected = false;
+    }
     _matchId = matchId;
     if (playerId != null) _playerId = playerId;
+    _reconnectAttempts = 0;
     _doConnect();
   }
 
@@ -60,6 +70,14 @@ class MatchSocketClient {
 
     try {
       _channel = WebSocketChannel.connect(Uri.parse(url));
+
+      // Mark connected as soon as the handshake succeeds.
+      _channel!.ready.then((_) {
+        _isConnected = true;
+        _reconnectAttempts = 0;
+      }).catchError((_) {
+        // Connection failed — reconnect handler will take over.
+      });
 
       _channel!.stream.listen(
         (data) {
@@ -118,7 +136,24 @@ class MatchSocketClient {
 
   void _attemptReconnect() {
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 3), () {
+    if (_reconnectAttempts >= _maxReconnectAttempts) return;
+
+    // Exponential backoff: 1s, 2s, 4s, 8s … capped at 30s.
+    final delaySeconds = [
+      1,
+      2,
+      4,
+      8,
+      15,
+      30,
+      30,
+      30,
+      30,
+      30,
+    ][_reconnectAttempts.clamp(0, 9)];
+    _reconnectAttempts++;
+
+    _reconnectTimer = Timer(Duration(seconds: delaySeconds), () {
       if (!_isConnected) {
         _doConnect();
       }

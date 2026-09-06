@@ -114,9 +114,12 @@ class _PrivateRoomCreateScreenState
         _pollTimer?.cancel();
         final matchId = status['matchId'];
         if (matchId != null) {
+          // Guest name may not have been captured if the room went active
+          // before the hasGuest poll fired — fall back to status response.
+          final name = _guestName ?? guestName;
           context.go('/online-gameplay', extra: {
             'matchId': matchId,
-            'opponentName': _guestName,
+            'opponentName': name,
           });
         }
         return;

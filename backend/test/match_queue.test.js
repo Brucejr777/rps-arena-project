@@ -3,16 +3,20 @@ const assert = require('node:assert/strict');
 const { MatchQueue, queueKey } = require('../lib/match_queue');
 
 describe('queueKey', () => {
-  it('returns format for standard formats', () => {
-    assert.strictEqual(queueKey('bestOf3'), 'bestOf3:0');
+  it('returns mode:format:winsRequired for standard formats', () => {
+    assert.strictEqual(queueKey('casual', 'bestOf3'), 'casual:bestOf3:0');
   });
 
   it('includes winsRequired for custom', () => {
-    assert.strictEqual(queueKey('custom', 5), 'custom:5');
+    assert.strictEqual(queueKey('casual', 'custom', 5), 'casual:custom:5');
   });
 
   it('uses 0 for unlimited', () => {
-    assert.strictEqual(queueKey('unlimited'), 'unlimited:0');
+    assert.strictEqual(queueKey('casual', 'unlimited'), 'casual:unlimited:0');
+  });
+
+  it('separates ranked from casual', () => {
+    assert.notStrictEqual(queueKey('ranked', 'bestOf3'), queueKey('casual', 'bestOf3'));
   });
 });
 

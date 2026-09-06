@@ -5,15 +5,18 @@ import 'core/router.dart';
 import 'core/services/audio_service.dart';
 import 'core/services/vibration_service.dart';
 
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setPreferredOrientations([
+  await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  await AudioService.instance.refreshVolumesFromSettings();
-  await VibrationService.instance.refreshFromSettings();
+  try {
+    await AudioService.instance.refreshVolumesFromSettings();
+    await VibrationService.instance.refreshFromSettings();
+  } catch (_) {
+    // Services will use defaults if settings read fails.
+  }
   runApp(const ProviderScope(child: MyApp()));
 }
 

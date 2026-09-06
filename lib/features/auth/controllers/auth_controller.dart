@@ -61,7 +61,8 @@ class AuthController extends Notifier<AuthState> {
           rating: player?['rating'] as int?,
         );
       } catch (_) {
-        state = const AuthState(isSignedIn: true);
+        // Profile fetch failed — treat as signed out (token may be invalid).
+        state = const AuthState();
       }
     }
   }

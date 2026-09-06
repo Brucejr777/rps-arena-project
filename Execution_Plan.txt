@@ -125,7 +125,7 @@ flutter pub add go_router
 flutter pub add dio
 flutter pub add web_socket_channel
 flutter pub add shared_preferences
-flutter pub add futter_secure_storage
+flutter pub add flutter_secure_storage
 flutter pub add audioplayers
 flutter pub add vibration
 flutter pub add intl

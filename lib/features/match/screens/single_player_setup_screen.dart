@@ -161,23 +161,6 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
                           );
                         },
                       ),
-                      const SizedBox(height: 16),
-                      ModeCard(
-                        iconAsset: 'assets/icons/icon_gamepad.svg',
-                        title: 'GAME MODE',
-                        subtitle: 'Standard / Unlimited',
-                        subtitle2: 'Pick your rules',
-                        badgeLabel: 'NEW',
-                        badgeColor: AppColors.svgPink,
-                        iconColor: AppColors.svgPink,
-                        onTap: () {
-                          showModalBottomSheet(
-                            context: context,
-                            backgroundColor: Colors.transparent,
-                            builder: (context) => _buildGameModePicker(),
-                          );
-                        },
-                      ),
                       const SizedBox(height: 24),
                     ],
                   ),
@@ -287,85 +270,4 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
     );
   }
 
-  Widget _buildGameModePicker() {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'GAME MODE',
-            style: TextStyle(
-              color: AppColors.primaryText,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
-            ),
-          ),
-          const SizedBox(height: 20),
-          _buildGameModeOption('STANDARD', 'Best of N rounds'),
-          const SizedBox(height: 8),
-          _buildGameModeOption('UNLIMITED', 'Play until you quit'),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGameModeOption(String label, String description) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.pop(context);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: AppColors.primaryText,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    description,
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, color: Colors.white38, size: 20),
-          ],
-        ),
-      ),
-    );
-  }
 }

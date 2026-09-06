@@ -11,7 +11,8 @@ class DisconnectionManager {
   constructor() {
     // Map<matchId, Map<playerId, { timer, isPlayerA }>>
     this.disconnections = new Map();
-    this.onTimeoutCallback = null;
+    // Map<matchId, Function> — per-match timeout callback
+    this._onTimeoutCallbacks = new Map();
     this.RECONNECT_WINDOW_MS = 30_000; // 30 seconds
   }
 
@@ -45,7 +46,7 @@ class DisconnectionManager {
     matchDisconnections.set(playerId, { timer, isPlayerA, startTime: Date.now() });
 
     if (onTimeout) {
-      this.onTimeoutCallback = onTimeout;
+      this._onTimeoutCallbacks.set(matchId, onTimeout);
     }
   }
 
@@ -53,8 +54,10 @@ class DisconnectionManager {
    * Handle disconnect timeout — assign loss to disconnected player.
    */
   onDisconnectTimeout(matchId, playerId, isPlayerA) {
-    if (this.onTimeoutCallback) {
-      this.onTimeoutCallback({ matchId, playerId, isPlayerA });
+    const callback = this._onTimeoutCallbacks.get(matchId);
+    if (callback) {
+      this._onTimeoutCallbacks.delete(matchId);
+      callback({ matchId, playerId, isPlayerA });
     }
   }
 
@@ -111,6 +114,7 @@ class DisconnectionManager {
       }
     }
     this.disconnections.clear();
+    this._onTimeoutCallbacks.clear();
   }
 }
 

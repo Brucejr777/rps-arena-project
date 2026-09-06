@@ -178,13 +178,13 @@ class ModeCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  // Chevron-right (always shown when enabled, per wireframe)
-                  if (enabled) ...[
+                  // Chevron-right (shown when enabled and no trailing widget)
+                  if (enabled && trailing == null) ...[
                     if (badgeLabel == null) const SizedBox(width: 4),
                     const Icon(Icons.chevron_right,
                         color: Color(0xFF94A3B8), size: 20),
                   ],
-                  // Trailing widget (overrides chevron when present)
+                  // Trailing widget (replaces chevron when present)
                   if (trailing != null) trailing!,
                 ],
               ),

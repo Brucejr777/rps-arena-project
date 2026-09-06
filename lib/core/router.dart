@@ -36,6 +36,7 @@ import '../features/stats/screens/view_statistics_screen.dart';
 import '../features/stats/screens/achievements_screen.dart';
 import '../features/settings/screens/gameplay_settings_screen.dart';
 import '../features/settings/screens/audio_settings_screen.dart';
+import 'network/api_client.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
@@ -169,11 +170,17 @@ final GoRouter appRouter = GoRouter(
       path: '/opponent-found',
       builder: (context, state) {
         final args = state.extra as Map<String, dynamic>? ?? {};
+        final matchId = args['matchId'] as int?;
         return OpponentFoundScreen(
           opponentName: args['opponentName'] as String? ?? 'Unknown',
           opponentRating: args['opponentRating'] as int? ?? 1000,
-          onReady: () {
-            // TODO T89: call POST /quick-match/ready
+          onReady: () async {
+            if (matchId == null) return;
+            try {
+              await AuthClient().post('/quick-match/ready', data: {'matchId': matchId});
+            } catch (_) {
+              // Ready-up failed; countdown will expire and route to /main.
+            }
           },
           onCancel: () => context.go('/main'),
         );
@@ -185,7 +192,8 @@ final GoRouter appRouter = GoRouter(
         onQuickMatch: () => context.push('/quick-match-setup'),
         onPrivateRoom: () => context.push('/private-room-setup'),
         onRankedMatch: () {
-          // TODO T96: navigate to Ranked Match setup
+          // TODO T96: no ranked-match setup screen exists yet.
+          // Backend route POST /ranked/join is ready (backend/routes/ranked.js).
         },
         onSettings: () => context.push('/settings'),
       ),
@@ -261,4 +269,12 @@ final GoRouter appRouter = GoRouter(
       },
     ),
   ],
+  errorBuilder: (context, state) => Scaffold(
+    body: Center(
+      child: Text(
+        'Page not found: ${state.uri}',
+        style: const TextStyle(color: Colors.white70, fontSize: 16),
+      ),
+    ),
+  ),
 );

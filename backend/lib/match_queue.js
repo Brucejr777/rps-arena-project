@@ -13,8 +13,8 @@
  * @param {string} formatType  e.g. 'bestOf3', 'custom', 'unlimited'
  * @param {number} winsRequired  only relevant for 'custom'
  */
-function queueKey(formatType, winsRequired = 0) {
-  return `${formatType}:${winsRequired}`;
+function queueKey(mode, formatType, winsRequired = 0) {
+  return `${mode}:${formatType}:${winsRequired}`;
 }
 
 class MatchQueue {
@@ -27,8 +27,8 @@ class MatchQueue {
    * Add a player to the queue.
    * Returns the matched opponent if one was waiting, or null.
    */
-  join({ playerId, username, rating, formatType, winsRequired = 0 }) {
-    const key = queueKey(formatType, winsRequired);
+  join({ playerId, username, rating, formatType, winsRequired = 0, mode = 'casual' }) {
+    const key = queueKey(mode, formatType, winsRequired);
 
     if (!this._queues.has(key)) {
       this._queues.set(key, []);
@@ -80,8 +80,8 @@ class MatchQueue {
   /**
    * Get the queue length for a given format.
    */
-  getQueueLength(formatType, winsRequired = 0) {
-    const key = queueKey(formatType, winsRequired);
+  getQueueLength(formatType, winsRequired = 0, mode = 'casual') {
+    const key = queueKey(mode, formatType, winsRequired);
     const queue = this._queues.get(key);
     return queue ? queue.length : 0;
   }

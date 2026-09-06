@@ -23,7 +23,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS refresh_token (
-        token TEXT PRIMARY KEY,
+        token_hash TEXT PRIMARY KEY,
         player_id INTEGER NOT NULL REFERENCES account(player_id),
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       )

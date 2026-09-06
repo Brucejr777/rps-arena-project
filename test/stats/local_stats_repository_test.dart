@@ -76,4 +76,46 @@ void main() {
   expect(stats.rockSelections, 0);
   expect(stats.winRate, 0.0);
 });
+
+  test('currentStreak increments on wins and resets on loss', () async {
+    final repo = LocalStatsRepository();
+    await repo.recordStandardMatchResult(playerWon: true);
+    await repo.recordStandardMatchResult(playerWon: true);
+    await repo.recordStandardMatchResult(playerWon: true);
+
+    var stats = await repo.load();
+    expect(stats.currentStreak, 3);
+    expect(stats.longestStreak, 3);
+
+    await repo.recordStandardMatchResult(playerWon: false);
+    stats = await repo.load();
+    expect(stats.currentStreak, 0);
+    expect(stats.longestStreak, 3);
+  });
+
+  test('longestStreak tracks the maximum streak', () async {
+    final repo = LocalStatsRepository();
+    for (var i = 0; i < 5; i++) {
+      await repo.recordStandardMatchResult(playerWon: true);
+    }
+    await repo.recordStandardMatchResult(playerWon: false);
+    for (var i = 0; i < 3; i++) {
+      await repo.recordStandardMatchResult(playerWon: true);
+    }
+
+    final stats = await repo.load();
+    expect(stats.currentStreak, 3);
+    expect(stats.longestStreak, 5);
+  });
+
+  test('draw resets currentStreak', () async {
+    final repo = LocalStatsRepository();
+    await repo.recordStandardMatchResult(playerWon: true);
+    await repo.recordStandardMatchResult(playerWon: true);
+    await repo.recordUnlimitedMatchResult(winner: null);
+
+    final stats = await repo.load();
+    expect(stats.currentStreak, 0);
+    expect(stats.longestStreak, 2);
+  });
 }

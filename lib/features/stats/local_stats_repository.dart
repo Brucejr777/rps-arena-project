@@ -56,6 +56,8 @@ class LocalStats {
   final int rockSelections;
   final int paperSelections;
   final int scissorsSelections;
+  final int currentStreak;
+  final int longestStreak;
 
   const LocalStats({
     this.matchesPlayed = 0,
@@ -67,6 +69,8 @@ class LocalStats {
     this.rockSelections = 0,
     this.paperSelections = 0,
     this.scissorsSelections = 0,
+    this.currentStreak = 0,
+    this.longestStreak = 0,
   });
 
   /// Win Rate = Matches Won × 100 ÷ Matches Played.
@@ -86,6 +90,8 @@ class LocalStats {
     int? rockSelections,
     int? paperSelections,
     int? scissorsSelections,
+    int? currentStreak,
+    int? longestStreak,
   }) {
     return LocalStats(
       matchesPlayed: matchesPlayed ?? this.matchesPlayed,
@@ -97,6 +103,8 @@ class LocalStats {
       rockSelections: rockSelections ?? this.rockSelections,
       paperSelections: paperSelections ?? this.paperSelections,
       scissorsSelections: scissorsSelections ?? this.scissorsSelections,
+      currentStreak: currentStreak ?? this.currentStreak,
+      longestStreak: longestStreak ?? this.longestStreak,
     );
   }
 
@@ -110,6 +118,8 @@ class LocalStats {
         'rockSelections': rockSelections,
         'paperSelections': paperSelections,
         'scissorsSelections': scissorsSelections,
+        'currentStreak': currentStreak,
+        'longestStreak': longestStreak,
       };
 
   factory LocalStats.fromJson(Map<String, dynamic> json) => LocalStats(
@@ -122,6 +132,8 @@ class LocalStats {
         rockSelections: json['rockSelections'] ?? 0,
         paperSelections: json['paperSelections'] ?? 0,
         scissorsSelections: json['scissorsSelections'] ?? 0,
+        currentStreak: json['currentStreak'] ?? 0,
+        longestStreak: json['longestStreak'] ?? 0,
       );
 }
 
@@ -177,14 +189,18 @@ class LocalStatsRepository {
   /// Records a completed standard match (has a clear winner/loser).
   Future<void> recordStandardMatchResult({required bool playerWon}) async {
     final current = await load();
+    final newStreak = playerWon ? current.currentStreak + 1 : 0;
     final updated = playerWon
         ? current.copyWith(
             matchesPlayed: current.matchesPlayed + 1,
             matchesWon: current.matchesWon + 1,
+            currentStreak: newStreak,
+            longestStreak: newStreak > current.longestStreak ? newStreak : current.longestStreak,
           )
         : current.copyWith(
             matchesPlayed: current.matchesPlayed + 1,
             matchesLost: current.matchesLost + 1,
+            currentStreak: 0,
           );
     await _save(updated);
   }
@@ -195,17 +211,23 @@ class LocalStatsRepository {
     final current = await load();
     LocalStats updated;
     if (winner == null) {
-      // Unlimited Match Draw increments matches played only.
-      updated = current.copyWith(matchesPlayed: current.matchesPlayed + 1);
+      updated = current.copyWith(
+        matchesPlayed: current.matchesPlayed + 1,
+        currentStreak: 0,
+      );
     } else if (winner == 'A') {
+      final newStreak = current.currentStreak + 1;
       updated = current.copyWith(
         matchesPlayed: current.matchesPlayed + 1,
         matchesWon: current.matchesWon + 1,
+        currentStreak: newStreak,
+        longestStreak: newStreak > current.longestStreak ? newStreak : current.longestStreak,
       );
     } else {
       updated = current.copyWith(
         matchesPlayed: current.matchesPlayed + 1,
         matchesLost: current.matchesLost + 1,
+        currentStreak: 0,
       );
     }
     await _save(updated);

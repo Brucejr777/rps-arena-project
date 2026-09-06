@@ -203,7 +203,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 totalRounds: total,
                 player1WinRate: p1Rate,
                 player2WinRate: p2Rate,
-                onPlayAgain: () => Navigator.of(context).maybePop(),
+                onPlayAgain: () {
+                  if (mounted) GoRouter.of(context).go('/online-match');
+                },
                 onMainMenu: () {
                   if (mounted) GoRouter.of(context).go('/main');
                 },
@@ -218,7 +220,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 playerWon: playerWon,
                 playerScore: _playerScore,
                 opponentScore: _opponentScore,
-                onPlayAgain: () => Navigator.of(context).maybePop(),
+                onPlayAgain: () {
+                  if (mounted) GoRouter.of(context).go('/online-match');
+                },
                 onMainMenu: () {
                   if (mounted) GoRouter.of(context).go('/main');
                 },
@@ -255,7 +259,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           totalRounds: total,
           player1WinRate: p1Rate,
           player2WinRate: p2Rate,
-          onPlayAgain: () => Navigator.of(context).maybePop(),
+          onPlayAgain: () {
+            if (mounted) GoRouter.of(context).go('/online-match');
+          },
           onMainMenu: () {
             if (mounted) GoRouter.of(context).go('/main');
           },
@@ -278,10 +284,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_selectionTimer <= 1) {
         timer.cancel();
-        // Auto-select if player hasn't chosen
         if (_selectedMove == null) {
           final moves = ['rock', 'paper', 'scissors'];
-          _selectMove(moves[DateTime.now().millisecond % 3]);
+          setState(() => _selectedMove = moves[DateTime.now().millisecond % 3]);
         }
         _submitMove();
       } else {
@@ -293,7 +298,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _selectMove(String move) {
     if (_selectedMove != null || _isWaitingForServer) return;
     setState(() => _selectedMove = move);
-    _submitMove();
   }
 
   Future<void> _submitMove() async {

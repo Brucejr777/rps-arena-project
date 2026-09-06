@@ -13,13 +13,21 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  Timer? _timer;
+
   @override
   void initState() {
     super.initState();
     // Offline modes load without internet — no network dependency here,
     // so this always proceeds after the fixed duration regardless of
     // connectivity.
-    Future.delayed(const Duration(seconds: 2), widget.onFinished);
+    _timer = Timer(const Duration(seconds: 2), widget.onFinished);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   @override

@@ -77,6 +77,9 @@ class AuthClient {
     await _storage.delete(refreshTokenKey);
   }
 
+  /// Mutex for token refresh — prevents concurrent refresh calls.
+  Future<void>? _refreshMutex;
+
   /// Build Options with the current access token attached.
   Future<Options> _authOptions() async {
     final token = await accessToken;
@@ -135,7 +138,23 @@ class AuthClient {
   }
 
   /// Exchange the current refresh token for a new token pair.
+  /// Uses a mutex so concurrent 401s share a single refresh call.
   Future<void> refreshTokens() async {
+    // If a refresh is already in progress, wait for it.
+    if (_refreshMutex != null) {
+      await _refreshMutex;
+      return;
+    }
+
+    _refreshMutex = _doRefresh();
+    try {
+      await _refreshMutex;
+    } finally {
+      _refreshMutex = null;
+    }
+  }
+
+  Future<void> _doRefresh() async {
     final rt = await refreshToken;
     if (rt == null) throw Exception('No refresh token stored.');
 
@@ -190,9 +209,22 @@ class AuthClient {
     }
   }
 
-  /// Make an authenticated DELETE request.
+  /// Make an authenticated DELETE request, with automatic 401 retry.
   Future<Response> delete(String path) async {
     final opts = await _authOptions();
-    return await dio.delete(path, options: opts);
+    try {
+      return await dio.delete(path, options: opts);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        try {
+          await refreshTokens();
+          final retryOpts = await _authOptions();
+          return await dio.delete(path, options: retryOpts);
+        } catch (_) {
+          rethrow;
+        }
+      }
+      rethrow;
+    }
   }
 }

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/hero_title.dart';
 import '../../../core/widgets/input_card.dart';
 import '../controllers/auth_controller.dart';
-import 'register_screen.dart';
 
 /// Login screen (T81).
 ///
@@ -218,13 +218,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(width: 8),
                   GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const RegisterScreen(),
-                        ),
-                      );
-                    },
+                    onTap: () => context.push('/register'),
                     child: const Text(
                       'CREATE ACCOUNT',
                       style: TextStyle(

@@ -62,7 +62,7 @@ CREATE TABLE leaderboard (
 );
 
 CREATE TABLE refresh_token (
-  token TEXT PRIMARY KEY,
+  token_hash TEXT PRIMARY KEY,
   player_id INTEGER NOT NULL REFERENCES account(player_id),
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -80,3 +80,13 @@ CREATE TABLE match_history (
   rank_change VARCHAR(20),
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX idx_account_username ON account(username);
+CREATE INDEX idx_player_statistic_player ON player_statistic(player_id);
+CREATE INDEX idx_match_player_a ON match(player_a_id);
+CREATE INDEX idx_match_player_b ON match(player_b_id);
+CREATE INDEX idx_round_match ON round(match_id);
+CREATE INDEX idx_room_status ON room(status);
+CREATE INDEX idx_leaderboard_rating ON leaderboard(rating DESC);
+CREATE INDEX idx_match_history_player ON match_history(player_id);
+CREATE INDEX idx_refresh_token_player ON refresh_token(player_id);

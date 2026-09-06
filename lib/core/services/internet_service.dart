@@ -9,6 +9,10 @@ class InternetService {
   bool _isConnected = true;
   Timer? _checkTimer;
   final StreamController<bool> _controller = StreamController<bool>.broadcast();
+  final Dio _dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 3),
+    receiveTimeout: const Duration(seconds: 3),
+  ));
 
   /// Current connectivity status
   bool get isConnected => _isConnected;
@@ -27,9 +31,7 @@ class InternetService {
   /// Check internet connectivity by attempting an HTTP request
   Future<void> _checkConnectivity() async {
     try {
-      final dio = Dio();
-      final response = await dio.get('https://www.google.com')
-          .timeout(const Duration(seconds: 3));
+      final response = await _dio.get('https://www.google.com');
       final connected = response.statusCode == 200;
 
       if (connected != _isConnected) {
@@ -53,6 +55,7 @@ class InternetService {
   /// Dispose resources
   void dispose() {
     _checkTimer?.cancel();
+    _dio.close();
     _controller.close();
   }
 }
@@ -62,10 +65,4 @@ final internetServiceProvider = Provider<InternetService>((ref) {
   final service = InternetService();
   ref.onDispose(() => service.dispose());
   return service;
-});
-
-/// Riverpod provider for current connectivity status
-final isConnectedProvider = StreamProvider<bool>((ref) {
-  final service = ref.watch(internetServiceProvider);
-  return service.onConnectivityChanged;
 });
