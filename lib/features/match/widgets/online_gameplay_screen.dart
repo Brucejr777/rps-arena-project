@@ -82,6 +82,11 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   // POST response, once from the WebSocket broadcast).
   bool _roundResolved = false;
 
+  // Set after a round's reveal ends — the client waits for the server's
+  // round_start event before beginning the next round.  This prevents
+  // Player 2 (who gets the HTTP response first) from racing ahead.
+  bool _waitingForNextRound = false;
+
   bool get _isPlayerA => widget.isPlayerA;
 
   bool get _isUnlimited => widget.formatType == 'unlimited';
@@ -145,6 +150,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       case SocketEventType.roundStart:
         if (!_opponentConnected) {
           _opponentConnected = true;
+        }
+        if (_waitingForNextRound) {
+          _waitingForNextRound = false;
+          _waitingTimeout?.cancel();
           _startRound();
         }
         break;
@@ -234,7 +243,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           final p2Rate = total == 0 ? 0.0 : (_opponentScore / total) * 100;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
-              builder: (_) => UnlimitedResultScreen(
+              builder: (routeCtx) => UnlimitedResultScreen(
                 player1Wins: _playerScore,
                 player2Wins: _opponentScore,
                 draws: _drawCount,
@@ -242,10 +251,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 player1WinRate: p1Rate,
                 player2WinRate: p2Rate,
                 onPlayAgain: () {
-                  GoRouter.of(context).go('/quick-match-setup');
+                  GoRouter.of(routeCtx).go('/quick-match-setup');
                 },
                 onMainMenu: () {
-                  GoRouter.of(context).go('/main');
+                  GoRouter.of(routeCtx).go('/main');
                 },
               ),
             ),
@@ -254,15 +263,15 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           final playerWon = _playerScore > _opponentScore;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
-              builder: (_) => StandardResultScreen(
+              builder: (routeCtx) => StandardResultScreen(
                 playerWon: playerWon,
                 playerScore: _playerScore,
                 opponentScore: _opponentScore,
                 onPlayAgain: () {
-                  GoRouter.of(context).go('/quick-match-setup');
+                  GoRouter.of(routeCtx).go('/quick-match-setup');
                 },
                 onMainMenu: () {
-                  GoRouter.of(context).go('/main');
+                  GoRouter.of(routeCtx).go('/main');
                 },
               ),
             ),
@@ -270,7 +279,17 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         }
       } else {
         _currentRound = totalRounds + 1;
-        _startRound();
+        // Wait for the server's round_start event so both players begin
+        // the next round together.  Safety timeout: if round_start doesn't
+        // arrive within 3s (e.g. WS hiccup), start anyway.
+        _waitingForNextRound = true;
+        _waitingTimeout?.cancel();
+        _waitingTimeout = Timer(const Duration(seconds: 3), () {
+          if (mounted && _waitingForNextRound) {
+            _waitingForNextRound = false;
+            _startRound();
+          }
+        });
       }
     });
   }
@@ -290,7 +309,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     final p2Rate = total == 0 ? 0.0 : (_opponentScore / total) * 100;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => UnlimitedResultScreen(
+        builder: (routeCtx) => UnlimitedResultScreen(
           player1Wins: _playerScore,
           player2Wins: _opponentScore,
           draws: _drawCount,
@@ -298,10 +317,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           player1WinRate: p1Rate,
           player2WinRate: p2Rate,
           onPlayAgain: () {
-            GoRouter.of(context).go('/quick-match-setup');
+            GoRouter.of(routeCtx).go('/quick-match-setup');
           },
           onMainMenu: () {
-            GoRouter.of(context).go('/main');
+            GoRouter.of(routeCtx).go('/main');
           },
         ),
       ),
@@ -316,6 +335,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _selectionTimer = 10;
       _isWaitingForServer = false;
       _roundResolved = false;
+      _waitingForNextRound = false;
     });
 
     _timer?.cancel();
@@ -372,7 +392,13 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         return;
       }
       // Otherwise the result will arrive via WebSocket.
-      // The 3-second safety-net timer above will poll if WS fails.
+      // Poll after 500ms as a faster fallback (stale-round guard prevents
+      // double-handling if WS delivers first).
+      _waitingTimeout?.cancel();
+      _waitingTimeout = Timer(const Duration(milliseconds: 500), () {
+        if (!mounted || !_isWaitingForServer) return;
+        _pollRoundState();
+      });
     } catch (e) {
       _waitingTimeout?.cancel();
       if (!mounted) return;
@@ -649,6 +675,15 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
+                            if (_waitingForNextRound && !_isWaitingForServer)
+                              const Text(
+                                'NEXT ROUND...',
+                                style: TextStyle(
+                                  color: AppColors.defaultAccent,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                           ],
                         ),
                         _playerScoreCard(widget.opponentName, _opponentScore),
@@ -694,7 +729,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                           move: 'rock',
                           iconAsset: 'assets/icons/icon_rock.svg',
                           isSelected: _selectedMove == 'rock',
-                          isDisabled: _selectedMove != null || _isWaitingForServer,
+                          isDisabled: _selectedMove != null || _isWaitingForServer || _waitingForNextRound,
                           onSelected: () => _selectMove('rock'),
                           frameColor: const Color(0xFFF97316),
                         ),
@@ -702,7 +737,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                           move: 'paper',
                           iconAsset: 'assets/icons/icon_paper.svg',
                           isSelected: _selectedMove == 'paper',
-                          isDisabled: _selectedMove != null || _isWaitingForServer,
+                          isDisabled: _selectedMove != null || _isWaitingForServer || _waitingForNextRound,
                           onSelected: () => _selectMove('paper'),
                           frameColor: const Color(0xFF06B6D4),
                         ),
@@ -710,7 +745,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                           move: 'scissors',
                           iconAsset: 'assets/icons/icon_scissors.svg',
                           isSelected: _selectedMove == 'scissors',
-                          isDisabled: _selectedMove != null || _isWaitingForServer,
+                          isDisabled: _selectedMove != null || _isWaitingForServer || _waitingForNextRound,
                           onSelected: () => _selectMove('scissors'),
                           frameColor: const Color(0xFFEC4899),
                         ),

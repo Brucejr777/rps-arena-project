@@ -312,6 +312,16 @@ function createMatchesRouter(pool, wss, matchConnections) {
             winsRequired: match.wins_required,
           };
           broadcastToMatch(parseInt(matchId), completedPayload);
+        } else {
+          // Send round_start after 1.5s so both players begin the next
+          // round together (1s reveal + 0.5s grace for WS delivery).
+          setTimeout(() => {
+            broadcastToMatch(parseInt(matchId), {
+              type: 'round_start',
+              matchId: parseInt(matchId),
+              serverTime: Date.now(),
+            });
+          }, 1500);
         }
       }
 
