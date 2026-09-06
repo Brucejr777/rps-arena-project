@@ -32,14 +32,24 @@ function createMatchesRouter(pool, wss, matchConnections) {
     if (matchConnections) {
       const conns = matchConnections.get(matchId);
       if (conns) {
-        for (const [, client] of conns) {
-          if (client.readyState === 1) client.send(msg);
+        console.log(`broadcastToMatch: matchId=${matchId}, conns=${conns.size}, type=${payload.type}`);
+        let sent = 0;
+        for (const [pid, client] of conns) {
+          if (client.readyState === 1) {
+            client.send(msg);
+            sent++;
+          } else {
+            console.log(`broadcastToMatch: player ${pid} readyState=${client.readyState} (not OPEN)`);
+          }
         }
+        console.log(`broadcastToMatch: sent to ${sent}/${conns.size} clients`);
         return;
       }
+      console.log(`broadcastToMatch: no conns entry for matchId=${matchId}`);
     }
     // Fallback: broadcast to all clients (filtering happens client-side)
     if (wss) {
+      console.log(`broadcastToMatch: fallback to wss.clients, total=${wss.clients.size}`);
       wss.clients.forEach((c) => { if (c.readyState === 1) c.send(msg); });
     }
   }

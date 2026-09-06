@@ -138,6 +138,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     final eventMatchId = event.data['matchId'];
     if (eventMatchId != null && '$eventMatchId' != '${widget.matchId}') return;
 
+    print('[OnlineGameplay] WS event: type=${event.type}, matchId=$eventMatchId, '
+        'data=${event.data}');
+
     switch (event.type) {
       case SocketEventType.roundStart:
         if (!_opponentConnected) {
@@ -172,7 +175,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   void _handleRoundResult(Map<String, dynamic> data) {
-    if (_roundResolved) return;
+    if (_roundResolved) {
+      print('[OnlineGameplay] _handleRoundResult: IGNORED (round already resolved)');
+      return;
+    }
     _roundResolved = true;
     _waitingTimeout?.cancel();
 
@@ -183,6 +189,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     final drawCount = _asInt(data['drawCount']);
     final totalRounds = _asInt(data['totalRounds']);
     final matchFinished = data['matchFinished'] as bool? ?? false;
+
+    print('[OnlineGameplay] _handleRoundResult: isPlayerA=$_isPlayerA, '
+        'serverScores=${playerAScore}-${playerBScore}, '
+        'myScore=${_isPlayerA ? playerAScore : playerBScore}, '
+        'oppScore=${_isPlayerA ? playerBScore : playerAScore}, '
+        'round=$totalRounds, finished=$matchFinished');
 
     setState(() {
       _isWaitingForServer = false;
@@ -317,6 +329,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   Future<void> _submitMove() async {
     if (_selectedMove == null || _isWaitingForServer) return;
 
+    print('[OnlineGameplay] _submitMove: move=$_selectedMove, round=$_currentRound');
     setState(() => _isWaitingForServer = true);
     _timer?.cancel();
 
@@ -339,6 +352,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       // leave the screen stuck on WAITING (the duplicate broadcast is
       // ignored via _roundResolved).
       final data = res.data;
+      print('[OnlineGameplay] _submitMove HTTP response: $data');
       if (data is Map<String, dynamic> && data['type'] == 'round_result') {
         _waitingTimeout?.cancel();
         if (!mounted) return;
@@ -346,6 +360,11 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         return;
       }
       // Otherwise the result will arrive via WebSocket.
+      // Start polling immediately so we catch the result as soon as the
+      // server resolves the round (WS delivery can be delayed on Render).
+      _pollRetries = 0;
+      _waitingTimeout?.cancel();
+      _pollRoundState();
     } catch (e) {
       _waitingTimeout?.cancel();
       if (!mounted) return;
@@ -364,6 +383,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   Future<void> _pollRoundState() async {
     _pollRetries++;
+    print('[OnlineGameplay] _pollRoundState: retry=$_pollRetries/$_maxPollRetries, round=$_currentRound');
     try {
       final res = await _authClient.get('/matches/${widget.matchId}/state');
       final data = res.data;
