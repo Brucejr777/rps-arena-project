@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
 
 /// Opponent found screen (T90).
 ///
 /// Shows after a Quick Match pairing. Displays opponent info, a READY button,
-/// and a 15-second countdown. If either player fails to confirm, the match
+/// and a 20-second countdown. If either player fails to confirm, the match
 /// is cancelled.
 class OpponentFoundScreen extends StatefulWidget {
+  final int matchId;
   final String opponentName;
   final int opponentRating;
   final VoidCallback onReady;
@@ -15,6 +18,7 @@ class OpponentFoundScreen extends StatefulWidget {
 
   const OpponentFoundScreen({
     super.key,
+    required this.matchId,
     required this.opponentName,
     required this.opponentRating,
     required this.onReady,
@@ -26,20 +30,26 @@ class OpponentFoundScreen extends StatefulWidget {
 }
 
 class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
-  static const int _countdownDuration = 15;
+  static const int _countdownDuration = 20;
   int _secondsRemaining = _countdownDuration;
   bool _isReady = false;
+  bool _readyFailed = false;
   Timer? _timer;
+  Timer? _pollTimer;
+  late final AuthClient _authClient;
 
   @override
   void initState() {
     super.initState();
+    _authClient = AuthClient();
     _startCountdown();
+    _startPolling();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _pollTimer?.cancel();
     super.dispose();
   }
 
@@ -54,10 +64,71 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
     });
   }
 
-  void _onReadyPressed() {
+  void _startPolling() {
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      if (!mounted) return;
+      try {
+        final res = await _authClient.get('/quick-match/status');
+        if (!mounted) return;
+        final data = res.data as Map<String, dynamic>;
+        final status = data['status'] as String?;
+
+        if (status == 'idle') {
+          // Match was cancelled (ready-up timeout or opponent left)
+          _timer?.cancel();
+          _pollTimer?.cancel();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Match cancelled — opponent did not confirm.')),
+            );
+            widget.onCancel();
+          }
+        }
+      } catch (_) {
+        // Polling failed — will retry
+      }
+    });
+  }
+
+  Future<void> _onReadyPressed() async {
     _timer?.cancel();
-    setState(() => _isReady = true);
-    widget.onReady();
+    setState(() { _isReady = true; _readyFailed = false; });
+
+    try {
+      final res = await _authClient.post(
+        '/quick-match/ready',
+        data: {'matchId': widget.matchId},
+      );
+      if (!mounted) return;
+      final data = res.data as Map<String, dynamic>;
+      final status = data['status'] as String?;
+
+      if (status == 'confirmed') {
+        // Both players ready — navigate to match
+        _pollTimer?.cancel();
+        widget.onReady();
+      }
+      // If 'waiting', keep showing "WAITING FOR OPPONENT..."
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final msg = (e.response?.data is Map<String, dynamic>)
+          ? (e.response!.data as Map<String, dynamic>)['error'] as String?
+          : null;
+      setState(() { _isReady = false; _readyFailed = true; });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(msg ?? 'Ready-up failed. Please try again.'),
+        ));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() { _isReady = false; _readyFailed = true; });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ready-up failed. Please try again.')),
+        );
+      }
+    }
   }
 
   String get _countdownText {

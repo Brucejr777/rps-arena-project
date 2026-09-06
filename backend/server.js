@@ -13,6 +13,8 @@ const { createRankedRouter } = require('./routes/ranked');
 const { createMatchesRouter } = require('./routes/matches');
 const { createLeaderboardRouter } = require('./routes/leaderboard');
 const { disconnectManager } = require('./lib/disconnect_manager');
+const { matchQueue } = require('./lib/match_queue');
+const { readyUpManager } = require('./lib/ready_up_manager');
 
 const app = express();
 app.use(cors());
@@ -141,6 +143,23 @@ const matchConnections = new Map();
 // Register match routes with wss and matchConnections for targeted delivery
 app.use('/matches', createMatchesRouter(pool, wss, matchConnections));
 
+// Ready-up timeout: notify both players when match is cancelled
+readyUpManager.onCancelled((matchId) => {
+  console.log(`Ready-up timeout for match ${matchId} — notifying players`);
+  const conns = matchConnections.get(matchId);
+  if (conns) {
+    for (const [, client] of conns) {
+      if (client.readyState === 1) {
+        client.send(JSON.stringify({
+          type: 'match_cancelled',
+          matchId,
+          reason: 'opponent_not_ready',
+        }));
+      }
+    }
+  }
+});
+
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {
   // Extract matchId from URL: /matches/{matchId}/events?playerId=X
@@ -217,6 +236,31 @@ wss.on('connection', (ws, req) => {
       }
     } else {
       console.log(`Player ${playerId} close ignored — newer connection exists in match ${matchId}`);
+    }
+
+    // Remove from Quick Match queue (ghost-entry cleanup)
+    matchQueue.removeByPlayerId(playerId);
+
+    // If player was in a pending ready-up, cancel and notify opponent
+    const pending = readyUpManager.getPendingMatch(playerId);
+    if (pending) {
+      const opponentId = pending.playerA.playerId === playerId
+        ? pending.playerB.playerId
+        : pending.playerA.playerId;
+      readyUpManager.cancelPlayer(pending.matchId, playerId);
+
+      // Notify opponent via WS if still connected
+      const pendingConns = matchConnections.get(pending.matchId);
+      if (pendingConns) {
+        const oppWs = pendingConns.get(opponentId);
+        if (oppWs && oppWs.readyState === 1) {
+          oppWs.send(JSON.stringify({
+            type: 'match_cancelled',
+            matchId: pending.matchId,
+            reason: 'opponent_disconnected',
+          }));
+        }
+      }
     }
 
     // Start 30s disconnect window if match is active

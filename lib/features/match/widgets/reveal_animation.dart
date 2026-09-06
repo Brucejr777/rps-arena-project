@@ -9,6 +9,8 @@ class RevealAnimation extends ConsumerStatefulWidget  {
   final String Function(String move) handAssetFor;
   final String playerALabel;
   final String playerBLabel;
+  final bool playerAAuto;
+  final bool playerBAuto;
 
 
   const RevealAnimation({
@@ -18,6 +20,8 @@ class RevealAnimation extends ConsumerStatefulWidget  {
     required this.handAssetFor,
     this.playerALabel = 'PLAYER 1',
     this.playerBLabel = 'PLAYER 2',
+    this.playerAAuto = false,
+    this.playerBAuto = false,
   });
 
   @override
@@ -53,7 +57,7 @@ class _RevealAnimationState extends ConsumerState<RevealAnimation>
     super.dispose();
   }
 
-  Widget _hand(String move, {required bool fromLeft, required String label}) {
+  Widget _hand(String move, {required bool fromLeft, required String label, required bool isAuto}) {
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -90,6 +94,24 @@ class _RevealAnimationState extends ConsumerState<RevealAnimation>
             padding: const EdgeInsets.all(12),
             child: Image.asset(widget.handAssetFor(move), fit: BoxFit.contain),
           ),
+          if (isAuto)
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.orange.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                'AUTO',
+                style: TextStyle(
+                  color: AppColors.orange,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -100,7 +122,7 @@ class _RevealAnimationState extends ConsumerState<RevealAnimation>
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _hand(widget.playerAMove, fromLeft: true, label: widget.playerALabel),
+        _hand(widget.playerAMove, fromLeft: true, label: widget.playerALabel, isAuto: widget.playerAAuto),
         Text(
           'VS',
           style: TextStyle(
@@ -109,7 +131,7 @@ class _RevealAnimationState extends ConsumerState<RevealAnimation>
             fontSize: 18,
           ),
         ),
-        _hand(widget.playerBMove, fromLeft: false, label: widget.playerBLabel),
+        _hand(widget.playerBMove, fromLeft: false, label: widget.playerBLabel, isAuto: widget.playerBAuto),
       ],
     );
   }

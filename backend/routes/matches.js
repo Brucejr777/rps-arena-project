@@ -295,10 +295,15 @@ function createMatchesRouter(pool, wss, matchConnections) {
         }
       }
 
+      // Fetch auto-move flags so the client can show AUTO tags during reveal
+      const autoFlags = await pool.query(
+        'SELECT player_a_auto, player_b_auto FROM round WHERE id = $1',
+        [roundId]
+      );
+
       // Build WebSocket event payload
       const eventPayload = {
-        type: 'round_result',
-        matchId: parseInt(matchId),
+        type: 'round_result', matchId: parseInt(matchId),
         roundNumber: currentRound,
         playerAMove: round.player_a_move,
         playerBMove: round.player_b_move,
@@ -309,6 +314,8 @@ function createMatchesRouter(pool, wss, matchConnections) {
         totalRounds: newTotalRounds,
         matchFinished,
         winnerId: matchWinner,
+        playerAAuto: autoFlags.rows[0]?.player_a_auto ?? false,
+        playerBAuto: autoFlags.rows[0]?.player_b_auto ?? false,
       };
 
       // Broadcast to match participants via WebSocket
@@ -919,8 +926,7 @@ function createMatchesRouter(pool, wss, matchConnections) {
 
       // Broadcast via WebSocket
       broadcastToMatch(matchId, {
-        type: 'round_result',
-        matchId,
+        type: 'round_result', matchId,
         roundNumber,
         playerAMove: r.player_a_move,
         playerBMove: r.player_b_move,
@@ -932,6 +938,8 @@ function createMatchesRouter(pool, wss, matchConnections) {
         matchFinished,
         winnerId: matchWinner,
         autoMove: true,
+        playerAAuto: isPlayerA,
+        playerBAuto: !isPlayerA,
       });
 
       if (!matchFinished) {

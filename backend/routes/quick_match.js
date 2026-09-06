@@ -43,6 +43,9 @@ function createQuickMatchRouter(pool) {
       );
       const rating = ratingResult.rows.length > 0 ? ratingResult.rows[0].rating : 1000;
 
+      // Idempotent join: remove any stale queue entry first (F8)
+      matchQueue.removeByPlayerId(playerId);
+
       // Try to match
       const match = matchQueue.join({
         playerId,
@@ -111,6 +114,18 @@ function createQuickMatchRouter(pool) {
         status: 'searching',
         formatType: entry.formatType,
         winsRequired: entry.winsRequired,
+      });
+    }
+
+    // Check if player is in a pending ready-up (matched but not confirmed)
+    const pending = readyUpManager.getPendingMatch(playerId);
+    if (pending) {
+      return res.json({
+        status: 'ready_up',
+        matchId: pending.matchId,
+        opponentName: pending.playerA.playerId === playerId
+          ? pending.playerB.username
+          : pending.playerA.username,
       });
     }
 

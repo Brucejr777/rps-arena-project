@@ -139,12 +139,17 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _cancelQueue();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
             children: [
               // ── Header ──────────────────────────────────────────
               Padding(
@@ -266,6 +271,7 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
           ),
         ),
       ),
+    ),
     );
   }
 

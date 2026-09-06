@@ -138,7 +138,12 @@ class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _cancelQueue();
+      },
+      child: Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
@@ -270,6 +275,7 @@ class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
           ),
         ),
       ),
+    ),
     );
   }
 

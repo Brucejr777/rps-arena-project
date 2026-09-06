@@ -7,7 +7,7 @@
  *   3. If either fails to confirm → match cancelled.
  */
 
-const READY_TIMEOUT_MS = 15_000;
+const READY_TIMEOUT_MS = 20_000;
 
 /**
  * @typedef {{ matchId: number, playerA: {playerId, username, rating}, playerB: {playerId, username, rating}, readyPlayers: Set<number>, timer: NodeJS.Timeout, formatType: string, winsRequired: number }} PendingMatch

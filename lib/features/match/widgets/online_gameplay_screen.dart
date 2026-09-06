@@ -65,6 +65,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   int _selectionTimer = 10;
   Timer? _timer;
   String? _selectedMove;
+  bool _isAutoMove = false;
   bool _isWaitingForServer = false;
   bool _isRevealing = false;
   bool _isPaused = false;
@@ -78,6 +79,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   // Server-revealed data
   String? _serverPlayerAMove;
   String? _serverPlayerBMove;
+  bool _serverPlayerAAuto = false;
+  bool _serverPlayerBAuto = false;
 
   // Guards against handling the same round_result twice (once from the
   // POST response, once from the WebSocket broadcast).
@@ -212,6 +215,23 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           _showRematchRequest = false;
         });
         break;
+      case SocketEventType.matchCancelled:
+        _rematchCountdown?.cancel();
+        _rematchPollTimer?.cancel();
+        setState(() {
+          _isRematchWaiting = false;
+          _showRematchRequest = false;
+          _showResult = false;
+        });
+        if (mounted) {
+          final reason = event.data['reason'] as String? ?? 'unknown';
+          final msg = reason == 'opponent_not_ready'
+              ? 'Opponent did not confirm the match.'
+              : 'Match cancelled.';
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+          GoRouter.of(context).go('/quick-match-setup');
+        }
+        break;
       default:
         break;
     }
@@ -256,6 +276,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _isRevealing = true;
       _serverPlayerAMove = playerAMove;
       _serverPlayerBMove = playerBMove;
+      _serverPlayerAAuto = data['playerAAuto'] as bool? ?? false;
+      _serverPlayerBAuto = data['playerBAuto'] as bool? ?? false;
       _playerScore = _isPlayerA ? playerAScore : playerBScore;
       _opponentScore = _isPlayerA ? playerBScore : playerAScore;
       _drawCount = drawCount;
@@ -268,6 +290,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         _isRevealing = false;
         _serverPlayerAMove = null;
         _serverPlayerBMove = null;
+        _serverPlayerAAuto = false;
+        _serverPlayerBAuto = false;
       });
 
       if (matchFinished) {
@@ -314,6 +338,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _pollRetries = 0;
     setState(() {
       _selectedMove = null;
+      _isAutoMove = false;
       _selectionTimer = 10;
       _isWaitingForServer = false;
       _roundResolved = false;
@@ -327,7 +352,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         timer.cancel();
         if (_selectedMove == null) {
           final moves = ['rock', 'paper', 'scissors'];
-          setState(() => _selectedMove = moves[DateTime.now().millisecond % 3]);
+          setState(() {
+            _selectedMove = moves[DateTime.now().millisecond % 3];
+            _isAutoMove = true;
+          });
         }
         _submitMove();
       } else {
@@ -341,6 +369,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     setState(() {
       _hasPicked = true;
       _selectedMove = move;
+      _isAutoMove = false;
     });
     _submitMove();
   }
@@ -572,8 +601,25 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/request');
       _startRematchPolling();
+      // F5: 30-second timeout for rematch request
+      _rematchCountdown?.cancel();
+      int remaining = 30;
+      _rematchCountdown = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) { timer.cancel(); return; }
+        remaining--;
+        if (remaining <= 0) {
+          timer.cancel();
+          _rematchPollTimer?.cancel();
+          setState(() => _isRematchWaiting = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Rematch request timed out.')),
+            );
+          }
+        }
+      });
     } catch (e) {
-      debugPrint('[Rematch] Request failed: $e');
+
       if (!mounted) return;
       final serverMsg = (e is DioException && e.response?.data is Map<String, dynamic>)
           ? (e.response!.data as Map<String, dynamic>)['error'] as String?
@@ -587,7 +633,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   void _acceptRematch() async {
-    debugPrint('[Rematch] Accept tapped');
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
     try {
@@ -600,14 +645,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           const SnackBar(content: Text('Rematch accepted, but no match id returned.')));
         return;
       }
-      debugPrint('[Rematch] navigating to new match $newMatchId');
       GoRouter.of(context).pushReplacement('/online-gameplay', extra: {
         'matchId': newMatchId,
         'playerName': widget.playerName,
         'opponentName': widget.opponentName,
       });
     } catch (e) {
-      debugPrint('[Rematch] Accept failed: $e');
       if (!mounted) return;
       final serverMsg = (e is DioException && e.response?.data is Map<String, dynamic>)
           ? (e.response!.data as Map<String, dynamic>)['error'] as String?
@@ -632,18 +675,16 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     });
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/decline');
-    } catch (e) {
-      debugPrint('[Rematch] Decline failed: $e');
+    } catch (_) {
+      // Decline failed — best-effort
     }
   }
 
   void _handleRematchAccepted(Map<String, dynamic> data) {
-    debugPrint('[Rematch] socket rematch_accepted: $data');
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
     final newMatchId = (data['newMatchId'] as num?)?.toInt();
     if (!mounted || newMatchId == null) return;
-    debugPrint('[Rematch] navigating to new match $newMatchId');
     GoRouter.of(context).pushReplacement('/online-gameplay', extra: {
       'matchId': newMatchId,
       'playerName': widget.playerName,
@@ -685,7 +726,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         if (status == 'accepted' && newMatchId != null) {
           _rematchPollTimer?.cancel();
           if (!mounted) return;
-          debugPrint('[Rematch] poll accepted → navigating to new match $newMatchId');
           GoRouter.of(context).pushReplacement('/online-gameplay', extra: {
             'matchId': newMatchId,
             'playerName': widget.playerName,
@@ -834,12 +874,37 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                         handAssetFor: themeController.handAssetFor,
                         playerALabel: widget.playerName,
                         playerBLabel: widget.opponentName,
+                        playerAAuto: _isPlayerA ? _serverPlayerAAuto : _serverPlayerBAuto,
+                        playerBAuto: _isPlayerA ? _serverPlayerBAuto : _serverPlayerAAuto,
                       )
                     else
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          _handImage(_selectedMove, isPlayer: true),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _handImage(_selectedMove, isPlayer: true),
+                              if (_isAutoMove)
+                                Container(
+                                  margin: const EdgeInsets.only(top: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.orange.withValues(alpha: 0.3),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'AUTO',
+                                    style: TextStyle(
+                                      color: AppColors.orange,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                           Text(
                             'VS',
                             style: TextStyle(

@@ -177,7 +177,7 @@ final GoRouter appRouter = GoRouter(
           formatLabel: args['formatLabel'] as String? ?? 'BEST OF 3',
           winsRequired: args['winsRequired'] as int? ?? 2,
           rating: args['rating'] as int? ?? 1000,
-          onCancel: () => context.go('/main'),
+          onCancel: () => context.go('/quick-match-setup'),
         );
       },
     ),
@@ -187,17 +187,18 @@ final GoRouter appRouter = GoRouter(
         final args = state.extra as Map<String, dynamic>? ?? {};
         final matchId = args['matchId'] as int?;
         return OpponentFoundScreen(
+          matchId: matchId ?? 0,
           opponentName: args['opponentName'] as String? ?? 'Unknown',
           opponentRating: args['opponentRating'] as int? ?? 1000,
-          onReady: () async {
+          onReady: () {
             if (matchId == null) return;
-            try {
-              await AuthClient().post('/quick-match/ready', data: {'matchId': matchId});
-            } catch (_) {
-              // Ready-up failed; countdown will expire and route to /main.
-            }
+            context.push('/online-gameplay', extra: {
+              'matchId': matchId,
+              'playerName': null,
+              'opponentName': args['opponentName'] as String?,
+            });
           },
-          onCancel: () => context.go('/main'),
+          onCancel: () => context.go('/quick-match-setup'),
         );
       },
     ),

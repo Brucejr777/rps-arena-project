@@ -52,6 +52,14 @@ class MatchQueue {
    * Returns true if the player was found and removed.
    */
   cancel(playerId) {
+    return this.removeByPlayerId(playerId);
+  }
+
+  /**
+   * Remove a player from every format queue (idempotent).
+   * Returns true if the player was found in any queue.
+   */
+  removeByPlayerId(playerId) {
     for (const [key, queue] of this._queues) {
       const index = queue.findIndex((e) => e.playerId === playerId);
       if (index !== -1) {
