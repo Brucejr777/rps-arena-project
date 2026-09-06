@@ -87,6 +87,14 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   // Player 2 (who gets the HTTP response first) from racing ahead.
   bool _waitingForNextRound = false;
 
+  // ── Rematch state ──────────────────────────────────────────
+  bool _showResult = false;
+  bool _showRematchRequest = false;
+  bool _isRematchWaiting = false;
+  int? _rematchRequesterId;
+  String? _rematchRequesterName;
+  Timer? _rematchCountdown;
+
   bool get _isPlayerA => widget.isPlayerA;
 
   bool get _isUnlimited => widget.formatType == 'unlimited';
@@ -115,6 +123,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void dispose() {
     _timer?.cancel();
     _waitingTimeout?.cancel();
+    _rematchCountdown?.cancel();
     _socketSub?.cancel();
     _socketClient.dispose();
     super.dispose();
@@ -178,6 +187,23 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           ),
         );
         break;
+      case SocketEventType.rematchRequested:
+        setState(() {
+          _showRematchRequest = true;
+          _rematchRequesterId = event.data['requesterId'] as int?;
+          _rematchRequesterName = event.data['requesterName'] as String?;
+        });
+        _startRematchCountdown();
+        break;
+      case SocketEventType.rematchAccepted:
+        _handleRematchAccepted(event.data);
+        break;
+      case SocketEventType.rematchDeclined:
+        setState(() {
+          _isRematchWaiting = false;
+          _showRematchRequest = false;
+        });
+        break;
       default:
         break;
     }
@@ -237,46 +263,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       });
 
       if (matchFinished) {
-        if (_isUnlimited) {
-          final total = _playerScore + _opponentScore + _drawCount;
-          final p1Rate = total == 0 ? 0.0 : (_playerScore / total) * 100;
-          final p2Rate = total == 0 ? 0.0 : (_opponentScore / total) * 100;
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (routeCtx) => UnlimitedResultScreen(
-                player1Wins: _playerScore,
-                player2Wins: _opponentScore,
-                draws: _drawCount,
-                totalRounds: total,
-                player1WinRate: p1Rate,
-                player2WinRate: p2Rate,
-                onPlayAgain: () {
-                  GoRouter.of(routeCtx).go('/quick-match-setup');
-                },
-                onMainMenu: () {
-                  GoRouter.of(routeCtx).go('/main');
-                },
-              ),
-            ),
-          );
-        } else {
-          final playerWon = _playerScore > _opponentScore;
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (routeCtx) => StandardResultScreen(
-                playerWon: playerWon,
-                playerScore: _playerScore,
-                opponentScore: _opponentScore,
-                onPlayAgain: () {
-                  GoRouter.of(routeCtx).go('/quick-match-setup');
-                },
-                onMainMenu: () {
-                  GoRouter.of(routeCtx).go('/main');
-                },
-              ),
-            ),
-          );
-        }
+        _timer?.cancel();
+        setState(() {
+          _showResult = true;
+          _showRematchRequest = false;
+          _isRematchWaiting = false;
+        });
       } else {
         _currentRound = totalRounds + 1;
         // Wait for the server's round_start event so both players begin
@@ -303,28 +295,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           ? _asInt(data['playerBScore'])
           : _asInt(data['playerAScore']);
       _drawCount = _asInt(data['drawCount']);
+      _showResult = true;
+      _showRematchRequest = false;
+      _isRematchWaiting = false;
     });
-    final total = _playerScore + _opponentScore + _drawCount;
-    final p1Rate = total == 0 ? 0.0 : (_playerScore / total) * 100;
-    final p2Rate = total == 0 ? 0.0 : (_opponentScore / total) * 100;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (routeCtx) => UnlimitedResultScreen(
-          player1Wins: _playerScore,
-          player2Wins: _opponentScore,
-          draws: _drawCount,
-          totalRounds: total,
-          player1WinRate: p1Rate,
-          player2WinRate: p2Rate,
-          onPlayAgain: () {
-            GoRouter.of(routeCtx).go('/quick-match-setup');
-          },
-          onMainMenu: () {
-            GoRouter.of(routeCtx).go('/main');
-          },
-        ),
-      ),
-    );
   }
 
   void _startRound() {
@@ -576,6 +550,76 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     }
   }
 
+  // ── Rematch methods ──────────────────────────────────────
+  void _requestRematch() async {
+    setState(() => _isRematchWaiting = true);
+    try {
+      await _authClient.post('/matches/${widget.matchId}/rematch/request');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isRematchWaiting = false);
+    }
+  }
+
+  void _acceptRematch() async {
+    _rematchCountdown?.cancel();
+    try {
+      final res = await _authClient.post('/matches/${widget.matchId}/rematch/accept');
+      final data = res.data as Map<String, dynamic>;
+      final newMatchId = data['newMatchId'] as int;
+      if (!mounted) return;
+      GoRouter.of(context).go('/online-gameplay', extra: {
+        'matchId': newMatchId,
+        'playerName': widget.playerName,
+        'opponentName': widget.opponentName,
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _showRematchRequest = false;
+        _isRematchWaiting = false;
+      });
+    }
+  }
+
+  void _declineRematch() async {
+    _rematchCountdown?.cancel();
+    setState(() {
+      _showRematchRequest = false;
+      _isRematchWaiting = false;
+    });
+    try {
+      await _authClient.post('/matches/${widget.matchId}/rematch/decline');
+    } catch (_) {}
+  }
+
+  void _handleRematchAccepted(Map<String, dynamic> data) {
+    _rematchCountdown?.cancel();
+    final newMatchId = data['newMatchId'] as int;
+    if (!mounted) return;
+    GoRouter.of(context).go('/online-gameplay', extra: {
+      'matchId': newMatchId,
+      'playerName': widget.playerName,
+      'opponentName': widget.opponentName,
+    });
+  }
+
+  void _startRematchCountdown() {
+    _rematchCountdown?.cancel();
+    int remaining = 15;
+    _rematchCountdown = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      remaining--;
+      if (remaining <= 0) {
+        timer.cancel();
+        _declineRematch();
+      }
+    });
+  }
+
   Widget _handImage(String? move, {required bool isPlayer}) {
     final themeController = ref.read(gameThemeProvider.notifier);
     final asset = move == null
@@ -761,6 +805,249 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                   onResume: _onResume,
                   onExit: _onExitConfirmed,
                 ),
+              if (_showResult) _buildResultOverlay(),
+              if (_showRematchRequest) _buildRematchRequestOverlay(),
+              if (_isRematchWaiting) _buildRematchWaitingOverlay(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultOverlay() {
+    final playerWon = _playerScore > _opponentScore;
+    final total = _playerScore + _opponentScore + _drawCount;
+
+    return Container(
+      color: Colors.black.withValues(alpha: 0.85),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // ── Victory/Defeat Card ───────────────────────
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    width: 1.5,
+                    color: (playerWon ? AppColors.green : AppColors.red)
+                        .withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      playerWon ? 'VICTORY' : 'DEFEAT',
+                      style: TextStyle(
+                        color: playerWon ? AppColors.green : AppColors.red,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      '$_playerScore - $_opponentScore',
+                      style: const TextStyle(
+                        color: AppColors.primaryText,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (_isUnlimited) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        '$total ROUNDS',
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 48),
+              // ── PLAY AGAIN button ─────────────────────────
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _requestRematch,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.defaultAccent,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text(
+                    'PLAY AGAIN',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // ── MAIN MENU button ──────────────────────────
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => GoRouter.of(context).go('/main'),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.white38),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text(
+                    'MAIN MENU',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRematchRequestOverlay() {
+    return Container(
+      color: Colors.black.withValues(alpha: 0.85),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'OPPONENT WANTS A REMATCH',
+                style: TextStyle(
+                  color: AppColors.primaryText,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${_rematchRequesterName ?? "Opponent"} is waiting...',
+                style: const TextStyle(color: Colors.white54, fontSize: 14),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _acceptRematch,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.green,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text(
+                    'ACCEPT',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: _declineRematch,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.white38),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text(
+                    'DECLINE',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRematchWaitingOverlay() {
+    return Container(
+      color: Colors.black.withValues(alpha: 0.85),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(
+                color: AppColors.defaultAccent,
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'WAITING FOR OPPONENT...',
+                style: TextStyle(
+                  color: AppColors.primaryText,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    _rematchCountdown?.cancel();
+                    setState(() => _isRematchWaiting = false);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.white38),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text(
+                    'CANCEL',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),

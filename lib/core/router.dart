@@ -5,6 +5,7 @@ import '../features/auth/screens/register_screen.dart';
 import '../features/online/screens/multiplayer_screen.dart';
 import '../features/online/screens/quick_match_setup_screen.dart';
 import '../features/online/screens/quick_match_searching_screen.dart';
+import '../features/online/screens/quick_match_create_screen.dart';
 import '../features/online/screens/opponent_found_screen.dart';
 import '../features/online/screens/private_room_create_screen.dart';
 import '../features/online/screens/private_room_join_screen.dart';
@@ -154,6 +155,18 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/quick-match-setup',
       builder: (context, state) => const QuickMatchSetupScreen(),
+    ),
+    GoRoute(
+      path: '/quick-match-create',
+      builder: (context, state) {
+        final args = state.extra as Map<String, dynamic>? ?? {};
+        return QuickMatchCreateScreen(
+          formatType: args['formatType'] as String? ?? 'bestOf3',
+          formatLabel: args['formatLabel'] as String? ?? 'BEST OF 3',
+          winsRequired: args['winsRequired'] as int? ?? 2,
+          onCancel: () => context.go('/quick-match-setup'),
+        );
+      },
     ),
     GoRoute(
       path: '/quick-match-searching',

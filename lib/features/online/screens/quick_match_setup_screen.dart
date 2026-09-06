@@ -125,7 +125,7 @@ class _QuickMatchSetupScreenState extends State<QuickMatchSetupScreen> {
 
               const Spacer(),
 
-              // ── Start Search ────────────────────────────────────
+              // ── Create Match button ──────────────────────────
               SizedBox(
                 width: double.infinity,
                 child: Container(
@@ -148,10 +148,11 @@ class _QuickMatchSetupScreenState extends State<QuickMatchSetupScreen> {
                   child: ElevatedButton(
                     onPressed: () {
                       context.push(
-                        '/quick-match-searching',
+                        '/quick-match-create',
                         extra: {
+                          'formatType': selectedFormat.format.name,
                           'formatLabel': _formatLabel,
-                          'rating': 1000,
+                          'winsRequired': selectedFormat.winsRequired,
                         },
                       );
                     },
@@ -164,12 +165,43 @@ class _QuickMatchSetupScreenState extends State<QuickMatchSetupScreen> {
                       ),
                     ),
                     child: const Text(
-                      'START SEARCH',
+                      'CREATE MATCH',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1.0,
                       ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // ── Search Match button ───────────────────────────
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    context.push(
+                      '/quick-match-searching',
+                      extra: {
+                        'formatLabel': _formatLabel,
+                        'rating': 1000,
+                      },
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.white38),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18.5),
+                    ),
+                  ),
+                  child: const Text(
+                    'SEARCH MATCH',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
                     ),
                   ),
                 ),

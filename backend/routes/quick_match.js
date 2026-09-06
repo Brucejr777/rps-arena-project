@@ -4,6 +4,10 @@
  * POST   /quick-match/join    — enter the queue for a format
  * DELETE /quick-match/cancel  — leave the queue
  * POST   /quick-match/ready   — confirm readiness after opponent found
+ *
+ * IMPORTANT: Quick Match uses the in-memory MatchQueue (match_queue.js).
+ * It is completely separate from Private Rooms (rooms.js / room table).
+ * Quick Match search will NEVER match Private Room entries.
  */
 
 const { Router } = require('express');

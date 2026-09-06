@@ -717,6 +717,159 @@ function createMatchesRouter(pool, wss, matchConnections) {
     }
   });
 
+  // ── POST /matches/:matchId/rematch/request ────────────────
+  router.post('/:matchId/rematch/request', async (req, res) => {
+    try {
+      const { playerId } = req.player;
+      const { matchId } = req.params;
+
+      const matchResult = await pool.query(
+        'SELECT * FROM match WHERE match_id = $1',
+        [matchId]
+      );
+      if (matchResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Match not found.' });
+      }
+      const match = matchResult.rows[0];
+
+      if (!match.winner_id && !match.match_draw) {
+        return res.status(400).json({ error: 'Match is not finished yet.' });
+      }
+
+      const isPlayerA = match.player_a_id === playerId;
+      const isPlayerB = match.player_b_id === playerId;
+      if (!isPlayerA && !isPlayerB) {
+        return res.status(403).json({ error: 'You are not part of this match.' });
+      }
+
+      const opponentId = isPlayerA ? match.player_b_id : match.player_a_id;
+
+      // Fetch requester name
+      const requesterResult = await pool.query(
+        'SELECT username FROM account WHERE player_id = $1',
+        [playerId]
+      );
+      const requesterName = requesterResult.rows[0]?.username ?? 'Opponent';
+
+      // Broadcast rematch request to opponent
+      if (wss || matchConnections) {
+        const conns = matchConnections.get(parseInt(matchId));
+        if (conns) {
+          const oppWs = conns.get(opponentId);
+          if (oppWs && oppWs.readyState === 1) {
+            oppWs.send(JSON.stringify({
+              type: 'rematch_requested',
+              matchId: parseInt(matchId),
+              requesterId: playerId,
+              requesterName,
+            }));
+          }
+        }
+      }
+
+      res.json({ status: 'requested' });
+    } catch (err) {
+      console.error('Rematch request error:', err);
+      res.status(500).json({ error: 'Internal server error.' });
+    }
+  });
+
+  // ── POST /matches/:matchId/rematch/accept ─────────────────
+  router.post('/:matchId/rematch/accept', async (req, res) => {
+    try {
+      const { playerId } = req.player;
+      const { matchId } = req.params;
+
+      const matchResult = await pool.query(
+        'SELECT * FROM match WHERE match_id = $1',
+        [matchId]
+      );
+      if (matchResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Match not found.' });
+      }
+      const orig = matchResult.rows[0];
+
+      const isPlayerA = orig.player_a_id === playerId;
+      const isPlayerB = orig.player_b_id === playerId;
+      if (!isPlayerA && !isPlayerB) {
+        return res.status(403).json({ error: 'You are not part of this match.' });
+      }
+
+      // Create new match with same config
+      const insertResult = await pool.query(
+        `INSERT INTO match (mode, format_type, wins_required, player_a_id, player_b_id)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING match_id`,
+        [orig.mode, orig.format_type, orig.wins_required, orig.player_a_id, orig.player_b_id]
+      );
+      const newMatchId = insertResult.rows[0].match_id;
+
+      // Broadcast to both players
+      if (wss || matchConnections) {
+        broadcastToMatch(parseInt(matchId), {
+          type: 'rematch_accepted',
+          matchId: parseInt(matchId),
+          newMatchId,
+          formatType: orig.format_type,
+          winsRequired: orig.wins_required,
+        });
+      }
+
+      res.json({
+        status: 'accepted',
+        newMatchId,
+        formatType: orig.format_type,
+        winsRequired: orig.wins_required,
+      });
+    } catch (err) {
+      console.error('Rematch accept error:', err);
+      res.status(500).json({ error: 'Internal server error.' });
+    }
+  });
+
+  // ── POST /matches/:matchId/rematch/decline ────────────────
+  router.post('/:matchId/rematch/decline', async (req, res) => {
+    try {
+      const { playerId } = req.player;
+      const { matchId } = req.params;
+
+      const matchResult = await pool.query(
+        'SELECT * FROM match WHERE match_id = $1',
+        [matchId]
+      );
+      if (matchResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Match not found.' });
+      }
+      const match = matchResult.rows[0];
+
+      const isPlayerA = match.player_a_id === playerId;
+      const isPlayerB = match.player_b_id === playerId;
+      if (!isPlayerA && !isPlayerB) {
+        return res.status(403).json({ error: 'You are not part of this match.' });
+      }
+
+      const opponentId = isPlayerA ? match.player_b_id : match.player_a_id;
+
+      if (wss || matchConnections) {
+        const conns = matchConnections.get(parseInt(matchId));
+        if (conns) {
+          const oppWs = conns.get(opponentId);
+          if (oppWs && oppWs.readyState === 1) {
+            oppWs.send(JSON.stringify({
+              type: 'rematch_declined',
+              matchId: parseInt(matchId),
+            }));
+          }
+        }
+      }
+
+      res.json({ status: 'declined' });
+    } catch (err) {
+      console.error('Rematch decline error:', err);
+      res.status(500).json({ error: 'Internal server error.' });
+    }
+  });
+
   // ── Round timeout handler (T100) ─────────────────────────────
   roundTimeoutManager.onTimeout(async ({ matchId, roundNumber, playerId, isPlayerA, autoMove }) => {
     try {

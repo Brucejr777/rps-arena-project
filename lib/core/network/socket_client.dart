@@ -11,6 +11,9 @@ enum SocketEventType {
   matchCompleted,
   opponentDisconnected,
   reconnectState,
+  rematchRequested,
+  rematchAccepted,
+  rematchDeclined,
 }
 
 /// Parsed socket event with type and data payload.
@@ -132,6 +135,12 @@ class MatchSocketClient {
         return SocketEventType.opponentDisconnected;
       case 'reconnect_state':
         return SocketEventType.reconnectState;
+      case 'rematch_requested':
+        return SocketEventType.rematchRequested;
+      case 'rematch_accepted':
+        return SocketEventType.rematchAccepted;
+      case 'rematch_declined':
+        return SocketEventType.rematchDeclined;
       default:
         return null;
     }
