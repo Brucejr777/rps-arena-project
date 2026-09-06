@@ -179,6 +179,17 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       print('[OnlineGameplay] _handleRoundResult: IGNORED (round already resolved)');
       return;
     }
+
+    // Guard against stale events from a previous round.  After _startRound()
+    // resets _roundResolved, a late WS broadcast or poll for the old round
+    // must not overwrite the new round's state.
+    final eventRound = _asInt(data['roundNumber']);
+    if (eventRound < _currentRound) {
+      print('[OnlineGameplay] _handleRoundResult: IGNORED stale round '
+          '$eventRound (current=$_currentRound)');
+      return;
+    }
+
     _roundResolved = true;
     _waitingTimeout?.cancel();
 
@@ -194,7 +205,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         'serverScores=${playerAScore}-${playerBScore}, '
         'myScore=${_isPlayerA ? playerAScore : playerBScore}, '
         'oppScore=${_isPlayerA ? playerBScore : playerAScore}, '
-        'round=$totalRounds, finished=$matchFinished');
+        'round=$totalRounds, finished=$matchFinished, '
+        'movesA=$playerAMove, movesB=$playerBMove');
 
     setState(() {
       _isWaitingForServer = false;
@@ -360,11 +372,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         return;
       }
       // Otherwise the result will arrive via WebSocket.
-      // Start polling immediately so we catch the result as soon as the
-      // server resolves the round (WS delivery can be delayed on Render).
-      _pollRetries = 0;
-      _waitingTimeout?.cancel();
-      _pollRoundState();
+      // The 3-second safety-net timer above will poll if WS fails.
     } catch (e) {
       _waitingTimeout?.cancel();
       if (!mounted) return;
