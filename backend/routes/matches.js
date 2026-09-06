@@ -114,12 +114,11 @@ function createMatchesRouter(pool, wss, matchConnections) {
         return res.status(403).json({ error: 'You are not part of this match.' });
       }
 
-      // Determine current round number
-      const roundResult = await pool.query(
-        'SELECT MAX(round_number) as max_round FROM round WHERE match_id = $1',
-        [matchId]
-      );
-      const currentRound = (roundResult.rows[0].max_round || 0) + 1;
+      // Determine current round number from completed rounds only.
+      // MAX(round_number) is wrong — a row exists as soon as ONE player
+      // submits, so the second player would compute round+1 and write to
+      // a brand-new row instead of completing the shared one.
+      const currentRound = match.total_rounds + 1;
 
       // Check for existing round this player already submitted to
       const existingRound = await pool.query(
@@ -825,6 +824,16 @@ function createMatchesRouter(pool, wss, matchConnections) {
           winnerId: matchWinner,
           autoMove: true,
         });
+
+        if (!matchFinished) {
+          setTimeout(() => {
+            broadcastToMatch(matchId, {
+              type: 'round_start',
+              matchId,
+              serverTime: Date.now(),
+            });
+          }, 1500);
+        }
       }
     } catch (err) {
       console.error('Round timeout error:', err);

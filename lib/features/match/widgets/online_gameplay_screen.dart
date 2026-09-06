@@ -356,6 +356,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _selectMove(String move) {
     if (_selectedMove != null || _isWaitingForServer) return;
     setState(() => _selectedMove = move);
+    _submitMove();
   }
 
   Future<void> _submitMove() async {
