@@ -33,12 +33,43 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     `);
     console.log('Migration: refresh_token table ready');
 
-    // Ensure result columns are TEXT (wider than VARCHAR)
-    await pool.query("ALTER TABLE round ALTER COLUMN result TYPE TEXT IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'round' AND column_name = 'result' AND data_type != 'text')");
-    await pool.query("ALTER TABLE match_history ALTER COLUMN result TYPE TEXT IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'match_history' AND column_name = 'result' AND data_type != 'text')");
+    // Fix legacy column name: rename 'token' → 'token_hash' if needed
+    await pool.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns WHERE table_name = 'refresh_token' AND column_name = 'token'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns WHERE table_name = 'refresh_token' AND column_name = 'token_hash'
+        ) THEN
+          ALTER TABLE refresh_token RENAME COLUMN token TO token_hash;
+          RAISE NOTICE 'Migration: renamed refresh_token.token to token_hash';
+        END IF;
+      END $$;
+    `);
+    console.log('Migration: refresh_token column name checked');
+
+    // Ensure result columns are TEXT
+    await pool.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns WHERE table_name = 'round' AND column_name = 'result' AND data_type != 'text'
+        ) THEN
+          ALTER TABLE round ALTER COLUMN result TYPE TEXT;
+        END IF;
+      END $$;
+    `);
+    await pool.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns WHERE table_name = 'match_history' AND column_name = 'result' AND data_type != 'text'
+        ) THEN
+          ALTER TABLE match_history ALTER COLUMN result TYPE TEXT;
+        END IF;
+      END $$;
+    `);
     console.log('Migration: result columns checked');
 
-    // Ensure match_history rank_change column exists (added later)
+    // Ensure match_history rank_change column exists
     await pool.query(`
       DO $$ BEGIN
         IF NOT EXISTS (
@@ -50,7 +81,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     `);
     console.log('Migration: match_history rank_change checked');
 
-    // Ensure a unique constraint exists on (match_id, round_number)
+    // Ensure unique constraint on (match_id, round_number)
     await pool.query(`
       DO $$ BEGIN
         IF NOT EXISTS (
