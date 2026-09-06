@@ -20,9 +20,10 @@ app.use(express.json());
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// Auto-migrate: create refresh_token table if it doesn't exist
+// Auto-migrate: ensure all tables and columns exist
 (async () => {
   try {
+    // Ensure refresh_token table exists
     await pool.query(`
       CREATE TABLE IF NOT EXISTS refresh_token (
         token_hash TEXT PRIMARY KEY,
@@ -32,14 +33,24 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     `);
     console.log('Migration: refresh_token table ready');
 
-    // Fix VARCHAR(10) truncation on result columns — values like
-    // 'player_a_wins' are 15 chars and were silently truncated.
-    await pool.query("ALTER TABLE round ALTER COLUMN result TYPE TEXT");
-    await pool.query("ALTER TABLE match_history ALTER COLUMN result TYPE TEXT");
-    console.log('Migration: result columns widened to TEXT');
+    // Ensure result columns are TEXT (wider than VARCHAR)
+    await pool.query("ALTER TABLE round ALTER COLUMN result TYPE TEXT IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'round' AND column_name = 'result' AND data_type != 'text')");
+    await pool.query("ALTER TABLE match_history ALTER COLUMN result TYPE TEXT IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'match_history' AND column_name = 'result' AND data_type != 'text')");
+    console.log('Migration: result columns checked');
+
+    // Ensure match_history rank_change column exists (added later)
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns WHERE table_name = 'match_history' AND column_name = 'rank_change'
+        ) THEN
+          ALTER TABLE match_history ADD COLUMN rank_change VARCHAR(20);
+        END IF;
+      END $$;
+    `);
+    console.log('Migration: match_history rank_change checked');
 
     // Ensure a unique constraint exists on (match_id, round_number)
-    // to prevent race-condition duplicate rounds.
     await pool.query(`
       DO $$ BEGIN
         IF NOT EXISTS (
@@ -52,7 +63,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     `);
     console.log('Migration: round unique constraint ready');
   } catch (err) {
-    console.error('Migration failed:', err.message);
+    console.error('Migration warning:', err.message);
   }
 })();
 

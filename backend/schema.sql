@@ -1,4 +1,4 @@
-CREATE TABLE account (
+CREATE TABLE IF NOT EXISTS account (
   player_id SERIAL PRIMARY KEY,
   username VARCHAR(16) UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
@@ -6,7 +6,7 @@ CREATE TABLE account (
   rank VARCHAR(20) NOT NULL DEFAULT 'Bronze'
 );
 
-CREATE TABLE player_statistic (
+CREATE TABLE IF NOT EXISTS player_statistic (
   player_id INTEGER PRIMARY KEY REFERENCES account(player_id),
   matches_played INTEGER NOT NULL DEFAULT 0,
   matches_won INTEGER NOT NULL DEFAULT 0,
@@ -19,7 +19,7 @@ CREATE TABLE player_statistic (
   scissors_selections INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE match (
+CREATE TABLE IF NOT EXISTS match (
   match_id SERIAL PRIMARY KEY,
   mode VARCHAR(20) NOT NULL,
   format_type VARCHAR(20) NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE match (
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE round (
+CREATE TABLE IF NOT EXISTS round (
   id SERIAL PRIMARY KEY,
   match_id INTEGER REFERENCES match(match_id),
   round_number INTEGER NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE round (
   result TEXT
 );
 
-CREATE TABLE room (
+CREATE TABLE IF NOT EXISTS room (
   room_code CHAR(6) PRIMARY KEY,
   host_id INTEGER REFERENCES account(player_id),
   guest_id INTEGER REFERENCES account(player_id),
@@ -55,19 +55,19 @@ CREATE TABLE room (
   wins_required INTEGER NOT NULL
 );
 
-CREATE TABLE leaderboard (
+CREATE TABLE IF NOT EXISTS leaderboard (
   player_id INTEGER PRIMARY KEY REFERENCES account(player_id),
   rating INTEGER NOT NULL,
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE refresh_token (
+CREATE TABLE IF NOT EXISTS refresh_token (
   token_hash TEXT PRIMARY KEY,
   player_id INTEGER NOT NULL REFERENCES account(player_id),
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE match_history (
+CREATE TABLE IF NOT EXISTS match_history (
   history_id SERIAL PRIMARY KEY,
   player_id INTEGER REFERENCES account(player_id),
   match_id INTEGER REFERENCES match(match_id),
@@ -81,12 +81,12 @@ CREATE TABLE match_history (
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_account_username ON account(username);
-CREATE INDEX idx_player_statistic_player ON player_statistic(player_id);
-CREATE INDEX idx_match_player_a ON match(player_a_id);
-CREATE INDEX idx_match_player_b ON match(player_b_id);
-CREATE INDEX idx_round_match ON round(match_id);
-CREATE INDEX idx_room_status ON room(status);
-CREATE INDEX idx_leaderboard_rating ON leaderboard(rating DESC);
-CREATE INDEX idx_match_history_player ON match_history(player_id);
-CREATE INDEX idx_refresh_token_player ON refresh_token(player_id);
+CREATE INDEX IF NOT EXISTS idx_account_username ON account(username);
+CREATE INDEX IF NOT EXISTS idx_player_statistic_player ON player_statistic(player_id);
+CREATE INDEX IF NOT EXISTS idx_match_player_a ON match(player_a_id);
+CREATE INDEX IF NOT EXISTS idx_match_player_b ON match(player_b_id);
+CREATE INDEX IF NOT EXISTS idx_round_match ON round(match_id);
+CREATE INDEX IF NOT EXISTS idx_room_status ON room(status);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_rating ON leaderboard(rating DESC);
+CREATE INDEX IF NOT EXISTS idx_match_history_player ON match_history(player_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_token_player ON refresh_token(player_id);
