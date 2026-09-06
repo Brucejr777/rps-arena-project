@@ -150,8 +150,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       case SocketEventType.roundStart:
         if (!_opponentConnected) {
           _opponentConnected = true;
-        }
-        if (_waitingForNextRound) {
+          _startRound();
+        } else if (_waitingForNextRound) {
           _waitingForNextRound = false;
           _waitingTimeout?.cancel();
           _startRound();
