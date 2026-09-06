@@ -29,11 +29,11 @@ function createMatchesRouter(pool, wss, matchConnections) {
   /** Send to both participants in a match via their tracked WS connections. */
   function broadcastToMatch(matchId, payload) {
     const msg = JSON.stringify(payload);
+    let sent = 0;
     if (matchConnections) {
       const conns = matchConnections.get(matchId);
       if (conns) {
         console.log(`broadcastToMatch: matchId=${matchId}, conns=${conns.size}, type=${payload.type}`);
-        let sent = 0;
         for (const [pid, client] of conns) {
           if (client.readyState === 1) {
             client.send(msg);
@@ -43,12 +43,12 @@ function createMatchesRouter(pool, wss, matchConnections) {
           }
         }
         console.log(`broadcastToMatch: sent to ${sent}/${conns.size} clients`);
-        return;
+      } else {
+        console.log(`broadcastToMatch: no conns entry for matchId=${matchId}`);
       }
-      console.log(`broadcastToMatch: no conns entry for matchId=${matchId}`);
     }
-    // Fallback: broadcast to all clients (filtering happens client-side)
-    if (wss) {
+    // Always fall back to wss.clients if no targeted clients received it
+    if (sent === 0 && wss) {
       console.log(`broadcastToMatch: fallback to wss.clients, total=${wss.clients.size}`);
       wss.clients.forEach((c) => { if (c.readyState === 1) c.send(msg); });
     }

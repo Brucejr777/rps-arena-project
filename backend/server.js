@@ -132,13 +132,13 @@ wss.on('connection', (ws, req) => {
     return;
   }
 
-  // Track this connection
+  // Track this connection (overwrites any old WS for this player — handles reconnects)
   if (!matchConnections.has(matchId)) {
     matchConnections.set(matchId, new Map());
   }
   matchConnections.get(matchId).set(playerId, ws);
 
-  console.log(`Player ${playerId} connected to match ${matchId}`);
+  console.log(`Player ${playerId} connected to match ${matchId} (ws id=${ws._ulid || 'n/a'})`);
 
   // Cancel any disconnect timer (reconnected successfully)
   const wasDisconnected = disconnectManager.cancelDisconnect(matchId, playerId);
@@ -173,13 +173,16 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     console.log(`Player ${playerId} disconnected from match ${matchId}`);
 
-    // Remove from tracking
+    // Remove from tracking — but ONLY if this ws is still the active one.
+    // If the player reconnected, a newer ws is stored and we must not delete it.
     const matchConns = matchConnections.get(matchId);
-    if (matchConns) {
+    if (matchConns && matchConns.get(playerId) === ws) {
       matchConns.delete(playerId);
       if (matchConns.size === 0) {
         matchConnections.delete(matchId);
       }
+    } else {
+      console.log(`Player ${playerId} close ignored — newer connection exists in match ${matchId}`);
     }
 
     // Start 30s disconnect window if match is active
