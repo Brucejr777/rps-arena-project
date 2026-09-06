@@ -87,6 +87,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   // Player 2 (who gets the HTTP response first) from racing ahead.
   bool _waitingForNextRound = false;
 
+  // ── Pick lock (role-agnostic) ─────────────────────────────
+  // Set synchronously on tap to prevent double-submit for BOTH players.
+  bool _hasPicked = false;
+
   // ── Rematch state ──────────────────────────────────────────
   bool _showResult = false;
   bool _showRematchRequest = false;
@@ -313,6 +317,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _isWaitingForServer = false;
       _roundResolved = false;
       _waitingForNextRound = false;
+      _hasPicked = false;
     });
 
     _timer?.cancel();
@@ -331,8 +336,11 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   void _selectMove(String move) {
-    if (_selectedMove != null || _isWaitingForServer) return;
-    setState(() => _selectedMove = move);
+    if (_hasPicked || _selectedMove != null || _isWaitingForServer) return;
+    setState(() {
+      _hasPicked = true;
+      _selectedMove = move;
+    });
     _submitMove();
   }
 
@@ -383,6 +391,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       setState(() {
         _isWaitingForServer = false;
         _selectedMove = null;
+        _hasPicked = false;
       });
     }
   }
@@ -838,7 +847,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                           move: 'rock',
                           iconAsset: 'assets/icons/icon_rock.svg',
                           isSelected: _selectedMove == 'rock',
-                          isDisabled: _selectedMove != null || _isWaitingForServer || _waitingForNextRound,
+                          isDisabled: _hasPicked || _selectedMove != null || _isWaitingForServer || _waitingForNextRound,
                           onSelected: () => _selectMove('rock'),
                           frameColor: const Color(0xFFF97316),
                         ),
@@ -846,7 +855,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                           move: 'paper',
                           iconAsset: 'assets/icons/icon_paper.svg',
                           isSelected: _selectedMove == 'paper',
-                          isDisabled: _selectedMove != null || _isWaitingForServer || _waitingForNextRound,
+                          isDisabled: _hasPicked || _selectedMove != null || _isWaitingForServer || _waitingForNextRound,
                           onSelected: () => _selectMove('paper'),
                           frameColor: const Color(0xFF06B6D4),
                         ),
@@ -854,7 +863,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                           move: 'scissors',
                           iconAsset: 'assets/icons/icon_scissors.svg',
                           isSelected: _selectedMove == 'scissors',
-                          isDisabled: _selectedMove != null || _isWaitingForServer || _waitingForNextRound,
+                          isDisabled: _hasPicked || _selectedMove != null || _isWaitingForServer || _waitingForNextRound,
                           onSelected: () => _selectMove('scissors'),
                           frameColor: const Color(0xFFEC4899),
                         ),

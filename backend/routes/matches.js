@@ -120,6 +120,25 @@ function createMatchesRouter(pool, wss, matchConnections) {
       // a brand-new row instead of completing the shared one.
       const currentRound = match.total_rounds + 1;
 
+      // ── Hard duplicate-pick guard (both players) ───────────
+      // Check if this player already has a move in the current round,
+      // regardless of who created the row.  This must run BEFORE any
+      // INSERT or UPDATE to prevent a second tap from overwriting.
+      const dupCheck = await pool.query(
+        `SELECT player_a_move, player_b_move FROM round
+         WHERE match_id = $1 AND round_number = $2`,
+        [matchId, currentRound]
+      );
+      if (dupCheck.rows.length > 0) {
+        const existing = dupCheck.rows[0];
+        if (isPlayerA && existing.player_a_move) {
+          return res.status(409).json({ error: 'Already picked this round.' });
+        }
+        if (isPlayerB && existing.player_b_move) {
+          return res.status(409).json({ error: 'Already picked this round.' });
+        }
+      }
+
       // Check for existing round this player already submitted to
       const existingRound = await pool.query(
         `SELECT id, player_a_move, player_b_move FROM round
@@ -800,6 +819,16 @@ function createMatchesRouter(pool, wss, matchConnections) {
       const isPlayerB = orig.player_b_id === playerId;
       if (!isPlayerA && !isPlayerB) {
         return res.status(403).json({ error: 'You are not part of this match.' });
+      }
+
+      // Idempotent: if a rematch was already accepted, return the existing new match
+      if (orig.rematch_status === 'accepted' && orig.rematch_new_match_id) {
+        return res.json({
+          status: 'accepted',
+          newMatchId: orig.rematch_new_match_id,
+          formatType: orig.format_type,
+          winsRequired: orig.wins_required,
+        });
       }
 
       // Create new match with same config
