@@ -1,22 +1,28 @@
+import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
 
 /// Quick Match searching screen (T88).
 ///
-/// Displays while the player is in the queue waiting for an opponent.
-/// Shows: SEARCHING FOR OPPONENT..., rating, match length, CANCEL.
+/// Joins the Quick Match queue on init and polls for a match.
+/// When matched, navigates to the opponent-found screen.
 class QuickMatchSearchingScreen extends StatefulWidget {
+  final String formatType;
   final String formatLabel;
+  final int winsRequired;
   final int rating;
   final VoidCallback onCancel;
-  final VoidCallback? onMatchFound;
 
   const QuickMatchSearchingScreen({
     super.key,
+    required this.formatType,
     required this.formatLabel,
+    required this.winsRequired,
     required this.rating,
     required this.onCancel,
-    this.onMatchFound,
   });
 
   @override
@@ -28,6 +34,10 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+  late final AuthClient _authClient;
+  Timer? _pollTimer;
+  bool _joining = false;
+  String? _error;
 
   @override
   void initState() {
@@ -39,12 +49,92 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
     _pulseAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+    _authClient = AuthClient();
+    _joinQueue();
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
+    _pollTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _joinQueue() async {
+    setState(() { _joining = true; _error = null; });
+    try {
+      final res = await _authClient.post(
+        '/quick-match/join',
+        data: {
+          'formatType': widget.formatType,
+          'winsRequired': widget.winsRequired,
+        },
+      );
+      if (!mounted) return;
+      final data = res.data as Map<String, dynamic>;
+      final status = data['status'] as String?;
+
+      if (status == 'matched') {
+        _navigateToOpponentFound(data);
+        return;
+      }
+
+      // Enqueued — start polling for match
+      setState(() => _joining = false);
+      _startPolling();
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final msg = (e.response?.data is Map<String, dynamic>)
+          ? (e.response!.data as Map<String, dynamic>)['error'] as String?
+          : null;
+      setState(() { _error = msg ?? 'Failed to join queue.'; _joining = false; });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() { _error = 'Failed to join queue.'; _joining = false; });
+    }
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      if (!mounted) return;
+      try {
+        final res = await _authClient.get('/quick-match/status');
+        if (!mounted) return;
+        final data = res.data as Map<String, dynamic>;
+        final status = data['status'] as String?;
+
+        if (status == 'idle') {
+          _pollTimer?.cancel();
+          return;
+        }
+      } catch (_) {
+        // Polling failed — will retry on next tick
+      }
+    });
+  }
+
+  void _navigateToOpponentFound(Map<String, dynamic> data) {
+    _pollTimer?.cancel();
+    final matchId = data['matchId'] as int?;
+    final opponent = data['opponent'] as Map<String, dynamic>?;
+    if (matchId == null || opponent == null) return;
+
+    context.push('/opponent-found', extra: {
+      'matchId': matchId,
+      'opponentName': opponent['username'] as String? ?? 'Unknown',
+      'opponentRating': opponent['rating'] as int? ?? 1000,
+    });
+  }
+
+  Future<void> _cancelQueue() async {
+    _pollTimer?.cancel();
+    try {
+      await _authClient.delete('/quick-match/cancel');
+    } catch (_) {
+      // Best-effort cancel
+    }
+    if (mounted) widget.onCancel();
   }
 
   @override
@@ -63,7 +153,7 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
                   children: [
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: widget.onCancel,
+                      onPressed: _cancelQueue,
                     ),
                     const Expanded(
                       child: Text(
@@ -103,16 +193,33 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
               ),
               const SizedBox(height: 24),
 
-              // ── SEARCHING FOR OPPONENT... ──────────────────────
-              const Text(
-                'SEARCHING FOR OPPONENT...',
-                style: TextStyle(
-                  color: AppColors.primaryText,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
+              // ── Status text ──────────────────────────────────
+              if (_error != null)
+                Text(
+                  _error!,
+                  style: const TextStyle(color: AppColors.red, fontSize: 14),
+                  textAlign: TextAlign.center,
+                )
+              else if (_joining)
+                const Text(
+                  'JOINING QUEUE...',
+                  style: TextStyle(
+                    color: AppColors.primaryText,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
+                )
+              else
+                const Text(
+                  'SEARCHING FOR OPPONENT...',
+                  style: TextStyle(
+                    color: AppColors.primaryText,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
                 ),
-              ),
               const SizedBox(height: 32),
 
               // ── Info cards ──────────────────────────────────────
@@ -137,7 +244,7 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: widget.onCancel,
+                  onPressed: _cancelQueue,
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Colors.white38),
                     padding: const EdgeInsets.symmetric(vertical: 16),

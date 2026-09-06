@@ -99,6 +99,24 @@ function createQuickMatchRouter(pool) {
     }
   });
 
+  // ── GET /quick-match/status ──────────────────────────────────
+  // Returns the player's current queue status (for polling from the
+  // create screen while waiting for an opponent).
+  router.get('/status', (req, res) => {
+    const { playerId } = req.player;
+    const entry = matchQueue.getStatus(playerId);
+
+    if (entry) {
+      return res.json({
+        status: 'searching',
+        formatType: entry.formatType,
+        winsRequired: entry.winsRequired,
+      });
+    }
+
+    res.json({ status: 'idle' });
+  });
+
   // ── DELETE /quick-match/cancel ────────────────────────────────
   router.delete('/cancel', (req, res) => {
     const { playerId } = req.player;

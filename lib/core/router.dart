@@ -173,7 +173,9 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) {
         final args = state.extra as Map<String, dynamic>? ?? {};
         return QuickMatchSearchingScreen(
+          formatType: args['formatType'] as String? ?? 'bestOf3',
           formatLabel: args['formatLabel'] as String? ?? 'BEST OF 3',
+          winsRequired: args['winsRequired'] as int? ?? 2,
           rating: args['rating'] as int? ?? 1000,
           onCancel: () => context.go('/main'),
         );

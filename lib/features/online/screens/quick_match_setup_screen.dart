@@ -184,7 +184,9 @@ class _QuickMatchSetupScreenState extends State<QuickMatchSetupScreen> {
                     context.push(
                       '/quick-match-searching',
                       extra: {
+                        'formatType': selectedFormat.format.name,
                         'formatLabel': _formatLabel,
+                        'winsRequired': selectedFormat.winsRequired,
                         'rating': 1000,
                       },
                     );
