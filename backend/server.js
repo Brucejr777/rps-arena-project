@@ -117,8 +117,8 @@ const wss = new WebSocketServer({ server });
 // Track connections: Map<matchId, Map<playerId, WebSocket>>
 const matchConnections = new Map();
 
-// Register match routes with wss
-app.use('/matches', createMatchesRouter(pool, wss));
+// Register match routes with wss and matchConnections for targeted delivery
+app.use('/matches', createMatchesRouter(pool, wss, matchConnections));
 
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {
@@ -152,6 +152,22 @@ wss.on('connection', (ws, req) => {
         client.send(JSON.stringify({ type: 'opponent_connected', matchId, playerId }));
       }
     }
+  }
+
+  // If both players are now connected, send round_start to synchronize timers
+  const matchConns = matchConnections.get(matchId);
+  if (matchConns && matchConns.size >= 2) {
+    const roundStartPayload = JSON.stringify({
+      type: 'round_start',
+      matchId,
+      serverTime: Date.now(),
+    });
+    for (const [, client] of matchConns) {
+      if (client.readyState === 1) {
+        client.send(roundStartPayload);
+      }
+    }
+    console.log(`Both players connected for match ${matchId} — sent round_start`);
   }
 
   ws.on('close', () => {

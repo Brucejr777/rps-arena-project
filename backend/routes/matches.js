@@ -22,9 +22,27 @@ const { calculateRatingChanges, applyRatingChanges, updatePlayerStatistics, trac
 
 const VALID_MOVES = ['rock', 'paper', 'scissors'];
 
-function createMatchesRouter(pool, wss) {
+function createMatchesRouter(pool, wss, matchConnections) {
   const router = Router();
   router.use(requireAuth);
+
+  /** Send to both participants in a match via their tracked WS connections. */
+  function broadcastToMatch(matchId, payload) {
+    const msg = JSON.stringify(payload);
+    if (matchConnections) {
+      const conns = matchConnections.get(matchId);
+      if (conns) {
+        for (const [, client] of conns) {
+          if (client.readyState === 1) client.send(msg);
+        }
+        return;
+      }
+    }
+    // Fallback: broadcast to all clients (filtering happens client-side)
+    if (wss) {
+      wss.clients.forEach((c) => { if (c.readyState === 1) c.send(msg); });
+    }
+  }
 
   // ── GET /matches/history (T118) ──────────────────────────────
   router.get('/history', async (req, res) => {
@@ -182,12 +200,9 @@ function createMatchesRouter(pool, wss) {
 
       const result = resolveRound(round.player_a_move, round.player_b_move);
 
-      // Update round result
-      await pool.query('UPDATE round SET result = $1 WHERE id = $2', [result, roundId]);
-
-      // Update match score — always query the round table (pg COUNT returns
-      // strings, so coerce to numbers). Never short-circuit; the round row
-      // for the current round already exists in the DB at this point.
+      // Update match score — query BEFORE setting the round result to avoid
+      // double-counting the current round. pg COUNT returns strings, so
+      // coerce to numbers.
       const countWins = async (resultType) => {
         const r = await pool.query(
           `SELECT COUNT(*) as wins FROM round WHERE match_id = $1 AND result = $2`,
@@ -201,6 +216,9 @@ function createMatchesRouter(pool, wss) {
       // Add this round's result
       if (result === 'player_a_wins') playerAScore += 1;
       if (result === 'player_b_wins') playerBScore += 1;
+
+      // Update round result (AFTER counting to avoid double-count)
+      await pool.query('UPDATE round SET result = $1 WHERE id = $2', [result, roundId]);
 
       const newDrawCount = result === 'draw'
         ? match.draw_count + 1
@@ -266,14 +284,9 @@ function createMatchesRouter(pool, wss) {
       };
 
       // Broadcast to match participants via WebSocket
-      if (wss) {
-        const message = JSON.stringify(eventPayload);
-        console.log(`Broadcasting round_result for match ${matchId} round ${currentRound} to ${wss.clients.size} clients: ${result} (scores ${playerAScore}-${playerBScore})`);
-        wss.clients.forEach((client) => {
-          if (client.readyState === 1) { // WebSocket.OPEN
-            client.send(message);
-          }
-        });
+      if (wss || matchConnections) {
+        console.log(`Broadcasting round_result for match ${matchId} round ${currentRound}: ${result} (scores ${playerAScore}-${playerBScore})`);
+        broadcastToMatch(parseInt(matchId), eventPayload);
 
         // T101: send dedicated match_completed event when match finishes
         if (matchFinished) {
@@ -288,12 +301,7 @@ function createMatchesRouter(pool, wss) {
             formatType: match.format_type,
             winsRequired: match.wins_required,
           };
-          const completedMsg = JSON.stringify(completedPayload);
-          wss.clients.forEach((client) => {
-            if (client.readyState === 1) {
-              client.send(completedMsg);
-            }
-          });
+          broadcastToMatch(parseInt(matchId), completedPayload);
         }
       }
 
@@ -479,8 +487,8 @@ function createMatchesRouter(pool, wss) {
       }
 
       // Send match_completed via WebSocket
-      if (wss) {
-        const payload = {
+      if (wss || matchConnections) {
+        broadcastToMatch(parseInt(matchId), {
           type: 'match_completed',
           matchId: parseInt(matchId),
           winnerId,
@@ -491,9 +499,7 @@ function createMatchesRouter(pool, wss) {
           totalRounds: match.total_rounds,
           formatType: 'unlimited',
           winsRequired: 0,
-        };
-        const msg = JSON.stringify(payload);
-        wss.clients.forEach((c) => { if (c.readyState === 1) c.send(msg); });
+        });
       }
 
       res.json({
@@ -560,8 +566,8 @@ function createMatchesRouter(pool, wss) {
         await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, winnerId, 0, 0);
 
         // Send match_completed via WebSocket
-        if (wss) {
-          const completedPayload = {
+        if (wss || matchConnections) {
+          broadcastToMatch(parseInt(matchId), {
             type: 'match_completed',
             matchId: parseInt(matchId),
             winnerId,
@@ -569,11 +575,6 @@ function createMatchesRouter(pool, wss) {
             message: 'Opponent cancelled the ranked match.',
             formatType: match.format_type,
             winsRequired: match.wins_required,
-          };
-          wss.clients.forEach((client) => {
-            if (client.readyState === 1) {
-              client.send(JSON.stringify(completedPayload));
-            }
           });
         }
 
@@ -599,8 +600,8 @@ function createMatchesRouter(pool, wss) {
       await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, true, null, 0, 0);
 
       // Send match_completed via WebSocket
-      if (wss) {
-        const completedPayload = {
+      if (wss || matchConnections) {
+        broadcastToMatch(parseInt(matchId), {
           type: 'match_completed',
           matchId: parseInt(matchId),
           winnerId: null,
@@ -609,11 +610,6 @@ function createMatchesRouter(pool, wss) {
           message: 'Match cancelled.',
           formatType: match.format_type,
           winsRequired: match.wins_required,
-        };
-        wss.clients.forEach((client) => {
-          if (client.readyState === 1) {
-            client.send(JSON.stringify(completedPayload));
-          }
         });
       }
 
@@ -678,8 +674,8 @@ function createMatchesRouter(pool, wss) {
       await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, quitRatingA, quitRatingB);
 
       // Send match_completed via WebSocket
-      if (wss) {
-        const completedPayload = {
+      if (wss || matchConnections) {
+        broadcastToMatch(parseInt(matchId), {
           type: 'match_completed',
           matchId: parseInt(matchId),
           winnerId,
@@ -687,12 +683,6 @@ function createMatchesRouter(pool, wss) {
           message: 'Opponent quit the match.',
           formatType: match.format_type,
           winsRequired: match.wins_required,
-        };
-        const completedMsg = JSON.stringify(completedPayload);
-        wss.clients.forEach((client) => {
-          if (client.readyState === 1) {
-            client.send(completedMsg);
-          }
         });
       }
 
@@ -799,8 +789,8 @@ function createMatchesRouter(pool, wss) {
       }
 
       // Broadcast via WebSocket
-      if (wss) {
-        const event = JSON.stringify({
+      if (wss || matchConnections) {
+        broadcastToMatch(matchId, {
           type: 'round_result',
           matchId,
           roundNumber,
@@ -815,7 +805,6 @@ function createMatchesRouter(pool, wss) {
           winnerId: matchWinner,
           autoMove: true,
         });
-        wss.clients.forEach((c) => { if (c.readyState === 1) c.send(event); });
       }
     } catch (err) {
       console.error('Round timeout error:', err);

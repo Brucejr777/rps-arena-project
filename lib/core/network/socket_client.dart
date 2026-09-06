@@ -6,6 +6,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 enum SocketEventType {
   opponentConnected,
   opponentFound,
+  roundStart,
   roundResult,
   matchCompleted,
   opponentDisconnected,
@@ -121,6 +122,8 @@ class MatchSocketClient {
         return SocketEventType.opponentConnected;
       case 'opponent_found':
         return SocketEventType.opponentFound;
+      case 'round_start':
+        return SocketEventType.roundStart;
       case 'round_result':
         return SocketEventType.roundResult;
       case 'match_completed':

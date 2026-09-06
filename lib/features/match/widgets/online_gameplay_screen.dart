@@ -67,8 +67,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   bool _isWaitingForServer = false;
   bool _isRevealing = false;
   bool _isPaused = false;
+  bool _opponentConnected = false;
 
-  // Safety net: if the server doesn't respond within 12 seconds,
+  // Safety net: if the server doesn't respond within 3 seconds,
   // poll the match state endpoint and either resolve the round or
   // let the player retry.
   Timer? _waitingTimeout;
@@ -92,7 +93,14 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _authClient = ref.read(authControllerProvider.notifier).client;
     _socketClient = MatchSocketClient();
     _connectWebSocket();
-    _startRound();
+    // Safety: if round_start doesn't arrive within 5s (opponent may have
+    // disconnected before we connected), start the round anyway.
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted && !_opponentConnected) {
+        _opponentConnected = true;
+        _startRound();
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(matchControllerProvider.notifier).setMode(MatchMode.online);
     });
@@ -131,6 +139,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     if (eventMatchId != null && '$eventMatchId' != '${widget.matchId}') return;
 
     switch (event.type) {
+      case SocketEventType.roundStart:
+        if (!_opponentConnected) {
+          _opponentConnected = true;
+          _startRound();
+        }
+        break;
       case SocketEventType.roundResult:
         _handleRoundResult(event.data);
         break;
@@ -180,8 +194,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _drawCount = drawCount;
     });
 
-    // Show reveal for 2 seconds, then advance
-    Future.delayed(const Duration(seconds: 2), () {
+    // Show reveal for 1 second, then advance
+    Future.delayed(const Duration(seconds: 1), () {
       if (!mounted) return;
       setState(() {
         _isRevealing = false;
@@ -307,10 +321,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _timer?.cancel();
 
     // Start safety-net timer: if the server doesn't deliver a round_result
-    // within 5 seconds, poll the state endpoint to catch up.
+    // within 3 seconds, poll the state endpoint to catch up.
     _waitingTimeout?.cancel();
     _pollRetries = 0;
-    _waitingTimeout = Timer(const Duration(seconds: 5), () {
+    _waitingTimeout = Timer(const Duration(seconds: 3), () {
       if (!mounted || !_isWaitingForServer) return;
       _pollRoundState();
     });
@@ -346,7 +360,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   /// current round has been resolved (maybe the WS event was missed).
   /// Retries up to [maxRetries] times if the round is still pending.
   int _pollRetries = 0;
-  static const int _maxPollRetries = 3;
+  static const int _maxPollRetries = 5;
 
   Future<void> _pollRoundState() async {
     _pollRetries++;
@@ -392,7 +406,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
       // Round still pending — retry if we haven't exhausted retries.
       if (_pollRetries < _maxPollRetries) {
-        _waitingTimeout = Timer(const Duration(seconds: 3), () {
+        _waitingTimeout = Timer(const Duration(seconds: 2), () {
           if (!mounted || !_isWaitingForServer) return;
           _pollRoundState();
         });
@@ -402,7 +416,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     } catch (_) {
       // Server unreachable — retry if we haven't exhausted retries.
       if (_pollRetries < _maxPollRetries) {
-        _waitingTimeout = Timer(const Duration(seconds: 3), () {
+        _waitingTimeout = Timer(const Duration(seconds: 2), () {
           if (!mounted || !_isWaitingForServer) return;
           _pollRoundState();
         });
