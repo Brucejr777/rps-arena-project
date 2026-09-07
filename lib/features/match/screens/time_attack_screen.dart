@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../core/services/audio_service.dart';
 import '../../../core/services/vibration_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -44,6 +46,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
   final Random _random = Random();
 
   _TaFlowStage _stage = _TaFlowStage.countdown;
+
   int _currentRound = 1;
   int _playerScore = 0;
   int _aiScore = 0;
@@ -91,6 +94,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _countdownValue--;
       if (mounted) setState(() {});
+
       if (_countdownValue < 0) {
         timer.cancel();
         _beginSelection();
@@ -100,6 +104,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
 
   void _beginSelection() {
     if (!mounted) return;
+
     setState(() => _stage = _TaFlowStage.playerMove);
 
     _selectionTimer?.cancel();
@@ -174,6 +179,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
 
   void _advanceAfterReveal() {
     if (!mounted) return;
+
     if (_currentRound >= _totalRounds) {
       _endGame();
     } else {
@@ -254,57 +260,18 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
         );
 
       case _TaFlowStage.playerMove:
-        return Stack(
-          children: [
-            LocalPlayerMoveScreen(
-              playerNumber: 1,
-              onMoveSelected: _onPlayerMove,
-              modeLabel: _modeLabel,
-              roundNumber: _currentRound,
-              showRoundLabel: true,
-              showBackButton: false,
-            ),
-            // Timer overlay
-            Positioned(
-              top: 120,
-              left: 0,
-              right: 0,
-              child: Center(child: _buildTimerDisplay()),
-            ),
-            // Exit button overlay
-            Positioned(
-              top: 16,
-              left: 16,
-              child: SafeArea(
-                child: GestureDetector(
-                  onTap: () => Navigator.of(context).maybePop(),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        width: 1.5,
-                        color: AppColors.blue,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.blue.withValues(alpha: 0.35),
-                          blurRadius: 10,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.arrow_back,
-                      color: Colors.white70,
-                      size: 20,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+        // ── FIX: Timer is passed as centerWidget so it sits in the
+        // flexible space between text and gesture cards — no overlap.
+        // Exit button uses showBackButton: true (built-in) instead of
+        // a separate Positioned overlay with SafeArea inside.
+        return LocalPlayerMoveScreen(
+          playerNumber: 1,
+          onMoveSelected: _onPlayerMove,
+          modeLabel: _modeLabel,
+          roundNumber: _currentRound,
+          showRoundLabel: true,
+          showBackButton: true,
+          centerWidget: _buildTimerDisplay(),
         );
 
       case _TaFlowStage.aiThinking:
@@ -497,6 +464,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
 
   Widget _buildTimerDisplay() {
     final isWarning = _timeRemaining <= 1;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       decoration: BoxDecoration(

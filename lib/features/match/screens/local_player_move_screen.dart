@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/game_theme_controller.dart';
 import '../../../core/services/audio_service.dart';
@@ -26,25 +25,18 @@ class LocalPlayerMoveScreen extends ConsumerStatefulWidget {
   final String? modeLabel;
 
   /// When true, displays ROUND X above the player title.
-  ///
-  /// This is used by single-player mode, where the round label was previously
-  /// drawn as a floating overlay and could overlap the PLAYER 1 text.
   final bool showRoundLabel;
 
   /// Optional END MATCH action.
-  ///
-  /// Used by Unlimited single-player matches so the control is part of the
-  /// normal top layout instead of a floating overlay.
   final VoidCallback? onEndMatch;
 
-  /// FIX:
   /// Controls whether this screen draws its own back button.
-  ///
-  /// In Single Player mode this can remain true.
-  /// In Local 2 Players mode, LocalMatchFlowScreen already provides a
-  /// centralized exit button, so this should be false to avoid duplicate
-  /// back buttons.
   final bool showBackButton;
+
+  /// Optional widget displayed in the flexible space between the
+  /// text content and the gesture cards. Used by Time Attack to
+  /// embed the countdown timer without overlapping other elements.
+  final Widget? centerWidget;
 
   const LocalPlayerMoveScreen({
     super.key,
@@ -59,6 +51,7 @@ class LocalPlayerMoveScreen extends ConsumerStatefulWidget {
     this.showRoundLabel = false,
     this.onEndMatch,
     this.showBackButton = true,
+    this.centerWidget,
   });
 
   @override
@@ -71,14 +64,9 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
 
   void _select(String move) {
     if (_selectedMove != null) return;
-
-    // Link the select mp3 to the gesture selection.
     AudioService.instance.playSelect();
-
     setState(() => _selectedMove = move);
 
-    // Brief pause so the lock/scale animation and hand image are
-    // actually visible before advancing to the next stage.
     Future.delayed(const Duration(milliseconds: 600), () {
       if (mounted) widget.onMoveSelected(move);
     });
@@ -164,9 +152,7 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 10),
-
             Container(
               width: 40,
               height: 2,
@@ -175,9 +161,7 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                 borderRadius: BorderRadius.circular(1),
               ),
             ),
-
             const SizedBox(height: 10),
-
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
@@ -194,7 +178,15 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
               ),
             ),
 
-            const Spacer(),
+            // ── Center widget slot (timer, etc.) ───────────────────
+            // Replaces the previous hard-coded Spacer so callers can
+            // inject content without resorting to Positioned overlays.
+            if (widget.centerWidget != null)
+              Expanded(
+                child: Center(child: widget.centerWidget!),
+              )
+            else
+              const Spacer(),
 
             // ── Gesture cards ─────────────────────────────────────
             Padding(
@@ -260,7 +252,6 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                 ],
               ),
             ),
-
             const SizedBox(height: 40),
 
             // ── Bottom frame indicator ─────────────────────────────
@@ -288,11 +279,6 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
-          // FIX:
-          // Only draw the internal back button when showBackButton is true.
-          //
-          // In Local 2 Players mode, LocalMatchFlowScreen provides the
-          // centralized exit button, so this internal button must be hidden.
           if (widget.showBackButton)
             GestureDetector(
               onTap: () => Navigator.of(context).maybePop(),
