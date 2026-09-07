@@ -2751,6 +2751,8 @@ const { createRankedRouter } = require('./routes/ranked');
 const { createMatchesRouter } = require('./routes/matches');
 const { createLeaderboardRouter } = require('./routes/leaderboard');
 const { disconnectManager } = require('./lib/disconnect_manager');
+const { matchQueue } = require('./lib/match_queue');
+const { readyUpManager } = require('./lib/ready_up_manager');
 
 const app = express();
 app.use(cors());
@@ -2879,6 +2881,23 @@ const matchConnections = new Map();
 // Register match routes with wss and matchConnections for targeted delivery
 app.use('/matches', createMatchesRouter(pool, wss, matchConnections));
 
+// Ready-up timeout: notify both players when match is cancelled
+readyUpManager.onCancelled((matchId) => {
+  console.log(`Ready-up timeout for match ${matchId} — notifying players`);
+  const conns = matchConnections.get(matchId);
+  if (conns) {
+    for (const [, client] of conns) {
+      if (client.readyState === 1) {
+        client.send(JSON.stringify({
+          type: 'match_cancelled',
+          matchId,
+          reason: 'opponent_not_ready',
+        }));
+      }
+    }
+  }
+});
+
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {
   // Extract matchId from URL: /matches/{matchId}/events?playerId=X
@@ -2955,6 +2974,31 @@ wss.on('connection', (ws, req) => {
       }
     } else {
       console.log(`Player ${playerId} close ignored — newer connection exists in match ${matchId}`);
+    }
+
+    // Remove from Quick Match queue (ghost-entry cleanup)
+    matchQueue.removeByPlayerId(playerId);
+
+    // If player was in a pending ready-up, cancel and notify opponent
+    const pending = readyUpManager.getPendingMatch(playerId);
+    if (pending) {
+      const opponentId = pending.playerA.playerId === playerId
+        ? pending.playerB.playerId
+        : pending.playerA.playerId;
+      readyUpManager.cancelPlayer(pending.matchId, playerId);
+
+      // Notify opponent via WS if still connected
+      const pendingConns = matchConnections.get(pending.matchId);
+      if (pendingConns) {
+        const oppWs = pendingConns.get(opponentId);
+        if (oppWs && oppWs.readyState === 1) {
+          oppWs.send(JSON.stringify({
+            type: 'match_cancelled',
+            matchId: pending.matchId,
+            reason: 'opponent_disconnected',
+          }));
+        }
+      }
     }
 
     // Start 30s disconnect window if match is active
@@ -3404,6 +3448,14 @@ class MatchQueue {
    * Returns true if the player was found and removed.
    */
   cancel(playerId) {
+    return this.removeByPlayerId(playerId);
+  }
+
+  /**
+   * Remove a player from every format queue (idempotent).
+   * Returns true if the player was found in any queue.
+   */
+  removeByPlayerId(playerId) {
     for (const [key, queue] of this._queues) {
       const index = queue.findIndex((e) => e.playerId === playerId);
       if (index !== -1) {
@@ -3701,7 +3753,7 @@ FILE: backend/lib/ready_up_manager.js
  *   3. If either fails to confirm → match cancelled.
  */
 
-const READY_TIMEOUT_MS = 15_000;
+const READY_TIMEOUT_MS = 20_000;
 
 /**
  * @typedef {{ matchId: number, playerA: {playerId, username, rating}, playerB: {playerId, username, rating}, readyPlayers: Set<number>, timer: NodeJS.Timeout, formatType: string, winsRequired: number }} PendingMatch
@@ -4779,10 +4831,15 @@ function createMatchesRouter(pool, wss, matchConnections) {
         }
       }
 
+      // Fetch auto-move flags so the client can show AUTO tags during reveal
+      const autoFlags = await pool.query(
+        'SELECT player_a_auto, player_b_auto FROM round WHERE id = $1',
+        [roundId]
+      );
+
       // Build WebSocket event payload
       const eventPayload = {
-        type: 'round_result',
-        matchId: parseInt(matchId),
+        type: 'round_result', matchId: parseInt(matchId),
         roundNumber: currentRound,
         playerAMove: round.player_a_move,
         playerBMove: round.player_b_move,
@@ -4793,6 +4850,8 @@ function createMatchesRouter(pool, wss, matchConnections) {
         totalRounds: newTotalRounds,
         matchFinished,
         winnerId: matchWinner,
+        playerAAuto: autoFlags.rows[0]?.player_a_auto ?? false,
+        playerBAuto: autoFlags.rows[0]?.player_b_auto ?? false,
       };
 
       // Broadcast to match participants via WebSocket
@@ -5403,8 +5462,7 @@ function createMatchesRouter(pool, wss, matchConnections) {
 
       // Broadcast via WebSocket
       broadcastToMatch(matchId, {
-        type: 'round_result',
-        matchId,
+        type: 'round_result', matchId,
         roundNumber,
         playerAMove: r.player_a_move,
         playerBMove: r.player_b_move,
@@ -5416,6 +5474,8 @@ function createMatchesRouter(pool, wss, matchConnections) {
         matchFinished,
         winnerId: matchWinner,
         autoMove: true,
+        playerAAuto: isPlayerA,
+        playerBAuto: !isPlayerA,
       });
 
       if (!matchFinished) {
@@ -5486,6 +5546,9 @@ function createQuickMatchRouter(pool) {
       );
       const rating = ratingResult.rows.length > 0 ? ratingResult.rows[0].rating : 1000;
 
+      // Idempotent join: remove any stale queue entry first (F8)
+      matchQueue.removeByPlayerId(playerId);
+
       // Try to match
       const match = matchQueue.join({
         playerId,
@@ -5554,6 +5617,18 @@ function createQuickMatchRouter(pool) {
         status: 'searching',
         formatType: entry.formatType,
         winsRequired: entry.winsRequired,
+      });
+    }
+
+    // Check if player is in a pending ready-up (matched but not confirmed)
+    const pending = readyUpManager.getPendingMatch(playerId);
+    if (pending) {
+      return res.json({
+        status: 'ready_up',
+        matchId: pending.matchId,
+        opponentName: pending.playerA.playerId === playerId
+          ? pending.playerB.username
+          : pending.playerA.username,
       });
     }
 
@@ -6264,17 +6339,18 @@ final GoRouter appRouter = GoRouter(
         final args = state.extra as Map<String, dynamic>? ?? {};
         final matchId = args['matchId'] as int?;
         return OpponentFoundScreen(
+          matchId: matchId ?? 0,
           opponentName: args['opponentName'] as String? ?? 'Unknown',
           opponentRating: args['opponentRating'] as int? ?? 1000,
-          onReady: () async {
+          onReady: () {
             if (matchId == null) return;
-            try {
-              await AuthClient().post('/quick-match/ready', data: {'matchId': matchId});
-            } catch (_) {
-              // Ready-up failed; countdown will expire and route to /main.
-            }
+            context.push('/online-gameplay', extra: {
+              'matchId': matchId,
+              'playerName': null,
+              'opponentName': args['opponentName'] as String?,
+            });
           },
-          onCancel: () => context.go('/main'),
+          onCancel: () => context.go('/quick-match-setup'),
         );
       },
     ),
@@ -6667,6 +6743,7 @@ enum SocketEventType {
   rematchRequested,
   rematchAccepted,
   rematchDeclined,
+  matchCancelled,
 }
 
 /// Parsed socket event with type and data payload.
@@ -6794,6 +6871,8 @@ class MatchSocketClient {
         return SocketEventType.rematchAccepted;
       case 'rematch_declined':
         return SocketEventType.rematchDeclined;
+      case 'match_cancelled':
+        return SocketEventType.matchCancelled;
       default:
         return null;
     }
@@ -13975,6 +14054,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   int _selectionTimer = 10;
   Timer? _timer;
   String? _selectedMove;
+  bool _isAutoMove = false;
   bool _isWaitingForServer = false;
   bool _isRevealing = false;
   bool _isPaused = false;
@@ -13988,6 +14068,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   // Server-revealed data
   String? _serverPlayerAMove;
   String? _serverPlayerBMove;
+  bool _serverPlayerAAuto = false;
+  bool _serverPlayerBAuto = false;
 
   // Guards against handling the same round_result twice (once from the
   // POST response, once from the WebSocket broadcast).
@@ -14122,6 +14204,23 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           _showRematchRequest = false;
         });
         break;
+      case SocketEventType.matchCancelled:
+        _rematchCountdown?.cancel();
+        _rematchPollTimer?.cancel();
+        setState(() {
+          _isRematchWaiting = false;
+          _showRematchRequest = false;
+          _showResult = false;
+        });
+        if (mounted) {
+          final reason = event.data['reason'] as String? ?? 'unknown';
+          final msg = reason == 'opponent_not_ready'
+              ? 'Opponent did not confirm the match.'
+              : 'Match cancelled.';
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+          GoRouter.of(context).go('/quick-match-setup');
+        }
+        break;
       default:
         break;
     }
@@ -14166,6 +14265,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _isRevealing = true;
       _serverPlayerAMove = playerAMove;
       _serverPlayerBMove = playerBMove;
+      _serverPlayerAAuto = data['playerAAuto'] as bool? ?? false;
+      _serverPlayerBAuto = data['playerBAuto'] as bool? ?? false;
       _playerScore = _isPlayerA ? playerAScore : playerBScore;
       _opponentScore = _isPlayerA ? playerBScore : playerAScore;
       _drawCount = drawCount;
@@ -14178,6 +14279,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         _isRevealing = false;
         _serverPlayerAMove = null;
         _serverPlayerBMove = null;
+        _serverPlayerAAuto = false;
+        _serverPlayerBAuto = false;
       });
 
       if (matchFinished) {
@@ -14224,6 +14327,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _pollRetries = 0;
     setState(() {
       _selectedMove = null;
+      _isAutoMove = false;
       _selectionTimer = 10;
       _isWaitingForServer = false;
       _roundResolved = false;
@@ -14237,7 +14341,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         timer.cancel();
         if (_selectedMove == null) {
           final moves = ['rock', 'paper', 'scissors'];
-          setState(() => _selectedMove = moves[DateTime.now().millisecond % 3]);
+          setState(() {
+            _selectedMove = moves[DateTime.now().millisecond % 3];
+            _isAutoMove = true;
+          });
         }
         _submitMove();
       } else {
@@ -14251,6 +14358,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     setState(() {
       _hasPicked = true;
       _selectedMove = move;
+      _isAutoMove = false;
     });
     _submitMove();
   }
@@ -14482,8 +14590,25 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/request');
       _startRematchPolling();
+      // F5: 30-second timeout for rematch request
+      _rematchCountdown?.cancel();
+      int remaining = 30;
+      _rematchCountdown = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) { timer.cancel(); return; }
+        remaining--;
+        if (remaining <= 0) {
+          timer.cancel();
+          _rematchPollTimer?.cancel();
+          setState(() => _isRematchWaiting = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Rematch request timed out.')),
+            );
+          }
+        }
+      });
     } catch (e) {
-      debugPrint('[Rematch] Request failed: $e');
+
       if (!mounted) return;
       final serverMsg = (e is DioException && e.response?.data is Map<String, dynamic>)
           ? (e.response!.data as Map<String, dynamic>)['error'] as String?
@@ -14497,7 +14622,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   void _acceptRematch() async {
-    debugPrint('[Rematch] Accept tapped');
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
     try {
@@ -14510,14 +14634,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           const SnackBar(content: Text('Rematch accepted, but no match id returned.')));
         return;
       }
-      debugPrint('[Rematch] navigating to new match $newMatchId');
       GoRouter.of(context).pushReplacement('/online-gameplay', extra: {
         'matchId': newMatchId,
         'playerName': widget.playerName,
         'opponentName': widget.opponentName,
       });
     } catch (e) {
-      debugPrint('[Rematch] Accept failed: $e');
       if (!mounted) return;
       final serverMsg = (e is DioException && e.response?.data is Map<String, dynamic>)
           ? (e.response!.data as Map<String, dynamic>)['error'] as String?
@@ -14542,18 +14664,16 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     });
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/decline');
-    } catch (e) {
-      debugPrint('[Rematch] Decline failed: $e');
+    } catch (_) {
+      // Decline failed — best-effort
     }
   }
 
   void _handleRematchAccepted(Map<String, dynamic> data) {
-    debugPrint('[Rematch] socket rematch_accepted: $data');
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
     final newMatchId = (data['newMatchId'] as num?)?.toInt();
     if (!mounted || newMatchId == null) return;
-    debugPrint('[Rematch] navigating to new match $newMatchId');
     GoRouter.of(context).pushReplacement('/online-gameplay', extra: {
       'matchId': newMatchId,
       'playerName': widget.playerName,
@@ -14595,7 +14715,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         if (status == 'accepted' && newMatchId != null) {
           _rematchPollTimer?.cancel();
           if (!mounted) return;
-          debugPrint('[Rematch] poll accepted → navigating to new match $newMatchId');
           GoRouter.of(context).pushReplacement('/online-gameplay', extra: {
             'matchId': newMatchId,
             'playerName': widget.playerName,
@@ -14744,12 +14863,37 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                         handAssetFor: themeController.handAssetFor,
                         playerALabel: widget.playerName,
                         playerBLabel: widget.opponentName,
+                        playerAAuto: _isPlayerA ? _serverPlayerAAuto : _serverPlayerBAuto,
+                        playerBAuto: _isPlayerA ? _serverPlayerBAuto : _serverPlayerAAuto,
                       )
                     else
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          _handImage(_selectedMove, isPlayer: true),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _handImage(_selectedMove, isPlayer: true),
+                              if (_isAutoMove)
+                                Container(
+                                  margin: const EdgeInsets.only(top: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.orange.withValues(alpha: 0.3),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'AUTO',
+                                    style: TextStyle(
+                                      color: AppColors.orange,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                           Text(
                             'VS',
                             style: TextStyle(
@@ -15196,6 +15340,8 @@ class RevealAnimation extends ConsumerStatefulWidget  {
   final String Function(String move) handAssetFor;
   final String playerALabel;
   final String playerBLabel;
+  final bool playerAAuto;
+  final bool playerBAuto;
 
 
   const RevealAnimation({
@@ -15205,6 +15351,8 @@ class RevealAnimation extends ConsumerStatefulWidget  {
     required this.handAssetFor,
     this.playerALabel = 'PLAYER 1',
     this.playerBLabel = 'PLAYER 2',
+    this.playerAAuto = false,
+    this.playerBAuto = false,
   });
 
   @override
@@ -15240,7 +15388,7 @@ class _RevealAnimationState extends ConsumerState<RevealAnimation>
     super.dispose();
   }
 
-  Widget _hand(String move, {required bool fromLeft, required String label}) {
+  Widget _hand(String move, {required bool fromLeft, required String label, required bool isAuto}) {
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -15277,6 +15425,24 @@ class _RevealAnimationState extends ConsumerState<RevealAnimation>
             padding: const EdgeInsets.all(12),
             child: Image.asset(widget.handAssetFor(move), fit: BoxFit.contain),
           ),
+          if (isAuto)
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.orange.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                'AUTO',
+                style: TextStyle(
+                  color: AppColors.orange,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -15287,7 +15453,7 @@ class _RevealAnimationState extends ConsumerState<RevealAnimation>
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _hand(widget.playerAMove, fromLeft: true, label: widget.playerALabel),
+        _hand(widget.playerAMove, fromLeft: true, label: widget.playerALabel, isAuto: widget.playerAAuto),
         Text(
           'VS',
           style: TextStyle(
@@ -15296,7 +15462,7 @@ class _RevealAnimationState extends ConsumerState<RevealAnimation>
             fontSize: 18,
           ),
         ),
-        _hand(widget.playerBMove, fromLeft: false, label: widget.playerBLabel),
+        _hand(widget.playerBMove, fromLeft: false, label: widget.playerBLabel, isAuto: widget.playerBAuto),
       ],
     );
   }
@@ -17905,15 +18071,18 @@ class _OnlineStatsScreenState extends ConsumerState<OnlineStatsScreen> {
 FILE: lib/features/online/screens/opponent_found_screen.dart
 ================================================================================
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
 
 /// Opponent found screen (T90).
 ///
 /// Shows after a Quick Match pairing. Displays opponent info, a READY button,
-/// and a 15-second countdown. If either player fails to confirm, the match
+/// and a 20-second countdown. If either player fails to confirm, the match
 /// is cancelled.
 class OpponentFoundScreen extends StatefulWidget {
+  final int matchId;
   final String opponentName;
   final int opponentRating;
   final VoidCallback onReady;
@@ -17921,6 +18090,7 @@ class OpponentFoundScreen extends StatefulWidget {
 
   const OpponentFoundScreen({
     super.key,
+    required this.matchId,
     required this.opponentName,
     required this.opponentRating,
     required this.onReady,
@@ -17932,20 +18102,26 @@ class OpponentFoundScreen extends StatefulWidget {
 }
 
 class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
-  static const int _countdownDuration = 15;
+  static const int _countdownDuration = 20;
   int _secondsRemaining = _countdownDuration;
   bool _isReady = false;
+  bool _readyFailed = false;
   Timer? _timer;
+  Timer? _pollTimer;
+  late final AuthClient _authClient;
 
   @override
   void initState() {
     super.initState();
+    _authClient = AuthClient();
     _startCountdown();
+    _startPolling();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _pollTimer?.cancel();
     super.dispose();
   }
 
@@ -17960,10 +18136,71 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
     });
   }
 
-  void _onReadyPressed() {
+  void _startPolling() {
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      if (!mounted) return;
+      try {
+        final res = await _authClient.get('/quick-match/status');
+        if (!mounted) return;
+        final data = res.data as Map<String, dynamic>;
+        final status = data['status'] as String?;
+
+        if (status == 'idle') {
+          // Match was cancelled (ready-up timeout or opponent left)
+          _timer?.cancel();
+          _pollTimer?.cancel();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Match cancelled — opponent did not confirm.')),
+            );
+            widget.onCancel();
+          }
+        }
+      } catch (_) {
+        // Polling failed — will retry
+      }
+    });
+  }
+
+  Future<void> _onReadyPressed() async {
     _timer?.cancel();
-    setState(() => _isReady = true);
-    widget.onReady();
+    setState(() { _isReady = true; _readyFailed = false; });
+
+    try {
+      final res = await _authClient.post(
+        '/quick-match/ready',
+        data: {'matchId': widget.matchId},
+      );
+      if (!mounted) return;
+      final data = res.data as Map<String, dynamic>;
+      final status = data['status'] as String?;
+
+      if (status == 'confirmed') {
+        // Both players ready — navigate to match
+        _pollTimer?.cancel();
+        widget.onReady();
+      }
+      // If 'waiting', keep showing "WAITING FOR OPPONENT..."
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final msg = (e.response?.data is Map<String, dynamic>)
+          ? (e.response!.data as Map<String, dynamic>)['error'] as String?
+          : null;
+      setState(() { _isReady = false; _readyFailed = true; });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(msg ?? 'Ready-up failed. Please try again.'),
+        ));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() { _isReady = false; _readyFailed = true; });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ready-up failed. Please try again.')),
+        );
+      }
+    }
   }
 
   String get _countdownText {
@@ -19727,7 +19964,12 @@ class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _cancelQueue();
+      },
+      child: Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
@@ -19859,6 +20101,7 @@ class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -20026,12 +20269,17 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _cancelQueue();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
             children: [
               // ── Header ──────────────────────────────────────────
               Padding(
@@ -20153,6 +20401,7 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
           ),
         ),
       ),
+    ),
     );
   }
 

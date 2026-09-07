@@ -1,14 +1,27 @@
 import 'dart:async';
+import 'dart:ui' show FontFeature;
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
 
-/// Opponent found screen (T90).
+/// Opponent found screen (T89/T90).
 ///
 /// Shows after a Quick Match pairing. Displays opponent info, a READY button,
-/// and a 20-second countdown. If either player fails to confirm, the match
+/// and a 15-second countdown. If either player fails to confirm, the match
 /// is cancelled.
+///
+/// Corrected behavior:
+/// - Countdown is 15 seconds, matching T89/T90.
+/// - The first player who presses READY and receives "waiting" is now able
+///   to detect when the second player also confirms via polling.
+/// - Polling handles:
+///   - ready_up  -> stay on this screen
+///   - confirmed -> both players ready, proceed to match
+///   - idle      -> match cancelled
+/// - READY failures no longer permanently cancel the countdown.
 class OpponentFoundScreen extends StatefulWidget {
   final int matchId;
   final String opponentName;
@@ -30,18 +43,28 @@ class OpponentFoundScreen extends StatefulWidget {
 }
 
 class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
-  static const int _countdownDuration = 20;
+  static const int _countdownDuration = 15;
+
   int _secondsRemaining = _countdownDuration;
+
   bool _isReady = false;
-  bool _readyFailed = false;
+  bool _isSubmitting = false;
+  bool _isPolling = false;
+  bool _hasNavigated = false;
+  bool _isCancelled = false;
+
+  String? _errorMessage;
+
   Timer? _timer;
   Timer? _pollTimer;
+
   late final AuthClient _authClient;
 
   @override
   void initState() {
     super.initState();
     _authClient = AuthClient();
+
     _startCountdown();
     _startPolling();
   }
@@ -54,10 +77,19 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
   }
 
   void _startCountdown() {
+    _timer?.cancel();
+
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _hasNavigated || _isCancelled) {
+        timer.cancel();
+        return;
+      }
+
       if (_secondsRemaining <= 1) {
         timer.cancel();
-        widget.onCancel(); // Time's up — match cancelled
+        _handleCancelled(
+          'Match cancelled — ready period expired.',
+        );
       } else {
         setState(() => _secondsRemaining--);
       }
@@ -65,75 +97,150 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
   }
 
   void _startPolling() {
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      if (!mounted) return;
+    _pollTimer?.cancel();
+
+    _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      if (!mounted || _hasNavigated || _isCancelled || _isPolling) {
+        return;
+      }
+
+      _isPolling = true;
+
       try {
         final res = await _authClient.get('/quick-match/status');
-        if (!mounted) return;
+
+        if (!mounted || _hasNavigated || _isCancelled) {
+          return;
+        }
+
         final data = res.data as Map<String, dynamic>;
         final status = data['status'] as String?;
 
-        if (status == 'idle') {
-          // Match was cancelled (ready-up timeout or opponent left)
-          _timer?.cancel();
-          _pollTimer?.cancel();
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Match cancelled — opponent did not confirm.')),
-            );
-            widget.onCancel();
-          }
+        if (status == 'confirmed') {
+          _proceedToMatch();
+        } else if (status == 'idle') {
+          _handleCancelled(
+            'Match cancelled — opponent did not confirm.',
+          );
         }
       } catch (_) {
-        // Polling failed — will retry
+        // Polling failed — retry on next tick.
+      } finally {
+        _isPolling = false;
       }
     });
   }
 
-  Future<void> _onReadyPressed() async {
+  void _proceedToMatch() {
+    if (_hasNavigated || _isCancelled) return;
+
+    _hasNavigated = true;
     _timer?.cancel();
-    setState(() { _isReady = true; _readyFailed = false; });
+    _pollTimer?.cancel();
+
+    if (mounted) {
+      widget.onReady();
+    }
+  }
+
+  void _handleCancelled(String message) {
+    if (_hasNavigated || _isCancelled) return;
+
+    _isCancelled = true;
+    _timer?.cancel();
+    _pollTimer?.cancel();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+
+      widget.onCancel();
+    }
+  }
+
+  Future<void> _onClosePressed() async {
+    if (_hasNavigated || _isCancelled) return;
+
+    _isCancelled = true;
+    _timer?.cancel();
+    _pollTimer?.cancel();
+
+    try {
+      await _authClient.delete('/quick-match/cancel');
+    } catch (_) {
+      // Best-effort cancel.
+    }
+
+    if (mounted) {
+      widget.onCancel();
+    }
+  }
+
+  Future<void> _onReadyPressed() async {
+    if (_isSubmitting || _isReady || _hasNavigated || _isCancelled) {
+      return;
+    }
+
+    if (widget.matchId <= 0) {
+      setState(() {
+        _errorMessage = 'Invalid match.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
 
     try {
       final res = await _authClient.post(
         '/quick-match/ready',
         data: {'matchId': widget.matchId},
       );
-      if (!mounted) return;
+
+      if (!mounted || _hasNavigated || _isCancelled) return;
+
       final data = res.data as Map<String, dynamic>;
       final status = data['status'] as String?;
 
-      if (status == 'confirmed') {
-        // Both players ready — navigate to match
-        _pollTimer?.cancel();
-        widget.onReady();
+      if (status == 'confirmed' || status == 'already_confirmed') {
+        _proceedToMatch();
+        return;
       }
-      // If 'waiting', keep showing "WAITING FOR OPPONENT..."
+
+      // Status is "waiting": this player is ready, but the opponent
+      // has not confirmed yet. Keep the countdown running and poll.
+      setState(() {
+        _isReady = true;
+        _isSubmitting = false;
+      });
     } on DioException catch (e) {
-      if (!mounted) return;
+      if (!mounted || _isCancelled) return;
+
       final msg = (e.response?.data is Map<String, dynamic>)
           ? (e.response!.data as Map<String, dynamic>)['error'] as String?
           : null;
-      setState(() { _isReady = false; _readyFailed = true; });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(msg ?? 'Ready-up failed. Please try again.'),
-        ));
-      }
+
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = msg ?? 'Ready-up failed. Please try again.';
+      });
     } catch (_) {
-      if (!mounted) return;
-      setState(() { _isReady = false; _readyFailed = true; });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ready-up failed. Please try again.')),
-        );
-      }
+      if (!mounted || _isCancelled) return;
+
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = 'Ready-up failed. Please try again.';
+      });
     }
   }
 
   String get _countdownText {
     final minutes = _secondsRemaining ~/ 60;
     final seconds = _secondsRemaining % 60;
+
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
@@ -154,12 +261,13 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
             children: [
               // ── Header ──────────────────────────────────────────
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
                   children: [
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: widget.onCancel,
+                      onPressed: _onClosePressed,
                     ),
                     const Expanded(
                       child: Text(
@@ -177,6 +285,7 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
                   ],
                 ),
               ),
+
               const Spacer(),
 
               // ── Opponent info card ──────────────────────────────
@@ -224,6 +333,7 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
                   ],
                 ),
               ),
+
               const SizedBox(height: 32),
 
               // ── Countdown ───────────────────────────────────────
@@ -244,29 +354,59 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
 
               const Spacer(),
 
+              // ── Error message ───────────────────────────────────
+              if (_errorMessage != null) ...[
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(
+                    color: AppColors.red,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+              ],
+
               // ── Ready / Waiting status ──────────────────────────
               if (_isReady)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.green.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Text(
-                    'WAITING FOR OPPONENT...',
-                    style: TextStyle(
-                      color: AppColors.green,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.green.withValues(alpha: 0.8),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'WAITING FOR OPPONENT...',
+                        style: TextStyle(
+                          color: AppColors.green,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ],
                   ),
                 )
               else
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _onReadyPressed,
+                    onPressed: _isSubmitting ? null : _onReadyPressed,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.green,
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -274,15 +414,24 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: const Text(
-                      'READY',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                        fontSize: 16,
-                      ),
-                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'READY',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                              fontSize: 16,
+                            ),
+                          ),
                   ),
                 ),
             ],

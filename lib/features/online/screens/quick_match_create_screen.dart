@@ -1,7 +1,9 @@
 import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
 
@@ -27,38 +29,25 @@ class QuickMatchCreateScreen extends StatefulWidget {
   State<QuickMatchCreateScreen> createState() => _QuickMatchCreateScreenState();
 }
 
-class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
+class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen> {
   late final AuthClient _authClient;
   Timer? _pollTimer;
-  bool _joining = false;
-  String? _error;
+  bool _isCancelling = false;
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-    _pulseAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
     _authClient = AuthClient();
     _joinQueue();
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
     _pollTimer?.cancel();
     super.dispose();
   }
 
   Future<void> _joinQueue() async {
-    setState(() { _joining = true; _error = null; });
     try {
       final res = await _authClient.post(
         '/quick-match/join',
@@ -67,7 +56,9 @@ class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
           'winsRequired': widget.winsRequired,
         },
       );
+
       if (!mounted) return;
+
       final data = res.data as Map<String, dynamic>;
       final status = data['status'] as String?;
 
@@ -76,48 +67,64 @@ class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
         return;
       }
 
-      // Enqueued — start polling for match
-      setState(() => _joining = false);
+      // If searching, start polling.
       _startPolling();
-    } on DioException catch (e) {
+    } catch (e) {
       if (!mounted) return;
-      final msg = (e.response?.data is Map<String, dynamic>)
-          ? (e.response!.data as Map<String, dynamic>)['error'] as String?
-          : null;
-      setState(() { _error = msg ?? 'Failed to join queue.'; _joining = false; });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() { _error = 'Failed to join queue.'; _joining = false; });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to join queue: $e')),
+      );
+      widget.onCancel();
     }
   }
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
       if (!mounted) return;
+
       try {
         final res = await _authClient.get('/quick-match/status');
         if (!mounted) return;
+
         final data = res.data as Map<String, dynamic>;
         final status = data['status'] as String?;
 
-        if (status == 'idle') {
-          // Matched and removed from queue — the /join response already
-          // handled navigation. Stop polling.
+        if (status == 'ready_up' || status == 'confirmed') {
           _pollTimer?.cancel();
+          _navigateToOpponentFoundFromStatus(data);
           return;
         }
+
+        if (status == 'idle') {
+          _pollTimer?.cancel();
+
+          if (mounted && !_isCancelling) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Match search ended.'),
+              ),
+            );
+
+            widget.onCancel();
+          }
+        }
       } catch (_) {
-        // Polling failed — will retry on next tick
+        // Polling failed — retry on next tick.
       }
     });
   }
 
   void _navigateToOpponentFound(Map<String, dynamic> data) {
     _pollTimer?.cancel();
+
     final matchId = data['matchId'] as int?;
     final opponent = data['opponent'] as Map<String, dynamic>?;
+
     if (matchId == null || opponent == null) return;
+
+    if (!mounted) return;
 
     context.push('/opponent-found', extra: {
       'matchId': matchId,
@@ -126,147 +133,112 @@ class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
     });
   }
 
-  Future<void> _cancelQueue() async {
+  void _navigateToOpponentFoundFromStatus(Map<String, dynamic> data) {
+    final matchId = data['matchId'] as int?;
+    if (matchId == null) return;
+
+    final opponent = data['opponent'] as Map<String, dynamic>?;
+
+    final opponentName = opponent?['username'] as String? ??
+        data['opponentName'] as String? ??
+        'Unknown';
+
+    final opponentRating = opponent?['rating'] as int? ?? 1000;
+
+    if (!mounted) return;
+
+    context.push('/opponent-found', extra: {
+      'matchId': matchId,
+      'opponentName': opponentName,
+      'opponentRating': opponentRating,
+    });
+  }
+
+  Future<void> _cancelSearch() async {
+    if (_isCancelling) return;
+    setState(() {
+      _isCancelling = true;
+    });
+
     _pollTimer?.cancel();
+
     try {
       await _authClient.delete('/quick-match/cancel');
     } catch (_) {
-      // Best-effort cancel
+      // Ignore cancel errors.
     }
-    if (mounted) widget.onCancel();
+
+    if (!mounted) return;
+    
+    widget.onCancel();
   }
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _cancelQueue();
-      },
-      child: Scaffold(
+    return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+        child: Center(
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // ── Header ──────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: _cancelQueue,
-                    ),
-                    const Expanded(
-                      child: Text(
-                        'QUICK MATCH',
-                        style: TextStyle(
-                          color: AppColors.primaryText,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    const SizedBox(width: 48),
-                  ],
+              const Text(
+                'QUICK MATCH',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2.0,
                 ),
               ),
-              const Spacer(),
-
-              // ── Waiting indicator ─────────────────────────────
-              AnimatedBuilder(
-                animation: _pulseAnimation,
-                builder: (context, child) {
-                  return Opacity(
-                    opacity: _pulseAnimation.value,
-                    child: child,
-                  );
-                },
-                child: const SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 3,
-                    color: AppColors.defaultAccent,
-                  ),
+              const SizedBox(height: 12),
+              Text(
+                widget.formatLabel,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
                 ),
               ),
-              const SizedBox(height: 24),
-
-              // ── Status text ──────────────────────────────────
-              if (_error != null)
-                Text(
-                  _error!,
-                  style: const TextStyle(color: AppColors.red, fontSize: 14),
-                  textAlign: TextAlign.center,
-                )
-              else if (_joining)
-                const Text(
-                  'JOINING QUEUE...',
-                  style: TextStyle(
-                    color: AppColors.primaryText,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                  ),
-                )
-              else ...[
-                  const Text(
-                    'WAITING FOR OPPONENT...',
-                    style: TextStyle(
-                      color: AppColors.primaryText,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Your match will start when someone searches.',
-                    style: TextStyle(color: Colors.white54, fontSize: 13),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+              const SizedBox(height: 48),
+              const SizedBox(
+                width: 64,
+                height: 64,
+                child: CircularProgressIndicator(
+                  strokeWidth: 4,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                ),
+              ),
               const SizedBox(height: 32),
-
-              // ── Info cards ──────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    _infoRow('MATCH LENGTH', widget.formatLabel),
-                  ],
+              const Text(
+                'WAITING FOR OPPONENT...',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
                 ),
               ),
-
-              const Spacer(),
-
-              // ── Cancel button ───────────────────────────────────
+              const SizedBox(height: 48),
               SizedBox(
-                width: double.infinity,
+                width: 200,
                 child: OutlinedButton(
-                  onPressed: _cancelQueue,
+                  onPressed: _isCancelling ? null : _cancelSearch,
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.white38),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: const BorderSide(color: Colors.redAccent),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text(
-                    'CANCEL',
-                    style: TextStyle(
-                      color: Colors.white70,
+                  child: Text(
+                    _isCancelling ? 'CANCELLING...' : 'CANCEL',
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
+                      letterSpacing: 1.2,
                     ),
                   ),
                 ),
@@ -275,25 +247,6 @@ class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
           ),
         ),
       ),
-    ),
-    );
-  }
-
-  Widget _infoRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label,
-            style: const TextStyle(color: Colors.white54, fontSize: 13)),
-        Text(
-          value,
-          style: const TextStyle(
-            color: AppColors.primaryText,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
     );
   }
 }

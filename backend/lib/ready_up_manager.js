@@ -7,7 +7,7 @@
  *   3. If either fails to confirm → match cancelled.
  */
 
-const READY_TIMEOUT_MS = 20_000;
+const READY_TIMEOUT_MS = 15_000; // T89: ready period 15 seconds
 
 /**
  * @typedef {{ matchId: number, playerA: {playerId, username, rating}, playerB: {playerId, username, rating}, readyPlayers: Set<number>, timer: NodeJS.Timeout, formatType: string, winsRequired: number }} PendingMatch
@@ -142,5 +142,4 @@ class ReadyUpManager {
 }
 
 const readyUpManager = new ReadyUpManager();
-
 module.exports = { ReadyUpManager, readyUpManager, READY_TIMEOUT_MS };
