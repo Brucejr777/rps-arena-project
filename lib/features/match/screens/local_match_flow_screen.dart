@@ -44,6 +44,7 @@ class _LocalMatchFlowScreenState
     extends ConsumerState<LocalMatchFlowScreen> {
   late final MatchEngine _engine;
   final LocalStatsRepository _statsRepo = LocalStatsRepository();
+
   _LocalFlowStage _stage = _LocalFlowStage.countdown;
   Timer? _countdownTimer;
   bool _victoryAnimationsEnabled = true;
@@ -60,7 +61,8 @@ class _LocalMatchFlowScreenState
   Future<void> _loadVictoryAnimationSetting() async {
     final settings = await SettingsRepository().load();
     if (mounted) {
-      setState(() => _victoryAnimationsEnabled = settings.victoryAnimationsEnabled);
+      setState(
+          () => _victoryAnimationsEnabled = settings.victoryAnimationsEnabled);
     }
   }
 
@@ -79,7 +81,7 @@ class _LocalMatchFlowScreenState
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final finished = _engine.tickCountdown();
-      setState(() {}); // refresh countdown number on screen
+      setState(() {});
       if (finished) {
         timer.cancel();
         _engine.beginSelection();
@@ -106,12 +108,14 @@ class _LocalMatchFlowScreenState
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
+
     VibrationService.instance.reveal();
     setState(() => _stage = _LocalFlowStage.revealing);
 
     if (_engine.playerAMove != null) {
       _statsRepo.recordMoveSelection(_engine.playerAMove!);
     }
+
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
@@ -172,10 +176,8 @@ class _LocalMatchFlowScreenState
     }
   }
 
-  /// True only when this round's result would finish a standard match
-/// (i.e. the winning player has now reached winsRequired).
   bool get _isMatchWinningRound {
-    if (widget.format.isUnlimited) return false; // Unlimited never auto-finishes
+    if (widget.format.isUnlimited) return false;
     if (_engine.lastResult == RoundResult.playerAWin) {
       return widget.format.isMatchWon(_engine.playerAScore);
     }
@@ -216,220 +218,220 @@ class _LocalMatchFlowScreenState
   }
 
   Widget _buildStageContent() {
-      switch (_stage) {
-        case _LocalFlowStage.countdown:
-          return Scaffold(
-            backgroundColor: AppColors.background,
-            body: Center(
-              child: CountdownAnimation(
-                value: _engine.countdownValue,
-                theme: ref.watch(gameThemeProvider),
-              ),
+    switch (_stage) {
+      case _LocalFlowStage.countdown:
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Center(
+            child: CountdownAnimation(
+              value: _engine.countdownValue,
+              theme: ref.watch(gameThemeProvider),
             ),
-          );
+          ),
+        );
 
-        case _LocalFlowStage.playerOneMove:
-          return LocalPlayerMoveScreen(
-            playerNumber: 1,
-            onMoveSelected: _onPlayerOneMove,
-          );
+      case _LocalFlowStage.playerOneMove:
+        return LocalPlayerMoveScreen(
+          playerNumber: 1,
+          onMoveSelected: _onPlayerOneMove,
+        );
 
-        case _LocalFlowStage.passDevice:
-          return PassDeviceScreen(onReady: _onReady);
+      case _LocalFlowStage.passDevice:
+        return PassDeviceScreen(onReady: _onReady);
 
-        case _LocalFlowStage.playerTwoMove:
-          return LocalPlayerMoveScreen(
-            playerNumber: 2,
-            onMoveSelected: _onPlayerTwoMove,
-          );
+      case _LocalFlowStage.playerTwoMove:
+        return LocalPlayerMoveScreen(
+          playerNumber: 2,
+          onMoveSelected: _onPlayerTwoMove,
+        );
 
-        case _LocalFlowStage.revealing:
-          final themeController = ref.read(gameThemeProvider.notifier);
-          return Scaffold(
-            backgroundColor: AppColors.background,
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'BOTH PLAYERS READY',
-                    style: TextStyle(
-                      color: AppColors.primaryText,
+      case _LocalFlowStage.revealing:
+        final themeController = ref.read(gameThemeProvider.notifier);
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  'BOTH PLAYERS READY',
+                  style: TextStyle(
+                    color: AppColors.primaryText,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (_engine.playerAMove != null &&
+                    _engine.playerBMove != null)
+                  RevealAnimation(
+                    playerAMove: _engine.playerAMove!,
+                    playerBMove: _engine.playerBMove!,
+                    handAssetFor: themeController.handAssetFor,
+                  ),
+                const SizedBox(height: 24),
+                if (_isMatchWinningRound && _victoryAnimationsEnabled)
+                  FinalFinishAnimation(
+                    playerAMove: _engine.playerAMove!,
+                    playerBMove: _engine.playerBMove!,
+                    playerAWon:
+                        _engine.lastResult == RoundResult.playerAWin,
+                    theme: ref.watch(gameThemeProvider),
+                    handAssetFor: themeController.handAssetFor,
+                  )
+                else if (_isMatchWinningRound && !_victoryAnimationsEnabled)
+                  const SizedBox.shrink()
+                else if (_engine.lastResult == RoundResult.playerAWin ||
+                    _engine.lastResult == RoundResult.playerBWin)
+                  RoundVictoryAnimation(
+                    playerAMove: _engine.playerAMove!,
+                    playerBMove: _engine.playerBMove!,
+                    playerAWon:
+                        _engine.lastResult == RoundResult.playerAWin,
+                    playerALabel: 'PLAYER 1',
+                    playerBLabel: 'PLAYER 2',
+                    theme: ref.watch(gameThemeProvider),
+                    handAssetFor: themeController.handAssetFor,
+                  )
+                else if (_engine.lastResult == RoundResult.draw &&
+                    _engine.playerAMove != null &&
+                    _engine.playerBMove != null)
+                  DrawAnimation(
+                    playerAMove: _engine.playerAMove!,
+                    playerBMove: _engine.playerBMove!,
+                    theme: ref.watch(gameThemeProvider),
+                  )
+                else
+                  Text(
+                    _resultLabel(),
+                    style: const TextStyle(
+                      color: AppColors.defaultAccent,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  if (_engine.playerAMove != null && _engine.playerBMove != null)
-                    RevealAnimation(
-                      playerAMove: _engine.playerAMove!,
-                      playerBMove: _engine.playerBMove!,
-                      handAssetFor: themeController.handAssetFor,
-                    ),
-                  const SizedBox(height: 24),
-                  if (_isMatchWinningRound && _victoryAnimationsEnabled)
-                    FinalFinishAnimation(
-                      winningMove: _engine.lastResult == RoundResult.playerAWin
-                          ? _engine.playerAMove!
-                          : _engine.playerBMove!,
-                      losingMove: _engine.lastResult == RoundResult.playerAWin
-                          ? _engine.playerBMove!
-                          : _engine.playerAMove!,
-                      theme: ref.watch(gameThemeProvider),
-                      handAssetFor: themeController.handAssetFor,
-                    )
-                  else if (_isMatchWinningRound && !_victoryAnimationsEnabled)
-                    const SizedBox.shrink() // match result displays immediately, no animation
-                  else if (_engine.lastResult == RoundResult.playerAWin ||
-                      _engine.lastResult == RoundResult.playerBWin)
-                    RoundVictoryAnimation(
-                      winningMove: _engine.lastResult == RoundResult.playerAWin
-                          ? _engine.playerAMove!
-                          : _engine.playerBMove!,
-                      losingMove: _engine.lastResult == RoundResult.playerAWin
-                          ? _engine.playerBMove!
-                          : _engine.playerAMove!,
-                      theme: ref.watch(gameThemeProvider),
-                      handAssetFor: themeController.handAssetFor,
-                    )
-                  else if (_engine.lastResult == RoundResult.draw &&
-                      _engine.playerAMove != null && _engine.playerBMove != null)
-                    DrawAnimation(
-                      playerAMove: _engine.playerAMove!,
-                      playerBMove: _engine.playerBMove!,
-                      theme: ref.watch(gameThemeProvider),
-                    )
-                  else
-                    Text(
-                      _resultLabel(),
-                      style: const TextStyle(
-                        color: AppColors.defaultAccent,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                ],
-              ),
+              ],
             ),
-          );
+          ),
+        );
 
-        case _LocalFlowStage.roundComplete:
-          if (widget.format.isUnlimited) {
-            return UnlimitedResultScreen(
-              player1Wins: _engine.playerAScore,
-              player2Wins: _engine.playerBScore,
-              draws: _engine.drawCount,
-              totalRounds: _engine.totalRounds,
-              player1WinRate: _engine.playerAWinRate,
-              player2WinRate: _engine.playerBWinRate,
-              onPlayAgain: () => Navigator.of(context).maybePop(),
-              onMainMenu: () =>
-                  Navigator.of(context).popUntil((route) => route.isFirst),
-            );
-          }
-          final playerWon = _engine.matchWinner == 'A';
-          return StandardResultScreen(
-            playerWon: playerWon,
-            playerScore: _engine.playerAScore,
-            opponentScore: _engine.playerBScore,
+      case _LocalFlowStage.roundComplete:
+        if (widget.format.isUnlimited) {
+          return UnlimitedResultScreen(
+            player1Wins: _engine.playerAScore,
+            player2Wins: _engine.playerBScore,
+            draws: _engine.drawCount,
+            totalRounds: _engine.totalRounds,
+            player1WinRate: _engine.playerAWinRate,
+            player2WinRate: _engine.playerBWinRate,
             onPlayAgain: () => Navigator.of(context).maybePop(),
             onMainMenu: () =>
                 Navigator.of(context).popUntil((route) => route.isFirst),
           );
+        }
+        final playerWon = _engine.matchWinner == 'A';
+        return StandardResultScreen(
+          playerWon: playerWon,
+          playerScore: _engine.playerAScore,
+          opponentScore: _engine.playerBScore,
+          onPlayAgain: () => Navigator.of(context).maybePop(),
+          onMainMenu: () =>
+              Navigator.of(context).popUntil((route) => route.isFirst),
+        );
 
-        case _LocalFlowStage.finishing:
-          final themeController = ref.read(gameThemeProvider.notifier);
-          final winningMove =
-              _engine.matchWinner == 'A' ? _engine.playerAMove : _engine.playerBMove;
-          final losingMove =
-              _engine.matchWinner == 'A' ? _engine.playerBMove : _engine.playerAMove;
-          return Scaffold(
-            backgroundColor: AppColors.background,
-            body: Center(
-              child: (winningMove != null && losingMove != null)
-                  ? FinalFinishAnimation(
-                      winningMove: winningMove,
-                      losingMove: losingMove,
-                      theme: ref.watch(gameThemeProvider),
-                      handAssetFor: themeController.handAssetFor,
-                    )
-                  : const SizedBox.shrink(),
-            ),
-          );
-      }
-    }
-
-    String _resultLabel() {
-      switch (_engine.lastResult) {
-        case RoundResult.playerAWin:
-          return 'PLAYER 1 WINS THE ROUND';
-        case RoundResult.playerBWin:
-          return 'PLAYER 2 WINS THE ROUND';
-        case RoundResult.draw:
-          return 'DRAW — REPLAYING${widget.format.isUnlimited ? '' : ' ROUND'}';
-        case null:
-          return '';
-      }
-    }
-
-    void _onEndMatchPressed() {
-      showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('END MATCH?',
-              style: TextStyle(color: AppColors.primaryText)),
-          content: Text(
-            'Current Score: ${_engine.playerAScore} - ${_engine.playerBScore}',
-            style: const TextStyle(color: Colors.white70),
+      case _LocalFlowStage.finishing:
+        final themeController = ref.read(gameThemeProvider.notifier);
+        final playerAWon = _engine.matchWinner == 'A';
+        final pAMove = _engine.playerAMove;
+        final pBMove = _engine.playerBMove;
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Center(
+            child: (pAMove != null && pBMove != null)
+                ? FinalFinishAnimation(
+                    playerAMove: pAMove,
+                    playerBMove: pBMove,
+                    playerAWon: playerAWon,
+                    theme: ref.watch(gameThemeProvider),
+                    handAssetFor: themeController.handAssetFor,
+                  )
+                : const SizedBox.shrink(),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('CANCEL',
-                  style: TextStyle(color: Colors.white70)),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _countdownTimer?.cancel();
-                _engine.endUnlimitedMatch();
-                _statsRepo.recordUnlimitedMatchResult(winner: _engine.matchWinner);
-                _statsRepo.recordLocalMatch(
-                  opponentName: 'Player 2',
-                  mode: 'local',
-                  formatType: 'unlimited',
-                  result: _engine.matchWinner == 'A'
-                      ? 'win'
-                      : _engine.matchWinner == null
-                          ? 'draw'
-                          : 'loss',
-                );
-
-                if (_engine.matchWinner != null && _victoryAnimationsEnabled) {
-                  setState(() => _stage = _LocalFlowStage.finishing);
-                  Future.delayed(const Duration(seconds: 3), () {
-                    if (mounted) setState(() => _stage = _LocalFlowStage.roundComplete);
-                  });
-                } else {
-                  // Either a Match Draw, or Victory Animations is OFF — skip straight
-                  // to the result screen.
-                  setState(() => _stage = _LocalFlowStage.roundComplete);
-                }
-              },
-              child: const Text('END MATCH',
-                  style: TextStyle(color: AppColors.red)),
-            ),
-          ],
-        ),
-      );
-    }
-
-    bool get _canEndMatchNow {
-      if (!widget.format.isUnlimited) return false;
-      if (_engine.totalRounds == 0) return false;
-      return _stage == _LocalFlowStage.countdown ||
-          _stage == _LocalFlowStage.playerOneMove;
+        );
     }
   }
+
+  String _resultLabel() {
+    switch (_engine.lastResult) {
+      case RoundResult.playerAWin:
+        return 'PLAYER 1 WINS THE ROUND';
+      case RoundResult.playerBWin:
+        return 'PLAYER 2 WINS THE ROUND';
+      case RoundResult.draw:
+        return 'DRAW — REPLAYING${widget.format.isUnlimited ? '' : ' ROUND'}';
+      case null:
+        return '';
+    }
+  }
+
+  void _onEndMatchPressed() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('END MATCH?',
+            style: TextStyle(color: AppColors.primaryText)),
+        content: Text(
+          'Current Score: ${_engine.playerAScore} - ${_engine.playerBScore}',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('CANCEL',
+                style: TextStyle(color: Colors.white70)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _countdownTimer?.cancel();
+              _engine.endUnlimitedMatch();
+              _statsRepo.recordUnlimitedMatchResult(
+                  winner: _engine.matchWinner);
+              _statsRepo.recordLocalMatch(
+                opponentName: 'Player 2',
+                mode: 'local',
+                formatType: 'unlimited',
+                result: _engine.matchWinner == 'A'
+                    ? 'win'
+                    : _engine.matchWinner == null
+                        ? 'draw'
+                        : 'loss',
+              );
+              if (_engine.matchWinner != null && _victoryAnimationsEnabled) {
+                setState(() => _stage = _LocalFlowStage.finishing);
+                Future.delayed(const Duration(seconds: 3), () {
+                  if (mounted) {
+                    setState(() => _stage = _LocalFlowStage.roundComplete);
+                  }
+                });
+              } else {
+                setState(() => _stage = _LocalFlowStage.roundComplete);
+              }
+            },
+            child: const Text('END MATCH',
+                style: TextStyle(color: AppColors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool get _canEndMatchNow {
+    if (!widget.format.isUnlimited) return false;
+    if (_engine.totalRounds == 0) return false;
+    return _stage == _LocalFlowStage.countdown ||
+        _stage == _LocalFlowStage.playerOneMove;
+  }
+}
