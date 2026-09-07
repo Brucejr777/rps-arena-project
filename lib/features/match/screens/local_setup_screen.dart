@@ -112,7 +112,7 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
               ),
               const SizedBox(height: 24),
 
-              // ── Mode cards ─────────────────────────────────────
+              // ── Mode cards (2-Player only) ─────────────────────
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
@@ -134,24 +134,11 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
                         iconAsset: 'assets/icons/icon_calendar.svg',
                         title: 'CUSTOM MATCH',
                         subtitle: 'Flexible rules',
-                        subtitle2: 'Invite friends',
-                        badgeLabel: 'ONLINE',
+                        subtitle2: 'Choose format & rules',
+                        badgeLabel: 'LOCAL',
                         badgeColor: AppColors.svgCyan,
                         iconColor: AppColors.svgCyan,
                         onTap: _openMatchLengthSelect,
-                      ),
-                      const SizedBox(height: 16),
-                      ModeCard(
-                        iconAsset: 'assets/icons/icon_rocket.svg',
-                        title: 'ACHIEVEMENTS',
-                        subtitle: 'Unlock badges',
-                        subtitle2: 'Track progress',
-                        badgeLabel: 'NEW',
-                        badgeColor: AppColors.svgPink,
-                        iconColor: AppColors.svgPink,
-                        onTap: () {
-                          context.push('/achievements');
-                        },
                       ),
                       const SizedBox(height: 24),
                     ],

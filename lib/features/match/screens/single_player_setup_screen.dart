@@ -115,7 +115,7 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
               ),
               const SizedBox(height: 24),
 
-              // ── Mode cards ─────────────────────────────────────
+              // ── Mode cards (1-Player only) ─────────────────────
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
@@ -125,7 +125,7 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
                         title: 'QUICK MATCH',
                         subtitle: _formatLabel,
                         subtitle2: 'Fastest pairing',
-                        badgeLabel: 'LOCAL',
+                        badgeLabel: 'AI',
                         badgeColor: AppColors.badgeGreen,
                         iconColor: AppColors.svgGreen,
                         onTap: () {
@@ -140,8 +140,8 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
                         iconAsset: 'assets/icons/icon_calendar.svg',
                         title: 'CUSTOM MATCH',
                         subtitle: 'Flexible rules',
-                        subtitle2: 'Invite friends',
-                        badgeLabel: 'ONLINE',
+                        subtitle2: 'Choose format & rules',
+                        badgeLabel: 'AI',
                         badgeColor: AppColors.svgCyan,
                         iconColor: AppColors.svgCyan,
                         onTap: _openMatchLengthSelect,
@@ -152,7 +152,7 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
                         title: 'DIFFICULTY',
                         subtitle: 'Easy / Normal / Hard / Expert / Asian',
                         subtitle2: 'Choose your challenge',
-                        badgeLabel: 'NEW',
+                        badgeLabel: 'AI',
                         badgeColor: AppColors.svgOrange,
                         iconColor: AppColors.svgOrange,
                         onTap: () {
@@ -187,6 +187,19 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
                         iconColor: AppColors.svgDarkRed,
                         onTap: () {
                           context.push('/tournament');
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_rocket.svg',
+                        title: 'ACHIEVEMENTS',
+                        subtitle: 'Unlock badges',
+                        subtitle2: 'Track progress',
+                        badgeLabel: 'STATS',
+                        badgeColor: AppColors.svgPink,
+                        iconColor: AppColors.svgPink,
+                        onTap: () {
+                          context.push('/achievements');
                         },
                       ),
                       const SizedBox(height: 24),
@@ -292,7 +305,6 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
     IconData icon,
   ) {
     final isSelected = selectedDifficulty == value;
-
     return GestureDetector(
       onTap: () {
         setState(() => selectedDifficulty = value);
