@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart'; // ← ADDED
 import '../../../core/theme/app_colors.dart';
 import '../domain/match_engine.dart';
 import '../domain/match_format.dart';
@@ -324,9 +325,9 @@ class _LocalMatchFlowScreenState
             totalRounds: _engine.totalRounds,
             player1WinRate: _engine.playerAWinRate,
             player2WinRate: _engine.playerBWinRate,
-            onPlayAgain: () => Navigator.of(context).maybePop(),
-            onMainMenu: () =>
-                Navigator.of(context).popUntil((route) => route.isFirst),
+            // ── FIX: use go_router instead of raw Navigator ──
+            onPlayAgain: () => GoRouter.of(context).pop(),
+            onMainMenu: () => GoRouter.of(context).go('/main'),
           );
         }
         final playerWon = _engine.matchWinner == 'A';
@@ -334,9 +335,9 @@ class _LocalMatchFlowScreenState
           playerWon: playerWon,
           playerScore: _engine.playerAScore,
           opponentScore: _engine.playerBScore,
-          onPlayAgain: () => Navigator.of(context).maybePop(),
-          onMainMenu: () =>
-              Navigator.of(context).popUntil((route) => route.isFirst),
+          // ── FIX: use go_router instead of raw Navigator ──
+          onPlayAgain: () => GoRouter.of(context).pop(),
+          onMainMenu: () => GoRouter.of(context).go('/main'),
         );
 
       case _LocalFlowStage.finishing:
