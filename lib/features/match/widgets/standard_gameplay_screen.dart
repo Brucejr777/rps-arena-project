@@ -218,7 +218,6 @@ class _StandardGameplayScreenState
                         children: [
                           MoveButton(
                             move: 'rock',
-                            iconAsset: 'assets/icons/icon_rock.svg',
                             isSelected: selectedMove == 'rock',
                             isDisabled: selectedMove != null,
                             onSelected: () => _selectMove('rock'),
@@ -226,7 +225,6 @@ class _StandardGameplayScreenState
                           ),
                           MoveButton(
                             move: 'paper',
-                            iconAsset: 'assets/icons/icon_paper.svg',
                             isSelected: selectedMove == 'paper',
                             isDisabled: selectedMove != null,
                             onSelected: () => _selectMove('paper'),
@@ -234,7 +232,6 @@ class _StandardGameplayScreenState
                           ),
                           MoveButton(
                             move: 'scissors',
-                            iconAsset: 'assets/icons/icon_scissors.svg',
                             isSelected: selectedMove == 'scissors',
                             isDisabled: selectedMove != null,
                             onSelected: () => _selectMove('scissors'),

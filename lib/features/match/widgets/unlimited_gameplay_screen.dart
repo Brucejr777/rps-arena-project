@@ -21,9 +21,8 @@ class UnlimitedGameplayScreen extends ConsumerStatefulWidget {
 }
 
 class _UnlimitedGameplayScreenState
-  extends ConsumerState<UnlimitedGameplayScreen> {
+    extends ConsumerState<UnlimitedGameplayScreen> {
   final MatchMode mode = MatchMode.offline; // TODO: pass in from setup screen
-
   late final MatchEngine _engine;
   int selectionTimer = 10;
   String? selectedMove;
@@ -70,8 +69,8 @@ class _UnlimitedGameplayScreenState
   Widget _handImage(String? move) {
     final themeController = ref.read(gameThemeProvider.notifier);
     final asset = move == null
-      ? themeController.handAssetFor('rock') // neutral placeholder while hidden
-      : themeController.handAssetFor(move);
+        ? themeController.handAssetFor('rock') // neutral placeholder while hidden
+        : themeController.handAssetFor(move);
     return Container(
       width: 100,
       height: 100,
@@ -91,7 +90,6 @@ class _UnlimitedGameplayScreenState
     );
   }
 
-
   void _onExitPressed() {
     ref.read(matchControllerProvider.notifier).pause();
     setState(() => isPaused = true);
@@ -105,7 +103,6 @@ class _UnlimitedGameplayScreenState
   void _onExitConfirmed() {
     final outcome = ref.read(matchControllerProvider.notifier).attemptExit();
     setState(() => isPaused = false);
-
     switch (outcome) {
       case ExitOutcome.connectionLost:
         Navigator.of(context).push(
@@ -162,136 +159,133 @@ class _UnlimitedGameplayScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: ThemeBackground(
-        theme: ref.watch(gameThemeProvider),
-        child: SafeArea(
-        child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        backgroundColor: AppColors.background,
+        body: ThemeBackground(
+          theme: ref.watch(gameThemeProvider),
+          child: SafeArea(
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white70),
-                        onPressed: _onExitPressed,
-                      ),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Text(
-                              'ROUNDS PLAYED: ${_engine.totalRounds}',
-                              style: const TextStyle(
-                                color: AppColors.primaryText,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white70),
+                            onPressed: _onExitPressed,
+                          ),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text(
+                                  'ROUNDS PLAYED: ${_engine.totalRounds}',
+                                  style: const TextStyle(
+                                    color: AppColors.primaryText,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    letterSpacing: 1.0,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                Text(
+                                  'DRAWS: ${_engine.drawCount}',
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 11,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _engine.totalRounds > 0 ? _onEndMatchPressed : null,
+                            child: Text(
+                              'END MATCH',
+                              style: TextStyle(
+                                color: _engine.totalRounds > 0
+                                    ? AppColors.red
+                                    : Colors.white24,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12,
-                                letterSpacing: 1.0,
                               ),
-                              textAlign: TextAlign.center,
                             ),
-                            Text(
-                              'DRAWS: ${_engine.drawCount}',
-                              style: const TextStyle(
-                                color: Colors.white54,
-                                fontSize: 11,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _engine.totalRounds > 0 ? _onEndMatchPressed : null,
-                        child: Text(
-                          'END MATCH',
-                          style: TextStyle(
-                            color: _engine.totalRounds > 0
-                                ? AppColors.red
-                                : Colors.white24,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
                           ),
-                        ),
+                        ],
                       ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _playerScoreCard('Player 1', _engine.playerAScore),
+                          Text(
+                            '$selectionTimer',
+                            style: TextStyle(
+                              color: selectionTimer <= 5
+                                  ? AppColors.red
+                                  : AppColors.primaryText,
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          _playerScoreCard('Player 2', _engine.playerBScore),
+                        ],
+                      ),
+                      const Spacer(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _handImage(selectedMove),
+                          Text(
+                            'VS',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.4),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                          _handImage(null),
+                        ],
+                      ),
+                      const Spacer(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          MoveButton(
+                            move: 'rock',
+                            isSelected: selectedMove == 'rock',
+                            isDisabled: selectedMove != null,
+                            onSelected: () => _selectMove('rock'),
+                            frameColor: const Color(0xFFF97316),
+                          ),
+                          MoveButton(
+                            move: 'paper',
+                            isSelected: selectedMove == 'paper',
+                            isDisabled: selectedMove != null,
+                            onSelected: () => _selectMove('paper'),
+                            frameColor: const Color(0xFF06B6D4),
+                          ),
+                          MoveButton(
+                            move: 'scissors',
+                            isSelected: selectedMove == 'scissors',
+                            isDisabled: selectedMove != null,
+                            onSelected: () => _selectMove('scissors'),
+                            frameColor: const Color(0xFFEC4899),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _playerScoreCard('Player 1', _engine.playerAScore),
-                      Text(
-                        '$selectionTimer',
-                        style: TextStyle(
-                          color: selectionTimer <= 5
-                              ? AppColors.red
-                              : AppColors.primaryText,
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      _playerScoreCard('Player 2', _engine.playerBScore),
-                    ],
-                  ),
-                  const Spacer(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _handImage(selectedMove),
-                      Text(
-                        'VS',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.4),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      _handImage(null),
-                    ],
-                  ),
-                  const Spacer(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      MoveButton(
-                        move: 'rock',
-                        iconAsset: 'assets/icons/icon_rock.svg',
-                        isSelected: selectedMove == 'rock',
-                        isDisabled: selectedMove != null,
-                        onSelected: () => _selectMove('rock'),
-                        frameColor: const Color(0xFFF97316),
-                      ),
-                      MoveButton(
-                        move: 'paper',
-                        iconAsset: 'assets/icons/icon_paper.svg',
-                        isSelected: selectedMove == 'paper',
-                        isDisabled: selectedMove != null,
-                        onSelected: () => _selectMove('paper'),
-                        frameColor: const Color(0xFF06B6D4),
-                      ),
-                      MoveButton(
-                        move: 'scissors',
-                        iconAsset: 'assets/icons/icon_scissors.svg',
-                        isSelected: selectedMove == 'scissors',
-                        isDisabled: selectedMove != null,
-                        onSelected: () => _selectMove('scissors'),
-                        frameColor: const Color(0xFFEC4899),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                ],
-              ),
+                ),
+                if (isPaused)
+                  PauseExitOverlay(onResume: _onResume, onExit: _onExitConfirmed),
+              ],
             ),
-            if (isPaused)
-              PauseExitOverlay(onResume: _onResume, onExit: _onExitConfirmed),
-          ],
-        ),
-      ),
-    ));
+          ),
+        ));
   }
 
   Widget _playerScoreCard(String name, int score) {

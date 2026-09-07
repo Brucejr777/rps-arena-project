@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme_controller.dart';
+import '../../../core/theme/game_theme_controller.dart';
 import '../../../core/services/audio_service.dart';
 import '../../../core/services/vibration_service.dart';
 
+/// Move selection button used across all game modes.
+///
+/// Displays the themed hand image (PNG) matching the active Game Theme
+/// (Normal / Space), consistent with LocalPlayerMoveScreen and all
+/// single-player / local flows.
 class MoveButton extends ConsumerWidget {
   final String move; // 'rock', 'paper', 'scissors'
-  final String iconAsset;
+
+  /// Kept for backward compatibility but no longer used for rendering.
+  /// The themed PNG hand asset is resolved automatically via
+  /// [gameThemeProvider].
+  final String? iconAsset;
+
   final bool isSelected;
   final bool isDisabled;
   final VoidCallback onSelected;
@@ -17,7 +27,7 @@ class MoveButton extends ConsumerWidget {
   const MoveButton({
     super.key,
     required this.move,
-    required this.iconAsset,
+    this.iconAsset, // deprecated — kept so existing call-sites compile
     required this.isSelected,
     required this.isDisabled,
     required this.onSelected,
@@ -26,7 +36,6 @@ class MoveButton extends ConsumerWidget {
 
   void _handleTap() {
     if (isDisabled) return;
-    // Link the select mp3 to the move-selection action.
     AudioService.instance.playSelect();
     VibrationService.instance.selection();
     onSelected();
@@ -35,6 +44,11 @@ class MoveButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final accent = ref.watch(appAccentColorProvider);
+    // Resolve the themed hand image (PNG) for the active Game Theme,
+    // exactly matching LocalPlayerMoveScreen / SinglePlayerMatchFlowScreen.
+    final themeController = ref.watch(gameThemeProvider.notifier);
+    final handAsset = themeController.handAssetFor(move);
+
     return GestureDetector(
       onTap: _handleTap,
       child: AnimatedScale(
@@ -63,6 +77,12 @@ class MoveButton extends ConsumerWidget {
                         : null,
                     color: isSelected ? null : AppColors.surface,
                     shape: BoxShape.circle,
+                    border: Border.all(
+                      width: 1.5,
+                      color: isSelected
+                          ? AppColors.green
+                          : (frameColor ?? Colors.white24),
+                    ),
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
@@ -73,18 +93,19 @@ class MoveButton extends ConsumerWidget {
                           ]
                         : [],
                   ),
-                  child: SvgPicture.asset(
-                    iconAsset,
-                    width: 32,
-                    height: 32,
-                    colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                  padding: const EdgeInsets.all(8),
+                  child: Image.asset(
+                    handAsset,
+                    fit: BoxFit.contain,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   move.toUpperCase(),
                   style: TextStyle(
-                    color: frameColor ?? Colors.white70,
+                    color: isSelected
+                        ? AppColors.green
+                        : (frameColor ?? Colors.white70),
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1.0,

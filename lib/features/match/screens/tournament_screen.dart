@@ -27,6 +27,7 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
     'Titan',
     'Nova'
   ];
+
   late List<String> _bracket;
   late List<String> _nextRound;
   int _currentRound = 0; // 0=QF, 1=SF, 2=F
@@ -122,7 +123,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
     Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
       _currentMatch++;
-
       // Check if round is complete
       if (_currentMatch >= _bracket.length ~/ 2) {
         _advanceRound();
@@ -401,7 +401,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
                 children: [
                   MoveButton(
                     move: 'rock',
-                    iconAsset: 'assets/icons/icon_rock.svg',
                     isSelected: _selectedMove == 'rock',
                     isDisabled: !_isMatchActive,
                     onSelected: () => _selectMove('rock'),
@@ -409,7 +408,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
                   ),
                   MoveButton(
                     move: 'paper',
-                    iconAsset: 'assets/icons/icon_paper.svg',
                     isSelected: _selectedMove == 'paper',
                     isDisabled: !_isMatchActive,
                     onSelected: () => _selectMove('paper'),
@@ -417,7 +415,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
                   ),
                   MoveButton(
                     move: 'scissors',
-                    iconAsset: 'assets/icons/icon_scissors.svg',
                     isSelected: _selectedMove == 'scissors',
                     isDisabled: !_isMatchActive,
                     onSelected: () => _selectMove('scissors'),
@@ -435,7 +432,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
 
   Widget _buildResultScreen(Color accent) {
     final won = _tournamentWinner == 'You';
-
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(

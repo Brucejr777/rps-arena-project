@@ -77,11 +77,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   String? _roundResult;
   bool _showRoundResult = false;
-
   bool _matchDraw = false;
   int? _matchWinnerId;
-
   bool _showResult = false;
+
   bool _showRematchRequest = false;
   bool _isRematchWaiting = false;
   int? _rematchRequesterId;
@@ -93,6 +92,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   bool get _isPlayerA => widget.isPlayerA;
   bool get _isUnlimited => widget.formatType == 'unlimited';
+
   bool get _canEndMatch =>
       _isUnlimited && _drawCount + _playerScore + _opponentScore > 0;
 
@@ -239,8 +239,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   void _handleRoundResult(Map<String, dynamic> data) {
     if (_roundResolved) return;
+
     final eventRound = _asInt(data['roundNumber']);
     if (eventRound < _currentRound) return;
+
     _roundResolved = true;
     _waitingTimeout?.cancel();
 
@@ -262,6 +264,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _serverPlayerBMove = playerBMove;
       _serverPlayerAAuto = data['playerAAuto'] as bool? ?? false;
       _serverPlayerBAuto = data['playerBAuto'] as bool? ?? false;
+
       _playerScore = _isPlayerA ? playerAScore : playerBScore;
       _opponentScore = _isPlayerA ? playerBScore : playerAScore;
       _drawCount = drawCount;
@@ -278,6 +281,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         _serverPlayerAAuto = false;
         _serverPlayerBAuto = false;
       });
+
       if (matchFinished) {
         _timer?.cancel();
         final winnerId = data['winnerId'];
@@ -306,6 +310,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _handleMatchCompleted(Map<String, dynamic> data) {
     final winnerId = data['winnerId'];
     final matchDraw = data['matchDraw'] as bool? ?? false;
+
     setState(() {
       _playerScore = _isPlayerA
           ? _asInt(data['playerAScore'])
@@ -336,6 +341,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _roundResult = null;
       _showRoundResult = false;
     });
+
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_selectionTimer <= 1) {
@@ -370,10 +376,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _timer?.cancel();
     _waitingTimeout?.cancel();
     _pollRetries = 0;
+
     _waitingTimeout = Timer(const Duration(seconds: 3), () {
       if (!mounted || !_isWaitingForServer) return;
       _pollRoundState();
     });
+
     try {
       final res = await _authClient.post(
         '/matches/${widget.matchId}/move',
@@ -414,9 +422,11 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         _resetWaiting();
         return;
       }
+
       final rounds = data['rounds'] as List<dynamic>? ?? [];
       final matchFinished = data['winnerId'] != null ||
           (data['matchDraw'] as bool? ?? false);
+
       for (final r in rounds) {
         if (r is Map<String, dynamic> && r['roundNumber'] == _currentRound) {
           final result = r['result'] as String?;
@@ -442,6 +452,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           }
         }
       }
+
       if (_pollRetries < _maxPollRetries) {
         _waitingTimeout = Timer(const Duration(seconds: 2), () {
           if (!mounted || !_isWaitingForServer) return;
@@ -565,9 +576,11 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
     if (!mounted) return;
+
     final playerName = widget.playerName;
     final opponentName = widget.opponentName;
     final navigator = Navigator.of(context);
+
     navigator.pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => OnlineMatchLoaderScreen(
@@ -586,9 +599,11 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _isRematchWaiting = true;
       _showRematchRequest = false;
     });
+
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/request');
       _startRematchPolling();
+
       _rematchCountdown?.cancel();
       int remaining = 30;
       _rematchCountdown = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -628,12 +643,14 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
     setState(() => _isAcceptingRematch = true);
+
     try {
       final res =
           await _authClient.post('/matches/${widget.matchId}/rematch/accept');
       final data = res.data as Map<String, dynamic>;
       final newMatchId = (data['newMatchId'] as num?)?.toInt();
       if (!mounted) return;
+
       if (newMatchId == null) {
         setState(() => _isAcceptingRematch = false);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -708,6 +725,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         final data = res.data as Map<String, dynamic>;
         final status = data['rematchStatus'] as String?;
         final newMatchId = (data['newMatchId'] as num?)?.toInt();
+
         if (status == 'accepted' && newMatchId != null) {
           _rematchPollTimer?.cancel();
           if (!mounted) return;
@@ -954,7 +972,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                       children: [
                         MoveButton(
                           move: 'rock',
-                          iconAsset: 'assets/icons/icon_rock.svg',
                           isSelected: _selectedMove == 'rock',
                           isDisabled: _hasPicked ||
                               _selectedMove != null ||
@@ -965,7 +982,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                         ),
                         MoveButton(
                           move: 'paper',
-                          iconAsset: 'assets/icons/icon_paper.svg',
                           isSelected: _selectedMove == 'paper',
                           isDisabled: _hasPicked ||
                               _selectedMove != null ||
@@ -976,7 +992,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                         ),
                         MoveButton(
                           move: 'scissors',
-                          iconAsset: 'assets/icons/icon_scissors.svg',
                           isSelected: _selectedMove == 'scissors',
                           isDisabled: _hasPicked ||
                               _selectedMove != null ||
@@ -1019,7 +1034,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       playerWon = _playerScore > _opponentScore;
       isDraw = _playerScore == _opponentScore;
     }
+
     final total = _playerScore + _opponentScore + _drawCount;
+
     final String resultTitle;
     final Color resultColor;
     if (isDraw) {
