@@ -11,6 +11,9 @@ class PassDeviceScreen extends StatelessWidget {
   final int roundNumber;
   final int draws;
 
+  /// Optional game-mode label, e.g. "Best of 3".
+  final String? modeLabel;
+
   const PassDeviceScreen({
     super.key,
     required this.onReady,
@@ -19,6 +22,7 @@ class PassDeviceScreen extends StatelessWidget {
     this.playerBScore = 0,
     this.roundNumber = 1,
     this.draws = 0,
+    this.modeLabel,
   });
 
   @override
@@ -37,7 +41,19 @@ class PassDeviceScreen extends StatelessWidget {
                   playerBScore: playerBScore,
                   roundNumber: roundNumber,
                   draws: draws,
+                  modeLabel: modeLabel,
                   margin: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 24),
+              ] else if (modeLabel != null) ...[
+                Text(
+                  modeLabel!,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                  ),
                 ),
                 const SizedBox(height: 24),
               ],

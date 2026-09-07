@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 
-/// Reusable scoreboard for in-game screens.
+/// Reusable scoreboard for local 2-player matches.
 ///
 /// Shows:
-/// - Player A score / Player B score (labels configurable)
-/// - Current round + draw count (can be hidden with [showRoundLine])
+/// - Optional game-mode label (e.g. "Best of 3")
+/// - Player 1 score
+/// - Player 2 score
+/// - Current round
+/// - Draw count when greater than zero
 class LocalScoreboard extends StatelessWidget {
   final int playerAScore;
   final int playerBScore;
   final int roundNumber;
   final int draws;
   final EdgeInsetsGeometry margin;
-  final String playerALabel;
-  final String playerBLabel;
-  final bool showRoundLine;
+  final String? modeLabel;
 
   const LocalScoreboard({
     super.key,
@@ -23,9 +24,7 @@ class LocalScoreboard extends StatelessWidget {
     this.roundNumber = 1,
     this.draws = 0,
     this.margin = const EdgeInsets.symmetric(horizontal: 24),
-    this.playerALabel = 'PLAYER 1',
-    this.playerBLabel = 'PLAYER 2',
-    this.showRoundLine = true,
+    this.modeLabel,
   });
 
   @override
@@ -51,11 +50,23 @@ class LocalScoreboard extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (modeLabel != null) ...[
+            Text(
+              modeLabel!,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.55),
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
           Row(
             children: [
               Expanded(
                 child: _scoreSide(
-                  label: playerALabel,
+                  label: 'PLAYER 1',
                   score: playerAScore,
                   color: AppColors.blue,
                 ),
@@ -73,7 +84,7 @@ class LocalScoreboard extends StatelessWidget {
               ),
               Expanded(
                 child: _scoreSide(
-                  label: playerBLabel,
+                  label: 'PLAYER 2',
                   score: playerBScore,
                   color: AppColors.purple,
                   alignRight: true,
@@ -81,13 +92,31 @@ class LocalScoreboard extends StatelessWidget {
               ),
             ],
           ),
-          if (showRoundLine) ...[
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'ROUND $roundNumber',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.55),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              if (draws > 0) ...[
+                const SizedBox(width: 8),
                 Text(
-                  'ROUND $roundNumber',
+                  '•',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.35),
+                    fontSize: 10,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'DRAWS $draws',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.55),
                     fontSize: 10,
@@ -95,29 +124,9 @@ class LocalScoreboard extends StatelessWidget {
                     letterSpacing: 1.0,
                   ),
                 ),
-                if (draws > 0) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    '•',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      fontSize: 10,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'DRAWS $draws',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.55),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ],
               ],
-            ),
-          ],
+            ],
+          ),
         ],
       ),
     );

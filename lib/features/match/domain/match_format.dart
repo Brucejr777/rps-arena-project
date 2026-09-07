@@ -3,6 +3,7 @@ enum MatchFormat { bestOf3, bestOf5, bestOf7, bestOf9, custom, unlimited }
 class MatchFormatConfig {
   static const int minCustomWins = 2;
   static const int maxCustomWins = 99;
+
   final MatchFormat format;
   final int winsRequired;
 
@@ -51,4 +52,23 @@ class MatchFormatConfig {
   }
 
   bool get isUnlimited => format == MatchFormat.unlimited;
+
+  /// Human-readable match-format label used by the in-game HUD,
+  /// e.g. "Best of 3", "Custom (First to 5)", "Unlimited".
+  String get displayLabel {
+    switch (format) {
+      case MatchFormat.bestOf3:
+        return 'Best of 3';
+      case MatchFormat.bestOf5:
+        return 'Best of 5';
+      case MatchFormat.bestOf7:
+        return 'Best of 7';
+      case MatchFormat.bestOf9:
+        return 'Best of 9';
+      case MatchFormat.custom:
+        return 'Custom (First to $winsRequired)';
+      case MatchFormat.unlimited:
+        return 'Unlimited';
+    }
+  }
 }

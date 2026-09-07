@@ -17,31 +17,25 @@ class LocalPlayerMoveScreen extends ConsumerStatefulWidget {
   final int playerNumber;
   final void Function(String move) onMoveSelected;
 
-  // Local 2-player scoreboard (score card with internal ROUND line).
   final bool showScoreboard;
-
-  // Single-player style header: standalone ROUND text + score card below it.
-  final bool showRoundHeader;
-
   final int playerAScore;
   final int playerBScore;
   final int roundNumber;
   final int draws;
-  final String playerALabel;
-  final String playerBLabel;
+
+  /// Optional game-mode label, e.g. "Easy - Best of 3" / "Best of 3".
+  final String? modeLabel;
 
   const LocalPlayerMoveScreen({
     super.key,
     required this.playerNumber,
     required this.onMoveSelected,
     this.showScoreboard = false,
-    this.showRoundHeader = false,
     this.playerAScore = 0,
     this.playerBScore = 0,
     this.roundNumber = 1,
     this.draws = 0,
-    this.playerALabel = 'PLAYER 1',
-    this.playerBLabel = 'PLAYER 2',
+    this.modeLabel,
   });
 
   @override
@@ -71,48 +65,30 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
         child: Column(
           children: [
             _buildTopNav(),
-            if (widget.showRoundHeader) ...[
+            if (widget.showScoreboard) ...[
               const SizedBox(height: 12),
-              Center(
-                child: Text(
-                  'ROUND ${widget.roundNumber}',
-                  style: const TextStyle(
-                    color: AppColors.primaryText,
+              LocalScoreboard(
+                playerAScore: widget.playerAScore,
+                playerBScore: widget.playerBScore,
+                roundNumber: widget.roundNumber,
+                draws: widget.draws,
+                modeLabel: widget.modeLabel,
+              ),
+              const SizedBox(height: 8),
+            ] else ...[
+              const SizedBox(height: 12),
+              if (widget.modeLabel != null)
+                Text(
+                  widget.modeLabel!,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                    letterSpacing: 1.2,
-                    shadows: [
-                      Shadow(
-                        blurRadius: 4,
-                        color: Colors.black87,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
+                    letterSpacing: 1.0,
                   ),
                 ),
-              ),
               const SizedBox(height: 8),
-              LocalScoreboard(
-                playerAScore: widget.playerAScore,
-                playerBScore: widget.playerBScore,
-                roundNumber: widget.roundNumber,
-                draws: widget.draws,
-                showRoundLine: false,
-                playerALabel: widget.playerALabel,
-                playerBLabel: widget.playerBLabel,
-              ),
-              const SizedBox(height: 8),
-            ] else if (widget.showScoreboard) ...[
-              const SizedBox(height: 12),
-              LocalScoreboard(
-                playerAScore: widget.playerAScore,
-                playerBScore: widget.playerBScore,
-                roundNumber: widget.roundNumber,
-                draws: widget.draws,
-              ),
-              const SizedBox(height: 8),
-            ] else
-              const SizedBox(height: 20),
+            ],
             // ── Hero title ─────────────────────────────────────────
             Text(
               'PLAYER ${widget.playerNumber}',

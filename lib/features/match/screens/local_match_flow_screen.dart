@@ -48,10 +48,12 @@ class LocalMatchFlowScreen extends ConsumerStatefulWidget {
 class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
   late final MatchEngine _engine;
   final LocalStatsRepository _statsRepo = LocalStatsRepository();
-
   _LocalFlowStage _stage = _LocalFlowStage.countdown;
   Timer? _countdownTimer;
   bool _victoryAnimationsEnabled = true;
+
+  /// Game-mode label shown on every in-game screen, e.g. "Best of 3".
+  String get _modeLabel => widget.format.displayLabel;
 
   @override
   void initState() {
@@ -80,23 +82,18 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
   void _startRound() {
     _engine.startRound();
     _engine.beginCountdown();
-
     setState(() {
       _stage = _LocalFlowStage.countdown;
     });
-
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final finished = _engine.tickCountdown();
-
       if (mounted) {
         setState(() {});
       }
-
       if (finished) {
         timer.cancel();
         _engine.beginSelection();
-
         if (mounted) {
           setState(() {
             _stage = _LocalFlowStage.playerOneMove;
@@ -108,7 +105,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
 
   void _onPlayerOneMove(String move) {
     _engine.submitPlayerAMove(move);
-
     setState(() {
       _stage = _LocalFlowStage.passDevice;
     });
@@ -129,17 +125,13 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
-
     VibrationService.instance.reveal();
-
     setState(() {
       _stage = _LocalFlowStage.revealing;
     });
-
     if (_engine.playerAMove != null) {
       _statsRepo.recordMoveSelection(_engine.playerAMove!);
     }
-
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
@@ -156,19 +148,15 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
       case null:
         break;
     }
-
     final delay = (_isMatchWinningRound && _victoryAnimationsEnabled)
         ? const Duration(seconds: 3)
         : const Duration(seconds: 2);
-
     Future.delayed(delay, _advanceAfterReveal);
   }
 
   void _advanceAfterReveal() {
     if (!mounted) return;
-
     _engine.checkMatchCondition();
-
     if (_engine.matchFinished) {
       if (widget.format.isUnlimited) {
         _statsRepo.recordUnlimitedMatchResult(
@@ -199,7 +187,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                   : 'loss',
         );
       }
-
       setState(() {
         _stage = _LocalFlowStage.roundComplete;
       });
@@ -210,22 +197,18 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
 
   bool get _isMatchWinningRound {
     if (widget.format.isUnlimited) return false;
-
     if (_engine.lastResult == RoundResult.playerAWin) {
       return widget.format.isMatchWon(_engine.playerAScore);
     }
-
     if (_engine.lastResult == RoundResult.playerBWin) {
       return widget.format.isMatchWon(_engine.playerBScore);
     }
-
     return false;
   }
 
   bool get _canEndMatchNow {
     if (!widget.format.isUnlimited) return false;
     if (_engine.totalRounds == 0) return false;
-
     return _stage == _LocalFlowStage.countdown ||
         _stage == _LocalFlowStage.playerOneMove;
   }
@@ -272,6 +255,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                   playerBScore: _engine.playerBScore,
                   roundNumber: _engine.currentRoundNumber,
                   draws: _engine.drawCount,
+                  modeLabel: _modeLabel,
                 ),
                 Expanded(
                   child: Center(
@@ -295,6 +279,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           playerBScore: _engine.playerBScore,
           roundNumber: _engine.currentRoundNumber,
           draws: _engine.drawCount,
+          modeLabel: _modeLabel,
         );
 
       case _LocalFlowStage.passDevice:
@@ -305,6 +290,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           playerBScore: _engine.playerBScore,
           roundNumber: _engine.currentRoundNumber,
           draws: _engine.drawCount,
+          modeLabel: _modeLabel,
         );
 
       case _LocalFlowStage.playerTwoMove:
@@ -316,6 +302,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           playerBScore: _engine.playerBScore,
           roundNumber: _engine.currentRoundNumber,
           draws: _engine.drawCount,
+          modeLabel: _modeLabel,
         );
 
       case _LocalFlowStage.revealing:
@@ -324,7 +311,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         final roundKey = ValueKey(
           'local_round_${_engine.currentRoundNumber}_${_engine.lastResult}',
         );
-
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: SafeArea(
@@ -348,6 +334,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                       playerBScore: _engine.playerBScore,
                       roundNumber: _engine.currentRoundNumber,
                       draws: _engine.drawCount,
+                      modeLabel: _modeLabel,
                     ),
                     const SizedBox(height: 16),
                     if (_engine.playerAMove != null &&
@@ -416,7 +403,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         final playerAWon = _engine.matchWinner == 'A';
         final playerAMove = _engine.playerAMove;
         final playerBMove = _engine.playerBMove;
-
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: Center(
@@ -439,7 +425,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         if (widget.format.isUnlimited) {
           final String unlimitedWinnerTitle;
           final Color unlimitedWinnerColor;
-
           if (_engine.matchWinner == 'A') {
             unlimitedWinnerTitle = 'PLAYER 1 WON';
             unlimitedWinnerColor = AppColors.blue;
@@ -450,7 +435,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             unlimitedWinnerTitle = 'MATCH DRAW';
             unlimitedWinnerColor = AppColors.orange;
           }
-
           return UnlimitedResultScreen(
             player1Wins: _engine.playerAScore,
             player2Wins: _engine.playerBScore,
@@ -464,10 +448,8 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             onMainMenu: () => GoRouter.of(context).go('/main'),
           );
         }
-
         final String standardResultTitle;
         final Color standardResultColor;
-
         if (_engine.matchWinner == 'A') {
           standardResultTitle = 'PLAYER 1 WON';
           standardResultColor = AppColors.blue;
@@ -478,7 +460,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           standardResultTitle = 'DRAW';
           standardResultColor = AppColors.orange;
         }
-
         return StandardResultScreen(
           playerWon: _engine.matchWinner == 'A',
           playerScore: _engine.playerAScore,
@@ -538,14 +519,11 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-
               _countdownTimer?.cancel();
               _engine.endUnlimitedMatch();
-
               _statsRepo.recordUnlimitedMatchResult(
                 winner: _engine.matchWinner,
               );
-
               _statsRepo.recordLocalMatch(
                 opponentName: 'Player 2',
                 mode: 'local',
@@ -556,7 +534,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                         ? 'draw'
                         : 'loss',
               );
-
               if (_engine.matchWinner != null &&
                   _victoryAnimationsEnabled &&
                   _engine.playerAMove != null &&
@@ -564,10 +541,8 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                 setState(() {
                   _stage = _LocalFlowStage.finishing;
                 });
-
                 Future.delayed(const Duration(seconds: 3), () {
                   if (!mounted) return;
-
                   setState(() {
                     _stage = _LocalFlowStage.roundComplete;
                   });
