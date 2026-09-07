@@ -5,11 +5,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/animation_speed_controller.dart';
 
 class RoundVictoryAnimation extends ConsumerStatefulWidget {
+  /// Player 1 / Player A's move — always displayed on the LEFT.
   final String playerAMove;
+
+  /// Player 2 / Player B's move — always displayed on the RIGHT.
   final String playerBMove;
+
+  /// Whether Player A won this round.
   final bool playerAWon;
+
+  /// Optional labels shown under each hand.
   final String playerALabel;
   final String playerBLabel;
+
   final GameTheme theme;
   final String Function(String move) handAssetFor;
 
@@ -61,7 +69,7 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
       ),
     ]).animate(_controller);
 
-    // Losing hand gets knocked backward and fades — "short defeat reaction".
+    // Losing hand gets knocked away and fades.
     _loserSlide = Tween<double>(begin: 0, end: 40).animate(CurvedAnimation(
       parent: _controller,
       curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
@@ -90,57 +98,89 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
   String get _winnerLabel =>
       widget.playerAWon ? widget.playerALabel : widget.playerBLabel;
 
-  /// Builds a single hand. [isWinner] controls whether it gets the
-  /// victory glow/scale or the defeat slide/fade.
+  /// Builds a single hand container.
+  /// [isWinner] controls whether it gets victory glow/scale or defeat slide/fade.
   Widget _buildHand({
     required String move,
     required bool isWinner,
+    required String label,
+    required bool isLeftSide,
   }) {
     if (isWinner) {
       return Transform.scale(
         scale: _winnerScale.value,
-        child: Container(
-          width: 110,
-          height: 110,
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: _glowColor.withValues(alpha: 0.7),
-                blurRadius: 24,
-                spreadRadius: 2,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 110,
+              height: 110,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: _glowColor.withValues(alpha: 0.7),
+                    blurRadius: 24,
+                    spreadRadius: 2,
+                  ),
+                ],
               ),
-            ],
-          ),
-          padding: const EdgeInsets.all(14),
-          child: Image.asset(
-            widget.handAssetFor(move),
-            fit: BoxFit.contain,
-          ),
+              padding: const EdgeInsets.all(14),
+              child: Image.asset(
+                widget.handAssetFor(move),
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: _glowColor,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
         ),
       );
     } else {
       // Loser slides AWAY from centre:
-      //   left-side loser  → negative X  (slides left)
-      //   right-side loser → positive X  (slides right)
-      final slideDirection = widget.playerAWon ? 1.0 : -1.0;
+      //   left-side loser  → negative X (slides left)
+      //   right-side loser → positive X (slides right)
+      final slideDirection = isLeftSide ? -1.0 : 1.0;
       return Opacity(
         opacity: _loserOpacity.value,
         child: Transform.translate(
           offset: Offset(_loserSlide.value * slideDirection, 0),
-          child: Container(
-            width: 90,
-            height: 90,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            padding: const EdgeInsets.all(12),
-            child: Image.asset(
-              widget.handAssetFor(move),
-              fit: BoxFit.contain,
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 90,
+                height: 90,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                padding: const EdgeInsets.all(12),
+                child: Image.asset(
+                  widget.handAssetFor(move),
+                  fit: BoxFit.contain,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -158,15 +198,19 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
             return Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // LEFT slot — always Player A
+                // LEFT slot — always Player A / Player 1
                 _buildHand(
                   move: widget.playerAMove,
                   isWinner: widget.playerAWon,
+                  label: widget.playerALabel,
+                  isLeftSide: true,
                 ),
-                // RIGHT slot — always Player B / AI
+                // RIGHT slot — always Player B / Player 2
                 _buildHand(
                   move: widget.playerBMove,
                   isWinner: !widget.playerAWon,
+                  label: widget.playerBLabel,
+                  isLeftSide: false,
                 ),
               ],
             );

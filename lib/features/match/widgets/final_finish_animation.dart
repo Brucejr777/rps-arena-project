@@ -5,9 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/animation_speed_controller.dart';
 
 class FinalFinishAnimation extends ConsumerStatefulWidget {
+  /// Player 1 / Player A's move — always displayed on the LEFT.
   final String playerAMove;
+
+  /// Player 2 / Player B's move — always displayed on the RIGHT.
   final String playerBMove;
+
+  /// Whether Player A won the match.
   final bool playerAWon;
+
   final GameTheme theme;
   final String Function(String move) handAssetFor;
 
@@ -45,7 +51,8 @@ class _FinalFinishAnimationState extends ConsumerState<FinalFinishAnimation>
       ), // maximum duration three seconds
     );
 
-    // Winner: "stylized impact" (Normal) / "energy attack" (Space)
+    // Winner: "stylized impact" (Normal) / "energy attack" (Space) — a
+    // strong pop with a slight rotation, then settles into a victory pose.
     _winnerScale = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween(begin: 1.0, end: 1.5)
@@ -65,7 +72,8 @@ class _FinalFinishAnimationState extends ConsumerState<FinalFinishAnimation>
     ]).animate(
         CurvedAnimation(parent: _controller, curve: Curves.easeOut));
 
-    // Loser: "knocked backward" / "powers down"
+    // Loser: "knocked backward" / "powers down" — slides away and fades
+    // over the first half of the timeline.
     _loserSlide = Tween<double>(begin: 0, end: 80).animate(
       CurvedAnimation(
         parent: _controller,
@@ -80,7 +88,7 @@ class _FinalFinishAnimationState extends ConsumerState<FinalFinishAnimation>
       ),
     );
 
-    // Continuous soft glow pulse behind the winner
+    // Continuous soft glow pulse behind the winner for the victory pose.
     _glowPulse = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 0.4, end: 0.9), weight: 50),
       TweenSequenceItem(tween: Tween(begin: 0.9, end: 0.4), weight: 50),
@@ -106,6 +114,7 @@ class _FinalFinishAnimationState extends ConsumerState<FinalFinishAnimation>
   Widget _buildHand({
     required String move,
     required bool isWinner,
+    required bool isLeftSide,
   }) {
     if (isWinner) {
       return Transform.rotate(
@@ -135,8 +144,8 @@ class _FinalFinishAnimationState extends ConsumerState<FinalFinishAnimation>
         ),
       );
     } else {
-      // Loser slides AWAY from centre and fades
-      final slideDirection = widget.playerAWon ? 1.0 : -1.0;
+      // Loser slides AWAY from centre and fades.
+      final slideDirection = isLeftSide ? -1.0 : 1.0;
       return Opacity(
         opacity: _loserOpacity.value,
         child: Transform.translate(
@@ -167,15 +176,17 @@ class _FinalFinishAnimationState extends ConsumerState<FinalFinishAnimation>
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            // LEFT slot — always Player A
+            // LEFT slot — always Player A / Player 1
             _buildHand(
               move: widget.playerAMove,
               isWinner: widget.playerAWon,
+              isLeftSide: true,
             ),
-            // RIGHT slot — always Player B / AI
+            // RIGHT slot — always Player B / Player 2
             _buildHand(
               move: widget.playerBMove,
               isWinner: !widget.playerAWon,
+              isLeftSide: false,
             ),
           ],
         );

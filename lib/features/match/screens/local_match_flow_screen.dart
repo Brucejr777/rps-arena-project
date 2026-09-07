@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart'; // ← ADDED
 import '../../../core/theme/app_colors.dart';
 import '../domain/match_engine.dart';
 import '../domain/match_format.dart';
@@ -82,7 +81,7 @@ class _LocalMatchFlowScreenState
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final finished = _engine.tickCountdown();
-      setState(() {});
+      setState(() {}); // refresh countdown number on screen
       if (finished) {
         timer.cancel();
         _engine.beginSelection();
@@ -177,6 +176,8 @@ class _LocalMatchFlowScreenState
     }
   }
 
+  /// True only when this round's result would finish a standard match
+  /// (i.e. the winning player has now reached winsRequired).
   bool get _isMatchWinningRound {
     if (widget.format.isUnlimited) return false;
     if (_engine.lastResult == RoundResult.playerAWin) {
@@ -248,6 +249,7 @@ class _LocalMatchFlowScreenState
 
       case _LocalFlowStage.revealing:
         final themeController = ref.read(gameThemeProvider.notifier);
+        final playerAWon = _engine.lastResult == RoundResult.playerAWin;
         return Scaffold(
           backgroundColor: AppColors.background,
           body: Center(
@@ -275,8 +277,7 @@ class _LocalMatchFlowScreenState
                   FinalFinishAnimation(
                     playerAMove: _engine.playerAMove!,
                     playerBMove: _engine.playerBMove!,
-                    playerAWon:
-                        _engine.lastResult == RoundResult.playerAWin,
+                    playerAWon: playerAWon,
                     theme: ref.watch(gameThemeProvider),
                     handAssetFor: themeController.handAssetFor,
                   )
@@ -287,8 +288,7 @@ class _LocalMatchFlowScreenState
                   RoundVictoryAnimation(
                     playerAMove: _engine.playerAMove!,
                     playerBMove: _engine.playerBMove!,
-                    playerAWon:
-                        _engine.lastResult == RoundResult.playerAWin,
+                    playerAWon: playerAWon,
                     playerALabel: 'PLAYER 1',
                     playerBLabel: 'PLAYER 2',
                     theme: ref.watch(gameThemeProvider),
@@ -325,9 +325,9 @@ class _LocalMatchFlowScreenState
             totalRounds: _engine.totalRounds,
             player1WinRate: _engine.playerAWinRate,
             player2WinRate: _engine.playerBWinRate,
-            // ── FIX: use go_router instead of raw Navigator ──
-            onPlayAgain: () => GoRouter.of(context).pop(),
-            onMainMenu: () => GoRouter.of(context).go('/main'),
+            onPlayAgain: () => Navigator.of(context).maybePop(),
+            onMainMenu: () =>
+                Navigator.of(context).popUntil((route) => route.isFirst),
           );
         }
         final playerWon = _engine.matchWinner == 'A';
@@ -335,9 +335,9 @@ class _LocalMatchFlowScreenState
           playerWon: playerWon,
           playerScore: _engine.playerAScore,
           opponentScore: _engine.playerBScore,
-          // ── FIX: use go_router instead of raw Navigator ──
-          onPlayAgain: () => GoRouter.of(context).pop(),
-          onMainMenu: () => GoRouter.of(context).go('/main'),
+          onPlayAgain: () => Navigator.of(context).maybePop(),
+          onMainMenu: () =>
+              Navigator.of(context).popUntil((route) => route.isFirst),
         );
 
       case _LocalFlowStage.finishing:
