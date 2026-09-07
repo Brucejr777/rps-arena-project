@@ -1,14 +1,33 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_theme_controller.dart';
 import '../../../core/services/audio_service.dart';
 import '../../../core/services/vibration_service.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/game_theme_controller.dart';
 import '../../stats/local_stats_repository.dart';
-import '../widgets/move_button.dart';
-import '../widgets/pause_exit_overlay.dart';
+import '../widgets/countdown_animation.dart';
+import '../widgets/draw_animation.dart';
+import '../widgets/local_scoreboard.dart';
+import '../widgets/reveal_animation.dart';
+import '../widgets/round_victory_animation.dart';
+import '../widgets/theme_background.dart';
+import 'local_player_move_screen.dart';
+import 'standard_result_screen.dart';
+
+/// Time Attack mode: 10 rounds, 3 seconds per move, random CPU.
+///
+/// Uses the same animation pipeline and themed hand assets as
+/// Single Player and Local 2 Players for visual consistency.
+enum _TaFlowStage {
+  countdown,
+  playerMove,
+  aiThinking,
+  revealing,
+  roundComplete,
+}
 
 class TimeAttackScreen extends ConsumerStatefulWidget {
   const TimeAttackScreen({super.key});
@@ -18,497 +37,505 @@ class TimeAttackScreen extends ConsumerStatefulWidget {
 }
 
 class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
+  static const int _totalRounds = 10;
+  static const int _roundTimeLimit = 3;
+
+  final LocalStatsRepository _statsRepo = LocalStatsRepository();
+  final Random _random = Random();
+
+  _TaFlowStage _stage = _TaFlowStage.countdown;
   int _currentRound = 1;
-  final int _totalRounds = 10;
   int _playerScore = 0;
   int _aiScore = 0;
-  String? _selectedMove;
-  String? _lastResult;
-  bool _isRoundActive = true;
-  bool _isPaused = false;
-  bool _isGameComplete = false;
-
-  // Time attack specific — CHANGED: 30 → 3 seconds
-  static const int _roundTimeLimit = 3;
+  int _drawCount = 0;
   int _timeRemaining = _roundTimeLimit;
-  Timer? _timer;
+  int _countdownValue = 3;
 
-  // Animation
-  String? _opponentMove;
-  bool _showOpponentMove = false;
+  String? _playerMove;
+  String? _aiMove;
+  /// 'player', 'ai', or 'draw'
+  String? _lastResult;
 
-  // ── FIX: single shared repository instance for all stats calls ──
-  final LocalStatsRepository _statsRepo = LocalStatsRepository();
+  Timer? _countdownTimer;
+  Timer? _selectionTimer;
+
+  String get _modeLabel => 'TIME ATTACK';
 
   @override
   void initState() {
     super.initState();
-    _startTimer();
+    AudioService.instance.stopMusic();
+    _startRound();
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _countdownTimer?.cancel();
+    _selectionTimer?.cancel();
+    AudioService.instance.playMusic();
     super.dispose();
   }
 
-  void _startTimer() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+  // ── Round lifecycle ──────────────────────────────────────────
+
+  void _startRound() {
+    _playerMove = null;
+    _aiMove = null;
+    _lastResult = null;
+    _timeRemaining = _roundTimeLimit;
+    _countdownValue = 3;
+
+    setState(() => _stage = _TaFlowStage.countdown);
+
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _countdownValue--;
+      if (mounted) setState(() {});
+      if (_countdownValue < 0) {
+        timer.cancel();
+        _beginSelection();
+      }
+    });
+  }
+
+  void _beginSelection() {
+    if (!mounted) return;
+    setState(() => _stage = _TaFlowStage.playerMove);
+
+    _selectionTimer?.cancel();
+    _selectionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       setState(() {
         _timeRemaining--;
         if (_timeRemaining <= 0) {
-          _timer?.cancel();
-          _timeOut();
+          timer.cancel();
+          _onTimeout();
         }
       });
     });
   }
 
-  // ── FIX: record round-outcome as lost on timeout ──
-  void _timeOut() {
-    if (!_isRoundActive) return;
-    setState(() {
-      _isRoundActive = false;
-      _opponentMove = _getAIMove();
-      _showOpponentMove = true;
-      _lastResult = 'TIME UP! You took too long.';
-      _aiScore++;
-    });
-    // FIX: record the timeout as a lost round
-    _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
-    _nextRoundAfterDelay();
+  void _onTimeout() {
+    if (_playerMove != null) return;
+    final autoMove = _randomMove();
+    _onPlayerMove(autoMove);
   }
 
-  String _getAIMove() {
-    final moves = ['rock', 'paper', 'scissors'];
-    moves.shuffle();
-    return moves.first;
-  }
+  void _onPlayerMove(String move) {
+    _selectionTimer?.cancel();
+    _playerMove = move;
+    AudioService.instance.playTransition();
 
-  // ── FIX: made async; record move selection + round outcome ──
-  void _selectMove(String move) {
-    if (!_isRoundActive || _isPaused) return;
-    _timer?.cancel();
-    AudioService.instance.playSound('select');
-    VibrationService.instance.selection();
-    setState(() {
-      _selectedMove = move;
-      _isRoundActive = false;
-    });
+    setState(() => _stage = _TaFlowStage.aiThinking);
 
-    // FIX: record the player's move selection immediately
-    _statsRepo.recordMoveSelection(move);
-
-    // AI makes move
     Future.delayed(const Duration(milliseconds: 500), () {
-      final aiMove = _getAIMove();
-      setState(() {
-        _opponentMove = aiMove;
-        _showOpponentMove = true;
-      });
-
-      // Determine winner
-      final result = _determineWinner(move, aiMove);
-      setState(() {
-        _lastResult = result;
-        if (result.contains('You win')) {
-          _playerScore++;
-        } else if (result.contains('You lose')) {
-          _aiScore++;
-        }
-      });
-
-      // FIX: record the round outcome
-      if (result.contains('You win')) {
-        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
-      } else if (result.contains('You lose')) {
-        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
-      } else {
-        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
-      }
-
-      _nextRoundAfterDelay();
-    });
-  }
-
-  String _determineWinner(String playerMove, String aiMove) {
-    if (playerMove == aiMove) return 'DRAW!';
-    if ((playerMove == 'rock' && aiMove == 'scissors') ||
-        (playerMove == 'paper' && aiMove == 'rock') ||
-        (playerMove == 'scissors' && aiMove == 'paper')) {
-      return 'You win this round!';
-    }
-    return 'You lose this round!';
-  }
-
-  void _nextRoundAfterDelay() {
-    Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
-      if (_currentRound >= _totalRounds) {
-        _endGame();
-      } else {
-        setState(() {
-          _currentRound++;
-          _selectedMove = null;
-          _opponentMove = null;
-          _showOpponentMove = false;
-          _lastResult = null;
-          _isRoundActive = true;
-          _timeRemaining = _roundTimeLimit; // CHANGED: uses constant
-        });
-        _startTimer();
-      }
+      _aiMove = _randomMove();
+      _statsRepo.recordMoveSelection(move);
+      _reveal();
     });
   }
 
-  void _endGame() {
-    setState(() {
-      _isGameComplete = true;
-    });
-    _saveResult();
+  Future<void> _reveal() async {
+    final outcome = _resolve(_playerMove!, _aiMove!);
+    _lastResult = outcome;
+
+    AudioService.instance.playReveal();
+    VibrationService.instance.reveal();
+
+    setState(() => _stage = _TaFlowStage.revealing);
+
+    switch (outcome) {
+      case 'player':
+        _playerScore++;
+        AudioService.instance.playVictory();
+        await _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
+        VibrationService.instance.victory();
+        break;
+      case 'ai':
+        _aiScore++;
+        AudioService.instance.playDefeat();
+        await _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
+        VibrationService.instance.defeat();
+        break;
+      case 'draw':
+        _drawCount++;
+        AudioService.instance.playDraw();
+        await _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
+        VibrationService.instance.draw();
+        break;
+    }
+
+    Future.delayed(const Duration(seconds: 2), _advanceAfterReveal);
   }
 
-  // ── FIX: use shared _statsRepo instance ──
-  void _saveResult() async {
+  void _advanceAfterReveal() {
+    if (!mounted) return;
+    if (_currentRound >= _totalRounds) {
+      _endGame();
+    } else {
+      _currentRound++;
+      _startRound();
+    }
+  }
+
+  Future<void> _endGame() async {
     await _statsRepo.recordStandardMatchResult(
-        playerWon: _playerScore > _aiScore);
+      playerWon: _playerScore > _aiScore,
+    );
+    if (!mounted) return;
+    setState(() => _stage = _TaFlowStage.roundComplete);
   }
 
   void _playAgain() {
-    setState(() {
-      _currentRound = 1;
-      _playerScore = 0;
-      _aiScore = 0;
-      _selectedMove = null;
-      _lastResult = null;
-      _opponentMove = null;
-      _showOpponentMove = false;
-      _isRoundActive = true;
-      _isGameComplete = false;
-      _timeRemaining = _roundTimeLimit; // CHANGED: uses constant
-    });
-    _startTimer();
+    _currentRound = 1;
+    _playerScore = 0;
+    _aiScore = 0;
+    _drawCount = 0;
+    _startRound();
   }
+
+  // ── Helpers ──────────────────────────────────────────────────
+
+  String _randomMove() =>
+      ['rock', 'paper', 'scissors'][_random.nextInt(3)];
+
+  String _resolve(String a, String b) {
+    if (a == b) return 'draw';
+    const beats = {
+      'rock': 'scissors',
+      'paper': 'rock',
+      'scissors': 'paper',
+    };
+    return beats[a] == b ? 'player' : 'ai';
+  }
+
+  // ── Build ────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final accent = ref.watch(appAccentColorProvider);
+    return ThemeBackground(
+      theme: ref.watch(gameThemeProvider),
+      child: _buildStageContent(),
+    );
+  }
 
-    if (_isGameComplete) {
-      return _buildResultScreen(accent);
-    }
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Stack(
-        children: [
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  // Header
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => context.go('/single-player-setup'),
-                      ),
-                      const Spacer(),
-                      const Text(
-                        'TIME ATTACK',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.pause, color: Colors.white),
-                        onPressed: () {
-                          _timer?.cancel();
-                          setState(() => _isPaused = true);
-                        },
-                      ),
-                    ],
+  Widget _buildStageContent() {
+    switch (_stage) {
+      case _TaFlowStage.countdown:
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: SafeArea(
+            child: Column(
+              children: [
+                _buildTopBar(),
+                const SizedBox(height: 8),
+                LocalScoreboard(
+                  playerAScore: _playerScore,
+                  playerBScore: _aiScore,
+                  roundNumber: _currentRound,
+                  draws: _drawCount,
+                  modeLabel: _modeLabel,
+                ),
+                Expanded(
+                  child: Center(
+                    child: CountdownAnimation(
+                      value: _countdownValue,
+                      theme: ref.watch(gameThemeProvider),
+                    ),
                   ),
-                  const SizedBox(height: 8),
+                ),
+              ],
+            ),
+          ),
+        );
 
-                  // Timer — CHANGED: warning threshold from <= 10 to <= 1
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
-                    ),
+      case _TaFlowStage.playerMove:
+        return Stack(
+          children: [
+            LocalPlayerMoveScreen(
+              playerNumber: 1,
+              onMoveSelected: _onPlayerMove,
+              modeLabel: _modeLabel,
+              roundNumber: _currentRound,
+              showRoundLabel: true,
+              showBackButton: false,
+            ),
+            // Timer overlay
+            Positioned(
+              top: 120,
+              left: 0,
+              right: 0,
+              child: Center(child: _buildTimerDisplay()),
+            ),
+            // Exit button overlay
+            Positioned(
+              top: 16,
+              left: 16,
+              child: SafeArea(
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).maybePop(),
+                  child: Container(
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: _timeRemaining <= 1
-                          ? Colors.red.withValues(alpha: 0.2)
-                          : AppColors.surface,
-                      borderRadius: BorderRadius.circular(12),
+                      color: AppColors.surface,
+                      shape: BoxShape.circle,
                       border: Border.all(
-                        color: _timeRemaining <= 1
-                            ? Colors.red
-                            : AppColors.surface,
+                        width: 1.5,
+                        color: AppColors.blue,
                       ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.timer,
-                          color: _timeRemaining <= 1
-                              ? Colors.red
-                              : Colors.white,
-                          size: 24,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '$_timeRemaining',
-                          style: TextStyle(
-                            color: _timeRemaining <= 1
-                                ? Colors.red
-                                : Colors.white,
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Text(
-                          'Round $_currentRound/$_totalRounds',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.blue.withValues(alpha: 0.35),
+                          blurRadius: 10,
                         ),
                       ],
                     ),
+                    child: const Icon(
+                      Icons.arrow_back,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                ),
+              ),
+            ),
+          ],
+        );
 
-                  // Score
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildScoreCard('YOU', _playerScore, AppColors.green),
-                      _buildScoreCard('CPU', _aiScore, AppColors.red),
-                    ],
+      case _TaFlowStage.aiThinking:
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: SafeArea(
+            child: Column(
+              children: [
+                _buildTopBar(),
+                const Expanded(
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.defaultAccent,
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                ),
+              ],
+            ),
+          ),
+        );
 
-                  // Result display
-                  if (_lastResult != null)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: _lastResult!.contains('win')
-                            ? AppColors.green.withValues(alpha: 0.2)
-                            : _lastResult!.contains('lose')
-                                ? AppColors.red.withValues(alpha: 0.2)
-                                : AppColors.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _lastResult!.contains('win')
-                              ? AppColors.green
-                              : _lastResult!.contains('lose')
-                                  ? AppColors.red
-                                  : AppColors.surface,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+      case _TaFlowStage.revealing:
+        final themeController = ref.read(gameThemeProvider.notifier);
+        final playerWon = _lastResult == 'player';
+        final isDraw = _lastResult == 'draw';
+        final roundKey = ValueKey(
+          'ta_round_${_currentRound}_$_lastResult',
+        );
+
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: SafeArea(
+            child: Column(
+              children: [
+                _buildTopBar(),
+                const SizedBox(height: 8),
+                LocalScoreboard(
+                  playerAScore: _playerScore,
+                  playerBScore: _aiScore,
+                  roundNumber: _currentRound,
+                  draws: _drawCount,
+                  modeLabel: _modeLabel,
+                ),
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (_showOpponentMove && _opponentMove != null) ...[
-                            Icon(
-                              _opponentMove == 'rock'
-                                  ? Icons.circle
-                                  : _opponentMove == 'paper'
-                                      ? Icons.square
-                                      : Icons.content_cut,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                            const SizedBox(width: 12),
-                          ],
-                          Text(
-                            _lastResult!,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          if (isDraw &&
+                              _playerMove != null &&
+                              _aiMove != null)
+                            DrawAnimation(
+                              key: roundKey,
+                              playerAMove: _playerMove!,
+                              playerBMove: _aiMove!,
+                              theme: ref.watch(gameThemeProvider),
+                            )
+                          else if (_playerMove != null &&
+                              _aiMove != null)
+                            RoundVictoryAnimation(
+                              key: roundKey,
+                              playerAMove: _playerMove!,
+                              playerBMove: _aiMove!,
+                              playerAWon: playerWon,
+                              playerALabel: 'YOU',
+                              playerBLabel: 'CPU',
+                              theme: ref.watch(gameThemeProvider),
+                              handAssetFor:
+                                  themeController.handAssetFor,
+                            )
+                          else
+                            const SizedBox.shrink(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+      case _TaFlowStage.roundComplete:
+        final isDraw = _playerScore == _aiScore;
+        return StandardResultScreen(
+          playerWon: _playerScore > _aiScore,
+          playerScore: _playerScore,
+          opponentScore: _aiScore,
+          resultTitle: isDraw
+              ? 'DRAW'
+              : _playerScore > _aiScore
+                  ? 'VICTORY'
+                  : 'DEFEAT',
+          resultColor: isDraw
+              ? AppColors.orange
+              : _playerScore > _aiScore
+                  ? AppColors.green
+                  : AppColors.red,
+          showMatchWon: !isDraw && _playerScore > _aiScore,
+          onPlayAgain: _playAgain,
+          onMainMenu: () => GoRouter.of(context).go('/main'),
+        );
+    }
+  }
+
+  // ── Shared widgets ───────────────────────────────────────────
+
+  Widget _buildTopBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.of(context).maybePop(),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  width: 1.5,
+                  color: AppColors.blue,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.blue.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.arrow_back,
+                color: Colors.white70,
+                size: 20,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'ROUND $_currentRound/$_totalRounds',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppColors.primaryText,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        letterSpacing: 1.2,
+                        shadows: [
+                          Shadow(
+                            blurRadius: 4,
+                            color: Colors.black87,
+                            offset: Offset(0, 2),
                           ),
                         ],
                       ),
                     ),
-
-                  const Spacer(),
-
-                  // Move buttons
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      MoveButton(
-                        move: 'rock',
-                        iconAsset: 'assets/icons/icon_rock.svg',
-                        isSelected: _selectedMove == 'rock',
-                        isDisabled: !_isRoundActive,
-                        onSelected: () => _selectMove('rock'),
-                        frameColor: AppColors.orange,
-                      ),
-                      MoveButton(
-                        move: 'paper',
-                        iconAsset: 'assets/icons/icon_paper.svg',
-                        isSelected: _selectedMove == 'paper',
-                        isDisabled: !_isRoundActive,
-                        onSelected: () => _selectMove('paper'),
-                        frameColor: AppColors.cyan,
-                      ),
-                      MoveButton(
-                        move: 'scissors',
-                        iconAsset: 'assets/icons/icon_scissors.svg',
-                        isSelected: _selectedMove == 'scissors',
-                        isDisabled: !_isRoundActive,
-                        onSelected: () => _selectMove('scissors'),
-                        frameColor: AppColors.magenta,
-                      ),
-                    ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 2),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      _modeLabel,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color:
+                            Colors.white.withValues(alpha: 0.55),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
-          if (_isPaused)
-            PauseExitOverlay(
-              onResume: () {
-                setState(() => _isPaused = false);
-                _startTimer();
-              },
-              onExit: () => context.go('/single-player-setup'),
-            ),
+          const SizedBox(width: 40),
         ],
       ),
     );
   }
 
-  Widget _buildScoreCard(String label, int score, Color color) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-          ),
+  Widget _buildTimerDisplay() {
+    final isWarning = _timeRemaining <= 1;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: isWarning
+            ? Colors.red.withValues(alpha: 0.2)
+            : AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          width: 1.5,
+          color: isWarning
+              ? Colors.red
+              : Colors.white.withValues(alpha: 0.08),
         ),
-        const SizedBox(height: 4),
-        Text(
-          '$score',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildResultScreen(Color accent) {
-    final won = _playerScore > _aiScore;
-    final draw = _playerScore == _aiScore;
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                won
-                    ? Icons.emoji_events
-                    : draw
-                        ? Icons.handshake
-                        : Icons.sentiment_dissatisfied,
-                color: won ? Colors.amber : draw ? Colors.white70 : Colors.red,
-                size: 80,
-              ),
-              const SizedBox(height: 24),
-              Text(
-                draw ? 'DRAW!' : won ? 'YOU WIN!' : 'YOU LOSE!',
-                style: TextStyle(
-                  color: won ? Colors.amber : draw ? Colors.white : Colors.red,
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '$_playerScore - $_aiScore',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 48,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Time Attack Complete',
-                style: TextStyle(color: Colors.white70, fontSize: 16),
-              ),
-              const SizedBox(height: 48),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _playAgain,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: accent,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(19.5),
-                    ),
-                  ),
-                  child: const Text(
-                    'PLAY AGAIN',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => context.go('/single-player-setup'),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppColors.surface),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(19.5),
-                    ),
-                  ),
-                  child: const Text(
-                    'BACK TO SETUP',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.timer,
+            color: isWarning ? Colors.red : Colors.white,
+            size: 22,
           ),
-        ),
+          const SizedBox(width: 8),
+          Text(
+            '$_timeRemaining',
+            style: TextStyle(
+              color: isWarning ? Colors.red : Colors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }
