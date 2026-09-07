@@ -58,7 +58,8 @@ class MultiplayerScreen extends StatelessWidget {
                   ModeCard(
                     iconAsset: 'assets/icons/icon_bolt.svg',
                     title: 'Quick Match',
-                    subtitle: 'Instantly connect and battle random players worldwide.',
+                    subtitle:
+                        'Instantly connect and battle random players worldwide.',
                     badgeLabel: 'CASUAL',
                     badgeColor: AppColors.badgeGreen,
                     iconColor: AppColors.svgGreen,
@@ -66,9 +67,10 @@ class MultiplayerScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   ModeCard(
-                    iconAsset: 'assets/icons/icon_settings.svg',
+                    iconAsset: 'assets/icons/icon_gamepad.svg', // ← CHANGED: was icon_settings.svg
                     title: 'Private Room',
-                    subtitle: 'Create or join a room with a code for your friends',
+                    subtitle:
+                        'Create or join a room with a code for your friends',
                     badgeLabel: 'FRIENDS',
                     badgeColor: AppColors.svgCyan,
                     iconColor: AppColors.svgCyan,
