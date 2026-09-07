@@ -40,7 +40,6 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
     final result = await context.push<MatchFormatConfig>('/match-format-select');
     if (!mounted) return;
     if (result == null) return;
-
     if (result.format == MatchFormat.custom) {
       final customResult =
           await context.push<MatchFormatConfig>('/custom-match-config');
@@ -88,13 +87,11 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-
               // ── Hero title ─────────────────────────────────────
               const Center(
                 child: HeroTitle(first: 'RPS', second: 'ARENA', fontSize: 26),
               ),
               const SizedBox(height: 8),
-
               // ── Subtitle ──────────────────────────────────────
               Center(
                 child: ShaderMask(
@@ -114,7 +111,6 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-
               // ── Mode cards (1-Player only) ─────────────────────
               Expanded(
                 child: SingleChildScrollView(
@@ -189,25 +185,13 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
                           context.push('/tournament');
                         },
                       ),
-                      const SizedBox(height: 16),
-                      ModeCard(
-                        iconAsset: 'assets/icons/icon_rocket.svg',
-                        title: 'ACHIEVEMENTS',
-                        subtitle: 'Unlock badges',
-                        subtitle2: 'Track progress',
-                        badgeLabel: 'STATS',
-                        badgeColor: AppColors.svgPink,
-                        iconColor: AppColors.svgPink,
-                        onTap: () {
-                          context.push('/achievements');
-                        },
-                      ),
+                      // ── REMOVED: Achievements ModeCard ──
+                      // Achievements is now accessible from the Profile screen.
                       const SizedBox(height: 24),
                     ],
                   ),
                 ),
               ),
-
               // ── Start button ───────────────────────────────────
               SizedBox(
                 width: double.infinity,

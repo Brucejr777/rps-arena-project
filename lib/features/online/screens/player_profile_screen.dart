@@ -16,6 +16,8 @@ import '../widgets/rank_badge.dart';
 /// - Win Rate
 /// - MATCH HISTORY button
 /// - ONLINE STATISTICS button
+/// - ACHIEVEMENTS button
+/// - SIGN OUT button
 ///
 /// No profile picture.
 class PlayerProfileScreen extends ConsumerStatefulWidget {
@@ -51,6 +53,7 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
       // Use the same AuthClient that handled login — shares token storage.
       Map<String, dynamic>? serverStats;
       Map<String, dynamic>? player;
+
       try {
         final client = ref.read(authControllerProvider.notifier).client;
         final response = await client.get('/auth/profile');
@@ -62,6 +65,7 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
       }
 
       if (!mounted) return;
+
       setState(() {
         _player = player;
         // Merge: server + local stats combined
@@ -99,6 +103,12 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _signOut() async {
+    await ref.read(authControllerProvider.notifier).signOut();
+    if (!mounted) return;
+    GoRouter.of(context).go('/main');
   }
 
   Widget _statBox(String label, String value) {
@@ -184,6 +194,7 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     final displayName = _player?['username'] ?? auth.username ?? 'Unknown';
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -214,7 +225,6 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
                 ],
               ),
             ),
-
             // ── Content ──────────────────────────────────────────
             Expanded(
               child: _isLoading
@@ -280,7 +290,6 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-
                               // ── Username ──────────────────────
                               Center(
                                 child: Text(
@@ -293,7 +302,6 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
                                 ),
                               ),
                               const SizedBox(height: 8),
-
                               // ── Rank badge + Rating ───────────
                               Center(
                                 child: Row(
@@ -314,7 +322,6 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
                                 ),
                               ),
                               const SizedBox(height: 24),
-
                               // ── Stats grid ───────────────────
                               Row(
                                 children: [
@@ -344,7 +351,6 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
                                 ],
                               ),
                               const SizedBox(height: 24),
-
                               // ── Action buttons ───────────────
                               _actionButton('MATCH HISTORY', () {
                                 context.push('/match-history');
@@ -353,6 +359,33 @@ class _PlayerProfileScreenState extends ConsumerState<PlayerProfileScreen> {
                               _actionButton('ONLINE STATISTICS', () {
                                 context.push('/online-stats');
                               }),
+                              const SizedBox(height: 12),
+                              _actionButton('ACHIEVEMENTS', () {
+                                context.push('/achievements');
+                              }),
+                              const SizedBox(height: 24),
+                              // ── Sign Out button ──────────────
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton(
+                                  onPressed: _signOut,
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(color: AppColors.red),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'SIGN OUT',
+                                    style: TextStyle(
+                                      color: AppColors.red,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),

@@ -117,7 +117,7 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
                       ),
                     ),
                     const Spacer(),
-                    // Settings gear (top-right) — wireframe: #334155 border, no glow
+                    // Settings gear (top-right)
                     GestureDetector(
                       onTap: widget.onSettings,
                       child: Container(
@@ -142,12 +142,10 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-
               // ── Hero title ─────────────────────────────────
               const HeroTitle(first: 'RPS', second: 'ARENA'),
               const SizedBox(height: 16),
               const GameModeHeader(),
-
               // ── Guest auth row (only when not signed in) ──
               if (!isSignedIn) ...[
                 const SizedBox(height: 16),
@@ -185,24 +183,11 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
                   ],
                 ),
               ] else ...[
+                // ── REMOVED: SIGN OUT button ──
+                // Sign out is now accessible from the Profile screen.
                 const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: () async {
-                    await ref.read(authControllerProvider.notifier).signOut();
-                  },
-                  child: const Text(
-                    'SIGN OUT',
-                    style: TextStyle(
-                      color: AppColors.orange,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
               ],
               const SizedBox(height: 20),
-
               // ── Mode cards (wireframe order/copy/badges) ──
               Expanded(
                 child: Padding(
@@ -255,7 +240,6 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
                   ),
                 ),
               ),
-
               // ── Bottom Frame Indicator ─────────────────────
               Container(
                 padding: const EdgeInsets.only(bottom: 12),

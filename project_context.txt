@@ -15185,7 +15185,6 @@ class MoveButton extends ConsumerWidget {
 FILE: lib/features/match/widgets/online_gameplay_screen.dart
 ================================================================================
 // lib/features/match/widgets/online_gameplay_screen.dart
-
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -15204,7 +15203,6 @@ import 'reveal_animation.dart';
 import '../screens/standard_result_screen.dart';
 import '../screens/unlimited_result_screen.dart';
 import '../../online/screens/connection_lost_screen.dart';
-// ── NEW IMPORT: needed for pushAndRemoveUntil navigation ──
 import '../../online/screens/online_match_loader_screen.dart';
 
 /// Online gameplay screen (T99).
@@ -15246,26 +15244,31 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   int _drawCount = 0;
   int _selectionTimer = 10;
   Timer? _timer;
-
   String? _selectedMove;
   bool _isAutoMove = false;
   bool _isWaitingForServer = false;
   bool _isRevealing = false;
   bool _isPaused = false;
   bool _opponentConnected = false;
-
   Timer? _waitingTimeout;
 
   String? _serverPlayerAMove;
   String? _serverPlayerBMove;
   bool _serverPlayerAAuto = false;
   bool _serverPlayerBAuto = false;
-
   bool _roundResolved = false;
   bool _waitingForNextRound = false;
   bool _hasPicked = false;
 
-  // ── Rematch state ──────────────────────────────────────────
+  // ── FIX: Store round result from server ──
+  String? _roundResult; // 'player_a_wins', 'player_b_wins', 'draw'
+  bool _showRoundResult = false;
+
+  // ── FIX: Store match-level result from server ──
+  bool _matchDraw = false;
+  int? _matchWinnerId;
+
+  // ── Rematch state ──
   bool _showResult = false;
   bool _showRematchRequest = false;
   bool _isRematchWaiting = false;
@@ -15281,20 +15284,41 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   bool get _canEndMatch =>
       _isUnlimited && _drawCount + _playerScore + _opponentScore > 0;
 
+  // ── FIX: Helper to determine if local player won the round ──
+  bool get _localPlayerWonRound {
+    if (_roundResult == null) return false;
+    if (_roundResult == 'player_a_wins') return _isPlayerA;
+    if (_roundResult == 'player_b_wins') return !_isPlayerA;
+    return false;
+  }
+
+  bool get _roundIsDraw => _roundResult == 'draw';
+
+  // ── FIX: Helper to get round result display text ──
+  String get _roundResultText {
+    if (_roundIsDraw) return 'DRAW';
+    if (_localPlayerWonRound) return 'YOU WIN THE ROUND';
+    return '${widget.opponentName.toUpperCase()} WINS THE ROUND';
+  }
+
+  Color get _roundResultColor {
+    if (_roundIsDraw) return AppColors.orange;
+    if (_localPlayerWonRound) return AppColors.green;
+    return AppColors.red;
+  }
+
   @override
   void initState() {
     super.initState();
     _authClient = ref.read(authControllerProvider.notifier).client;
     _socketClient = MatchSocketClient();
     _connectWebSocket();
-
     Future.delayed(const Duration(seconds: 5), () {
       if (mounted && !_opponentConnected) {
         _opponentConnected = true;
         _startRound();
       }
     });
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(matchControllerProvider.notifier).setMode(MatchMode.online);
     });
@@ -15339,15 +15363,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           _startRound();
         }
         break;
-
       case SocketEventType.roundResult:
         _handleRoundResult(event.data);
         break;
-
       case SocketEventType.matchCompleted:
         _handleMatchCompleted(event.data);
         break;
-
       case SocketEventType.opponentDisconnected:
         Navigator.of(context).push(
           MaterialPageRoute(
@@ -15363,7 +15384,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           ),
         );
         break;
-
       case SocketEventType.rematchRequested:
         setState(() {
           _showRematchRequest = true;
@@ -15372,11 +15392,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         });
         _startRematchCountdown();
         break;
-
       case SocketEventType.rematchAccepted:
         _handleRematchAccepted(event.data);
         break;
-
       case SocketEventType.rematchDeclined:
         _rematchPollTimer?.cancel();
         setState(() {
@@ -15384,7 +15402,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           _showRematchRequest = false;
         });
         break;
-
       case SocketEventType.matchCancelled:
         _rematchCountdown?.cancel();
         _rematchPollTimer?.cancel();
@@ -15403,7 +15420,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           GoRouter.of(context).go('/quick-match-setup');
         }
         break;
-
       default:
         break;
     }
@@ -15413,7 +15429,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     if (_roundResolved) return;
     final eventRound = _asInt(data['roundNumber']);
     if (eventRound < _currentRound) return;
-
     _roundResolved = true;
     _waitingTimeout?.cancel();
 
@@ -15425,9 +15440,14 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     final totalRounds = _asInt(data['totalRounds']);
     final matchFinished = data['matchFinished'] as bool? ?? false;
 
+    // ── FIX: Store the round result from the server ──
+    final result = data['result'] as String?;
+
     setState(() {
       _isWaitingForServer = false;
       _isRevealing = true;
+      _showRoundResult = true;
+      _roundResult = result;
       _serverPlayerAMove = playerAMove;
       _serverPlayerBMove = playerBMove;
       _serverPlayerAAuto = data['playerAAuto'] as bool? ?? false;
@@ -15437,10 +15457,13 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _drawCount = drawCount;
     });
 
-    Future.delayed(const Duration(seconds: 1), () {
+    // ── FIX: Extended delay to show round result text (1.5s instead of 1s) ──
+    Future.delayed(const Duration(milliseconds: 1500), () {
       if (!mounted) return;
       setState(() {
         _isRevealing = false;
+        _showRoundResult = false;
+        _roundResult = null;
         _serverPlayerAMove = null;
         _serverPlayerBMove = null;
         _serverPlayerAAuto = false;
@@ -15449,6 +15472,11 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
       if (matchFinished) {
         _timer?.cancel();
+        // ── FIX: Store match winner from round_result event ──
+        final winnerId = data['winnerId'];
+        if (winnerId != null) {
+          _matchWinnerId = _asInt(winnerId);
+        }
         setState(() {
           _showResult = true;
           _showRematchRequest = false;
@@ -15469,6 +15497,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   void _handleMatchCompleted(Map<String, dynamic> data) {
+    // ── FIX: Store winnerId and matchDraw from server ──
+    final winnerId = data['winnerId'];
+    final matchDraw = data['matchDraw'] as bool? ?? false;
+
     setState(() {
       _playerScore = _isPlayerA
           ? _asInt(data['playerAScore'])
@@ -15477,6 +15509,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           ? _asInt(data['playerBScore'])
           : _asInt(data['playerAScore']);
       _drawCount = _asInt(data['drawCount']);
+      _matchDraw = matchDraw;
+      _matchWinnerId = winnerId != null ? _asInt(winnerId) : null;
       _showResult = true;
       _showRematchRequest = false;
       _isRematchWaiting = false;
@@ -15486,7 +15520,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _startRound() {
     _waitingTimeout?.cancel();
     _pollRetries = 0;
-
     setState(() {
       _selectedMove = null;
       _isAutoMove = false;
@@ -15495,6 +15528,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _roundResolved = false;
       _waitingForNextRound = false;
       _hasPicked = false;
+      _roundResult = null;
+      _showRoundResult = false;
     });
 
     _timer?.cancel();
@@ -15527,12 +15562,11 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   Future<void> _submitMove() async {
     if (_selectedMove == null || _isWaitingForServer) return;
-
     setState(() => _isWaitingForServer = true);
     _timer?.cancel();
-
     _waitingTimeout?.cancel();
     _pollRetries = 0;
+
     _waitingTimeout = Timer(const Duration(seconds: 3), () {
       if (!mounted || !_isWaitingForServer) return;
       _pollRoundState();
@@ -15543,7 +15577,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         '/matches/${widget.matchId}/move',
         data: {'move': _selectedMove},
       );
-
       final data = res.data;
       if (data is Map<String, dynamic> && data['type'] == 'round_result') {
         _waitingTimeout?.cancel();
@@ -15551,7 +15584,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         _handleRoundResult(data);
         return;
       }
-
       _waitingTimeout?.cancel();
       _waitingTimeout = Timer(const Duration(milliseconds: 500), () {
         if (!mounted || !_isWaitingForServer) return;
@@ -15580,7 +15612,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         _resetWaiting();
         return;
       }
-
       final rounds = data['rounds'] as List<dynamic>? ?? [];
       final matchFinished = data['winnerId'] != null ||
           (data['matchDraw'] as bool? ?? false);
@@ -15655,7 +15686,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _onExitConfirmed() {
     final outcome = ref.read(matchControllerProvider.notifier).attemptExit();
     setState(() => _isPaused = false);
-
     switch (outcome) {
       case ExitOutcome.connectionLost:
         Navigator.of(context).push(
@@ -15729,30 +15759,17 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   //  REMATCH
   // ════════════════════════════════════════════════════════════
 
-  /// ── FIX: use pushAndRemoveUntil to guarantee a completely new
-  /// widget tree. go_router's go() to the same /online-gameplay
-  /// path can skip rebuilding, which kept the old State (scores,
-  /// _isWaitingForServer, _waitingForNextRound, socket) alive. ──
   void _navigateToRematch(int newMatchId) {
     if (_hasNavigatedToRematch) return;
     _hasNavigatedToRematch = true;
-
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
-
     if (!mounted) return;
 
     final playerName = widget.playerName;
     final opponentName = widget.opponentName;
-
-    // Capture the navigator BEFORE this widget is disposed.
     final navigator = Navigator.of(context);
 
-    // pushAndRemoveUntil removes every existing route and pushes a
-    // brand-new OnlineMatchLoaderScreen. This guarantees:
-    //   • a fresh OnlineMatchLoaderScreen  → fresh _resolve()
-    //   • a fresh OnlineGameplayScreen     → scores = 0, flags = false
-    //   • a fresh MatchSocketClient        → connects to the NEW match
     navigator.pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => OnlineMatchLoaderScreen(
@@ -15762,7 +15779,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           opponentName: opponentName,
         ),
       ),
-      (route) => false, // remove ALL previous routes
+      (route) => false,
     );
   }
 
@@ -15771,11 +15788,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _isRematchWaiting = true;
       _showRematchRequest = false;
     });
-
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/request');
       _startRematchPolling();
-
       _rematchCountdown?.cancel();
       int remaining = 30;
       _rematchCountdown = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -15812,27 +15827,21 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   void _acceptRematch() async {
     if (_isAcceptingRematch || _hasNavigatedToRematch) return;
-
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
-
     setState(() => _isAcceptingRematch = true);
-
     try {
       final res =
           await _authClient.post('/matches/${widget.matchId}/rematch/accept');
       final data = res.data as Map<String, dynamic>;
       final newMatchId = (data['newMatchId'] as num?)?.toInt();
-
       if (!mounted) return;
-
       if (newMatchId == null) {
         setState(() => _isAcceptingRematch = false);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Rematch accepted, but no match id returned.')));
         return;
       }
-
       _navigateToRematch(newMatchId);
     } catch (e) {
       if (!mounted) return;
@@ -15967,10 +15976,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.close,
-                              color: Colors.white70),
-                          onPressed: _onExitPressed,
-                        ),
+                            icon: const Icon(Icons.close,
+                                color: Colors.white70),
+                            onPressed: _onExitPressed),
                         Text(
                           'ROUND $_currentRound',
                           style: const TextStyle(
@@ -16041,20 +16049,52 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                     if (_isRevealing &&
                         _serverPlayerAMove != null &&
                         _serverPlayerBMove != null)
-                      RevealAnimation(
-                        playerAMove: _isPlayerA
-                            ? _serverPlayerAMove!
-                            : _serverPlayerBMove!,
-                        playerBMove: _isPlayerA
-                            ? _serverPlayerBMove!
-                            : _serverPlayerAMove!,
-                        handAssetFor: themeController.handAssetFor,
-                        playerALabel: widget.playerName,
-                        playerBLabel: widget.opponentName,
-                        playerAAuto:
-                            _isPlayerA ? _serverPlayerAAuto : _serverPlayerBAuto,
-                        playerBAuto:
-                            _isPlayerA ? _serverPlayerBAuto : _serverPlayerAAuto,
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          RevealAnimation(
+                            playerAMove: _isPlayerA
+                                ? _serverPlayerAMove!
+                                : _serverPlayerBMove!,
+                            playerBMove: _isPlayerA
+                                ? _serverPlayerBMove!
+                                : _serverPlayerAMove!,
+                            handAssetFor: themeController.handAssetFor,
+                            playerALabel: widget.playerName,
+                            playerBLabel: widget.opponentName,
+                            playerAAuto:
+                                _isPlayerA ? _serverPlayerAAuto : _serverPlayerBAuto,
+                            playerBAuto:
+                                _isPlayerA ? _serverPlayerBAuto : _serverPlayerAAuto,
+                          ),
+                          // ── FIX: Display round winner text ──
+                          if (_showRoundResult && _roundResult != null) ...[
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _roundResultColor.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  width: 1.5,
+                                  color: _roundResultColor.withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Text(
+                                _roundResultText,
+                                style: TextStyle(
+                                  color: _roundResultColor,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       )
                     else
                       Row(
@@ -16156,8 +16196,36 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   Widget _buildResultOverlay() {
-    final playerWon = _playerScore > _opponentScore;
+    // ── FIX: Use server-authoritative winner instead of score comparison ──
+    final bool playerWon;
+    final bool isDraw;
+
+    if (_matchDraw) {
+      playerWon = false;
+      isDraw = true;
+    } else if (_matchWinnerId != null) {
+      playerWon = _matchWinnerId == widget.playerId;
+      isDraw = false;
+    } else {
+      // Fallback: score comparison (should not normally reach here)
+      playerWon = _playerScore > _opponentScore;
+      isDraw = _playerScore == _opponentScore;
+    }
+
     final total = _playerScore + _opponentScore + _drawCount;
+
+    final String resultTitle;
+    final Color resultColor;
+    if (isDraw) {
+      resultTitle = 'DRAW';
+      resultColor = AppColors.orange;
+    } else if (playerWon) {
+      resultTitle = 'VICTORY';
+      resultColor = AppColors.green;
+    } else {
+      resultTitle = 'DEFEAT';
+      resultColor = AppColors.red;
+    }
 
     return Container(
       color: Colors.black.withValues(alpha: 0.85),
@@ -16175,17 +16243,15 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     width: 1.5,
-                    color: (playerWon ? AppColors.green : AppColors.red)
-                        .withValues(alpha: 0.3),
+                    color: resultColor.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Column(
                   children: [
                     Text(
-                      playerWon ? 'VICTORY' : 'DEFEAT',
+                      resultTitle,
                       style: TextStyle(
-                        color:
-                            playerWon ? AppColors.green : AppColors.red,
+                        color: resultColor,
                         fontSize: 32,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 2,

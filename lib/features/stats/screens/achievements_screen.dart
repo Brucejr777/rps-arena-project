@@ -174,7 +174,6 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> {
         target: 100,
       ),
     ];
-
     setState(() { _isLoading = false; });
   }
 
@@ -202,8 +201,8 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    // FIX: Navigate to Single Player (1-Player) instead of Local Setup (2-Player)
-                    onPressed: () => context.go('/single-player-setup'),
+                    // FIX: Navigate back to Profile instead of Single Player Setup
+                    onPressed: () => context.go('/profile'),
                   ),
                   const Spacer(),
                   const Text(
@@ -220,7 +219,6 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> {
                 ],
               ),
             ),
-
             // Progress bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -252,9 +250,7 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> {
                 ],
               ),
             ),
-
             const SizedBox(height: 16),
-
             // Achievements list
             Expanded(
               child: ListView.builder(
