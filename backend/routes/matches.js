@@ -30,6 +30,7 @@ function createMatchesRouter(pool, wss, matchConnections) {
   function broadcastToMatch(matchId, payload) {
     const msg = JSON.stringify(payload);
     let sent = 0;
+
     if (matchConnections) {
       const conns = matchConnections.get(matchId);
       if (conns) {
@@ -47,6 +48,7 @@ function createMatchesRouter(pool, wss, matchConnections) {
         console.log(`broadcastToMatch: no conns entry for matchId=${matchId}`);
       }
     }
+
     // Always fall back to wss.clients if no targeted clients received it
     if (sent === 0 && wss) {
       console.log(`broadcastToMatch: fallback to wss.clients, total=${wss.clients.size}`);
@@ -58,7 +60,6 @@ function createMatchesRouter(pool, wss, matchConnections) {
   router.get('/history', async (req, res) => {
     try {
       const { playerId } = req.player;
-
       const result = await pool.query(
         `SELECT mh.history_id, mh.match_id, mh.opponent_id, a.username AS opponent_name,
                 mh.mode, mh.format_type, mh.result, mh.rating_before, mh.rating_after,
@@ -70,7 +71,6 @@ function createMatchesRouter(pool, wss, matchConnections) {
          LIMIT 50`,
         [playerId]
       );
-
       res.json({ history: result.rows, count: result.rows.length });
     } catch (err) {
       console.error('Match history error:', err);
@@ -95,11 +95,9 @@ function createMatchesRouter(pool, wss, matchConnections) {
         'SELECT * FROM match WHERE match_id = $1',
         [matchId]
       );
-
       if (matchResult.rows.length === 0) {
         return res.status(404).json({ error: 'Match not found.' });
       }
-
       const match = matchResult.rows[0];
 
       // Check match is still active
@@ -115,20 +113,15 @@ function createMatchesRouter(pool, wss, matchConnections) {
       }
 
       // Determine current round number from completed rounds only.
-      // MAX(round_number) is wrong — a row exists as soon as ONE player
-      // submits, so the second player would compute round+1 and write to
-      // a brand-new row instead of completing the shared one.
       const currentRound = match.total_rounds + 1;
 
       // ── Hard duplicate-pick guard (both players) ───────────
-      // Check if this player already has a move in the current round,
-      // regardless of who created the row.  This must run BEFORE any
-      // INSERT or UPDATE to prevent a second tap from overwriting.
       const dupCheck = await pool.query(
         `SELECT player_a_move, player_b_move FROM round
          WHERE match_id = $1 AND round_number = $2`,
         [matchId, currentRound]
       );
+
       if (dupCheck.rows.length > 0) {
         const existing = dupCheck.rows[0];
         if (isPlayerA && existing.player_a_move) {
@@ -150,8 +143,7 @@ function createMatchesRouter(pool, wss, matchConnections) {
       let existingMove = null;
 
       if (existingRound.rows.length === 0) {
-        // Create new round — use ON CONFLICT to handle the race where both
-        // players submit at the same instant and both read "no row".
+        // Create new round — use ON CONFLICT to handle the race
         const insertResult = await pool.query(
           `INSERT INTO round (match_id, round_number, player_a_move, player_b_move, player_a_auto, player_b_auto)
            VALUES ($1, $2, $3, $4, false, false)
@@ -161,28 +153,22 @@ function createMatchesRouter(pool, wss, matchConnections) {
         );
 
         if (insertResult.rows.length > 0) {
-          // We won the race — we created the row.
           roundId = insertResult.rows[0].id;
-
           // Start 10s timeout for the other player (T100)
           const waitingPlayerId = isPlayerA ? match.player_b_id : match.player_a_id;
           const waitingIsPlayerA = !isPlayerA;
           roundTimeoutManager.startTimer(parseInt(matchId), currentRound, waitingPlayerId, waitingIsPlayerA);
         } else {
-          // Another player created the row between our SELECT and INSERT.
-          // Fall through to the "round exists" branch below.
           const retryRound = await pool.query(
             `SELECT id, player_a_move, player_b_move FROM round
              WHERE match_id = $1 AND round_number = $2`,
             [matchId, currentRound]
           );
           existingRound.rows = retryRound.rows;
-          // Fall through
         }
       }
 
       if (existingRound.rows.length > 0 && roundId == null) {
-        // Round exists — check if this player already submitted
         const round = existingRound.rows[0];
         roundId = round.id;
 
@@ -211,7 +197,6 @@ function createMatchesRouter(pool, wss, matchConnections) {
       const round = updatedRound.rows[0];
 
       if (!round.player_a_move || !round.player_b_move) {
-        // Still waiting for the other player
         return res.json({
           status: 'waiting',
           roundNumber: currentRound,
@@ -228,9 +213,7 @@ function createMatchesRouter(pool, wss, matchConnections) {
 
       const result = resolveRound(round.player_a_move, round.player_b_move);
 
-      // Update match score — query BEFORE setting the round result to avoid
-      // double-counting the current round. pg COUNT returns strings, so
-      // coerce to numbers.
+      // Update match score — query BEFORE setting the round result
       const countWins = async (resultType) => {
         const r = await pool.query(
           `SELECT COUNT(*) as wins FROM round WHERE match_id = $1 AND result = $2`,
@@ -238,6 +221,7 @@ function createMatchesRouter(pool, wss, matchConnections) {
         );
         return parseInt(r.rows[0].wins, 10) || 0;
       };
+
       let playerAScore = await countWins('player_a_wins');
       let playerBScore = await countWins('player_b_wins');
 
@@ -290,8 +274,9 @@ function createMatchesRouter(pool, wss, matchConnections) {
         }
 
         // T117: Update statistics for ALL online match modes
+        // FIX: Pass newDrawCount as the 8th argument
         if (match.mode !== 'local') {
-          await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, matchWinner, playerAScore, playerBScore);
+          await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, matchWinner, playerAScore, playerBScore, newDrawCount);
         }
       }
 
@@ -364,11 +349,9 @@ function createMatchesRouter(pool, wss, matchConnections) {
         'SELECT * FROM match WHERE match_id = $1',
         [matchId]
       );
-
       if (matchResult.rows.length === 0) {
         return res.status(404).json({ error: 'Match not found.' });
       }
-
       const match = matchResult.rows[0];
 
       const roundsResult = await pool.query(
@@ -422,11 +405,9 @@ function createMatchesRouter(pool, wss, matchConnections) {
         'SELECT * FROM match WHERE match_id = $1',
         [matchId]
       );
-
       if (matchResult.rows.length === 0) {
         return res.status(404).json({ error: 'Match not found.' });
       }
-
       const match = matchResult.rows[0];
 
       // Must be an Unlimited match
@@ -466,6 +447,7 @@ function createMatchesRouter(pool, wss, matchConnections) {
 
         if (roundCheck.rows.length > 0) {
           const r = roundCheck.rows[0];
+
           // If one player submitted but round isn't resolved yet, auto-complete it
           if (!r.result && ((r.player_a_move && !r.player_b_move) || (!r.player_a_move && r.player_b_move))) {
             const missingIsA = !r.player_a_move;
@@ -495,6 +477,7 @@ function createMatchesRouter(pool, wss, matchConnections) {
       const aWins = parseInt((await pool.query(
         `SELECT COUNT(*) as c FROM round WHERE match_id = $1 AND result = 'player_a_wins'`, [matchId]
       )).rows[0].c, 10) || 0;
+
       const bWins = parseInt((await pool.query(
         `SELECT COUNT(*) as c FROM round WHERE match_id = $1 AND result = 'player_b_wins'`, [matchId]
       )).rows[0].c, 10) || 0;
@@ -527,8 +510,9 @@ function createMatchesRouter(pool, wss, matchConnections) {
       }
 
       // T117: Update statistics for ALL online match modes
+      // FIX: Pass match.draw_count as the 8th argument
       if (match.mode !== 'local') {
-        await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, matchDraw, winnerId, aWins, bWins);
+        await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, matchDraw, winnerId, aWins, bWins, match.draw_count);
       }
 
       // Send match_completed via WebSocket
@@ -572,11 +556,9 @@ function createMatchesRouter(pool, wss, matchConnections) {
         'SELECT * FROM match WHERE match_id = $1',
         [matchId]
       );
-
       if (matchResult.rows.length === 0) {
         return res.status(404).json({ error: 'Match not found.' });
       }
-
       const match = matchResult.rows[0];
 
       // Match must not already be finished
@@ -593,22 +575,19 @@ function createMatchesRouter(pool, wss, matchConnections) {
 
       // For ranked matches: cancel after ready triggers loss penalty
       if (match.mode === 'ranked') {
-        // Both players are in the match (ready confirmed) — penalty applies
         const winnerId = isPlayerA ? match.player_b_id : match.player_a_id;
         const loserId = playerId;
 
-        // Update match with loss
         await pool.query(
           'UPDATE match SET winner_id = $1, total_rounds = total_rounds + 1 WHERE match_id = $2',
           [winnerId, matchId]
         );
 
-        // T111: Apply rating changes for ranked cancel
         const { ratingChangeA: cancelRatingA, ratingChangeB: cancelRatingB } = calculateRatingChanges(false, winnerId, match.player_a_id, match.player_b_id);
         await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, cancelRatingA, cancelRatingB);
-        await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, winnerId, 0, 0);
+        // FIX: Pass 0 for drawCount (no rounds played in a cancel)
+        await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, winnerId, 0, 0, 0);
 
-        // Send match_completed via WebSocket
         broadcastToMatch(parseInt(matchId), {
           type: 'match_completed',
           matchId: parseInt(matchId),
@@ -634,13 +613,10 @@ function createMatchesRouter(pool, wss, matchConnections) {
         [matchId]
       );
 
-      // T118: Record match history for non-ranked cancel
       await recordMatchHistory(pool, matchId, match.player_a_id, match.player_b_id, true, null, 0, 0);
+      // FIX: Pass 0 for drawCount (no rounds played in a cancel)
+      await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, true, null, 0, 0, 0);
 
-      // T117: Update stats for non-ranked online matches on cancel
-      await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, true, null, 0, 0);
-
-      // Send match_completed via WebSocket
       broadcastToMatch(parseInt(matchId), {
         type: 'match_completed',
         matchId: parseInt(matchId),
@@ -674,11 +650,9 @@ function createMatchesRouter(pool, wss, matchConnections) {
         'SELECT * FROM match WHERE match_id = $1',
         [matchId]
       );
-
       if (matchResult.rows.length === 0) {
         return res.status(404).json({ error: 'Match not found.' });
       }
-
       const match = matchResult.rows[0];
 
       // Match must not already be finished
@@ -698,21 +672,17 @@ function createMatchesRouter(pool, wss, matchConnections) {
         return res.status(400).json({ error: 'Quit penalty only applies to ranked matches.' });
       }
 
-      // Determine winner (opponent) and loser (quitter)
       const winnerId = isPlayerA ? match.player_b_id : match.player_a_id;
       const loserId = playerId;
 
-      // Update match: set winner, increment total rounds for record
       await pool.query(
         'UPDATE match SET winner_id = $1, total_rounds = total_rounds + 1 WHERE match_id = $2',
         [winnerId, matchId]
       );
 
-      // T111: Apply rating changes for ranked quit
       const { ratingChangeA: quitRatingA, ratingChangeB: quitRatingB } = calculateRatingChanges(false, winnerId, match.player_a_id, match.player_b_id);
       await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, quitRatingA, quitRatingB);
 
-      // Send match_completed via WebSocket
       broadcastToMatch(parseInt(matchId), {
         type: 'match_completed',
         matchId: parseInt(matchId),
@@ -751,7 +721,6 @@ function createMatchesRouter(pool, wss, matchConnections) {
       const requesterResult = await pool.query('SELECT username FROM account WHERE player_id = $1', [playerId]);
       const requesterName = requesterResult.rows[0]?.username ?? 'Opponent';
 
-      // Reset stale state so the requester's poller never sees an old 'declined'/'accepted'
       await pool.query(
         'UPDATE match SET rematch_status = $1, rematch_new_match_id = NULL WHERE match_id = $2',
         ['pending', matchId]);
@@ -789,6 +758,7 @@ function createMatchesRouter(pool, wss, matchConnections) {
         `INSERT INTO match (mode, format_type, wins_required, player_a_id, player_b_id)
          VALUES ($1,$2,$3,$4,$5) RETURNING match_id`,
         [orig.mode, orig.format_type, orig.wins_required, orig.player_a_id, orig.player_b_id]);
+
       const newMatchId = insertResult.rows[0].match_id;
 
       await pool.query(
@@ -873,6 +843,7 @@ function createMatchesRouter(pool, wss, matchConnections) {
         [round.id]
       );
       const r = updatedRound.rows[0];
+
       if (!r.player_a_move || !r.player_b_move) return;
 
       const result = resolveRound(r.player_a_move, r.player_b_move);
@@ -886,26 +857,30 @@ function createMatchesRouter(pool, wss, matchConnections) {
       // Update match totals
       const newTotalRounds = match.total_rounds + 1;
       const newDrawCount = result === 'draw' ? match.draw_count + 1 : match.draw_count;
+
       await pool.query(
         'UPDATE match SET total_rounds = $1, draw_count = $2 WHERE match_id = $3',
         [newTotalRounds, newDrawCount, matchId]
       );
 
       // Calculate scores
-      const aWins = (await pool.query(
+      const aWins = parseInt((await pool.query(
         `SELECT COUNT(*) as c FROM round WHERE match_id = $1 AND result = 'player_a_wins'`, [matchId]
-      )).rows[0].c;
-      const bWins = (await pool.query(
+      )).rows[0].c, 10) || 0;
+
+      const bWins = parseInt((await pool.query(
         `SELECT COUNT(*) as c FROM round WHERE match_id = $1 AND result = 'player_b_wins'`, [matchId]
-      )).rows[0].c;
+      )).rows[0].c, 10) || 0;
 
       // Check match completion
       let matchFinished = false;
       let matchWinner = null;
+
       if (match.format_type !== 'unlimited') {
         if (aWins >= match.wins_required) { matchFinished = true; matchWinner = match.player_a_id; }
         else if (bWins >= match.wins_required) { matchFinished = true; matchWinner = match.player_b_id; }
       }
+
       if (matchFinished) {
         await pool.query('UPDATE match SET winner_id = $1 WHERE match_id = $2', [matchWinner, matchId]);
 
@@ -915,12 +890,13 @@ function createMatchesRouter(pool, wss, matchConnections) {
           await applyRatingChanges(pool, matchId, match.player_a_id, match.player_b_id, ratingChangeA, ratingChangeB);
         } else if (match.mode !== 'local') {
           // T118: Record match history for non-ranked online matches
-          await recordMatchHistory(pool, matchId, match.player_a_id, match.player_b_id, false, matchWinner, parseInt(aWins), parseInt(bWins));
+          await recordMatchHistory(pool, matchId, match.player_a_id, match.player_b_id, false, matchWinner, aWins, bWins);
         }
 
         // T117: Update statistics for ALL online match modes
+        // FIX: Pass newDrawCount as the 8th argument
         if (match.mode !== 'local') {
-          await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, matchWinner, parseInt(aWins), parseInt(bWins));
+          await updatePlayerStatistics(pool, match.player_a_id, match.player_b_id, false, matchWinner, aWins, bWins, newDrawCount);
         }
       }
 

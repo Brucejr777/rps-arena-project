@@ -114,54 +114,68 @@ async function applyRatingChanges(pool, matchId, playerAId, playerBId, ratingCha
 }
 
 /**
- * Update player statistics after a ranked match.
+ * Update player statistics after a match completes.
+ *
+ * FIX: Now accepts drawCount parameter to properly track round-level draws.
+ * The `draws` column represents the number of individual rounds that ended
+ * in a draw, NOT match-level draws.
  *
  * @param {Pool} pool - Database pool
  * @param {number} playerAId - Player A's ID
  * @param {number} playerBId - Player B's ID
- * @param {boolean} matchDraw - Whether match was a draw
+ * @param {boolean} matchDraw - Whether match was a draw (Unlimited tie)
  * @param {number|null} winnerId - Winner's player ID
  * @param {number} playerAWins - Player A's round wins
  * @param {number} playerBWins - Player B's round wins
+ * @param {number} drawCount - Number of rounds that ended in a draw (FIX)
  */
-async function updatePlayerStatistics(pool, playerAId, playerBId, matchDraw, winnerId, playerAWins, playerBWins) {
+async function updatePlayerStatistics(pool, playerAId, playerBId, matchDraw, winnerId, playerAWins, playerBWins, drawCount = 0) {
   const winnerIdInt = winnerId ? parseInt(winnerId) : null;
   const aWins = parseInt(playerAWins) || 0;
   const bWins = parseInt(playerBWins) || 0;
+  const roundsDrawn = parseInt(drawCount) || 0;
 
   if (matchDraw) {
-    // Both players get matches_played +1 and draws +1
+    // Match-level draw (Unlimited match with equal scores).
+    // Both players get matches_played +1.
+    // FIX: Use roundsDrawn instead of hardcoded +1 for the draws column.
     await pool.query(
-      `UPDATE player_statistic SET matches_played = matches_played + 1, draws = draws + 1,
-       rounds_won = rounds_won + $1, rounds_lost = rounds_lost + $2 WHERE player_id = $3`,
-      [aWins, bWins, playerAId]
+      `UPDATE player_statistic SET matches_played = matches_played + 1,
+       draws = draws + $1,
+       rounds_won = rounds_won + $2, rounds_lost = rounds_lost + $3 WHERE player_id = $4`,
+      [roundsDrawn, aWins, bWins, playerAId]
     );
     await pool.query(
-      `UPDATE player_statistic SET matches_played = matches_played + 1, draws = draws + 1,
-       rounds_won = rounds_won + $1, rounds_lost = rounds_lost + $2 WHERE player_id = $3`,
-      [bWins, aWins, playerBId]
+      `UPDATE player_statistic SET matches_played = matches_played + 1,
+       draws = draws + $1,
+       rounds_won = rounds_won + $2, rounds_lost = rounds_lost + $3 WHERE player_id = $4`,
+      [roundsDrawn, bWins, aWins, playerBId]
     );
   } else if (winnerIdInt) {
     const isPlayerAWinner = winnerIdInt === parseInt(playerAId);
 
     // Winner stats
+    // FIX: Include draws = draws + roundsDrawn
     const winnerId = isPlayerAWinner ? playerAId : playerBId;
     const winnerRoundWins = isPlayerAWinner ? aWins : bWins;
     const winnerRoundLosses = isPlayerAWinner ? bWins : aWins;
     await pool.query(
       `UPDATE player_statistic SET matches_played = matches_played + 1, matches_won = matches_won + 1,
-       rounds_won = rounds_won + $1, rounds_lost = rounds_lost + $2 WHERE player_id = $3`,
-      [winnerRoundWins, winnerRoundLosses, winnerId]
+       draws = draws + $1,
+       rounds_won = rounds_won + $2, rounds_lost = rounds_lost + $3 WHERE player_id = $4`,
+      [roundsDrawn, winnerRoundWins, winnerRoundLosses, winnerId]
     );
 
     // Loser stats
+    // FIX: Include draws = draws + roundsDrawn
     const loserId = isPlayerAWinner ? playerBId : playerAId;
     const loserRoundWins = isPlayerAWinner ? bWins : aWins;
     const loserRoundLosses = isPlayerAWinner ? aWins : bWins;
     await pool.query(
       `UPDATE player_statistic SET matches_played = matches_played + 1, matches_lost = matches_lost + 1,
-       rounds_won = rounds_won + $1, rounds_lost = rounds_lost + $2 WHERE player_id = $3`,
-      [loserRoundWins, loserRoundLosses, loserId]
+       draws = draws + $1,
+       rounds_won = rounds_won + $2, rounds_lost = rounds_lost + $3 WHERE player_id = $4`,
+      [roundsDrawn, loserRoundWins, loserRoundLosses, loserId]
     );
   }
 }
@@ -201,6 +215,7 @@ async function recordMatchHistory(pool, matchId, playerAId, playerBId, matchDraw
     'SELECT player_id, rating FROM account WHERE player_id = $1 OR player_id = $2',
     [playerAId, playerBId]
   );
+
   const ratings = {};
   for (const row of ratingsResult.rows) {
     ratings[row.player_id] = row.rating;
