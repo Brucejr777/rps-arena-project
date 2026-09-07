@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/game_theme_controller.dart';
 import '../../../core/services/audio_service.dart';
@@ -24,6 +25,18 @@ class LocalPlayerMoveScreen extends ConsumerStatefulWidget {
   final int draws;
   final String? modeLabel;
 
+  /// When true, displays ROUND X above the player title.
+  ///
+  /// This is used by single-player mode, where the round label was previously
+  /// drawn as a floating overlay and could overlap the PLAYER 1 text.
+  final bool showRoundLabel;
+
+  /// Optional END MATCH action.
+  ///
+  /// Used by Unlimited single-player matches so the control is part of the
+  /// normal top layout instead of a floating overlay.
+  final VoidCallback? onEndMatch;
+
   const LocalPlayerMoveScreen({
     super.key,
     required this.playerNumber,
@@ -34,6 +47,8 @@ class LocalPlayerMoveScreen extends ConsumerStatefulWidget {
     this.roundNumber = 1,
     this.draws = 0,
     this.modeLabel,
+    this.showRoundLabel = false,
+    this.onEndMatch,
   });
 
   @override
@@ -46,9 +61,12 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
 
   void _select(String move) {
     if (_selectedMove != null) return;
+
     // Link the select mp3 to the gesture selection.
     AudioService.instance.playSelect();
+
     setState(() => _selectedMove = move);
+
     // Brief pause so the lock/scale animation and hand image are
     // actually visible before advancing to the next stage.
     Future.delayed(const Duration(milliseconds: 600), () {
@@ -59,12 +77,14 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
   @override
   Widget build(BuildContext context) {
     final themeController = ref.watch(gameThemeProvider.notifier);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
             _buildTopNav(),
+
             if (widget.showScoreboard) ...[
               const SizedBox(height: 12),
               LocalScoreboard(
@@ -77,36 +97,69 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
               const SizedBox(height: 8),
             ] else ...[
               const SizedBox(height: 12),
-              if (widget.modeLabel != null)
-                Text(
-                  widget.modeLabel!,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.55),
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
+
+              if (widget.showRoundLabel)
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'ROUND ${widget.roundNumber}',
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.primaryText,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ),
+
+              if (widget.modeLabel != null) ...[
+                SizedBox(height: widget.showRoundLabel ? 4 : 0),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    widget.modeLabel!,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 8),
             ],
+
             // ── Hero title ─────────────────────────────────────────
-            Text(
-              'PLAYER ${widget.playerNumber}',
-              style: const TextStyle(
-                color: AppColors.primaryText,
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-                shadows: [
-                  Shadow(
-                    color: Colors.black45,
-                    blurRadius: 8,
-                    offset: Offset(0, 3),
-                  ),
-                ],
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'PLAYER ${widget.playerNumber}',
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.primaryText,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black45,
+                      blurRadius: 8,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
               ),
             ),
+
             const SizedBox(height: 10),
+
             Container(
               width: 40,
               height: 2,
@@ -115,62 +168,94 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                 borderRadius: BorderRadius.circular(1),
               ),
             ),
+
             const SizedBox(height: 10),
-            Text(
-              _selectedMove == null ? 'Make your choice.' : 'LOCKED',
-              style: TextStyle(
-                color: _selectedMove == null
-                    ? AppColors.blue
-                    : AppColors.green,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.5,
+
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                _selectedMove == null ? 'Make your choice.' : 'LOCKED',
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color:
+                      _selectedMove == null ? AppColors.blue : AppColors.green,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                ),
               ),
             ),
+
             const Spacer(),
+
             // ── Gesture cards ─────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 21),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _GestureCard(
-                    move: 'rock',
-                    label: 'ROCK',
-                    borderColor: _rockBorder,
-                    labelColor: _rockDark,
-                    isSelected: _selectedMove == 'rock',
-                    isDisabled:
-                        _selectedMove != null && _selectedMove != 'rock',
-                    handAsset: themeController.handAssetFor('rock'),
-                    onTap: () => _select('rock'),
+                  Expanded(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 120),
+                        child: _GestureCard(
+                          move: 'rock',
+                          label: 'ROCK',
+                          borderColor: _rockBorder,
+                          labelColor: _rockDark,
+                          isSelected: _selectedMove == 'rock',
+                          isDisabled:
+                              _selectedMove != null && _selectedMove != 'rock',
+                          handAsset: themeController.handAssetFor('rock'),
+                          onTap: () => _select('rock'),
+                        ),
+                      ),
+                    ),
                   ),
-                  _GestureCard(
-                    move: 'paper',
-                    label: 'PAPER',
-                    borderColor: _paperBorder,
-                    labelColor: _paperDark,
-                    isSelected: _selectedMove == 'paper',
-                    isDisabled:
-                        _selectedMove != null && _selectedMove != 'paper',
-                    handAsset: themeController.handAssetFor('paper'),
-                    onTap: () => _select('paper'),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 120),
+                        child: _GestureCard(
+                          move: 'paper',
+                          label: 'PAPER',
+                          borderColor: _paperBorder,
+                          labelColor: _paperDark,
+                          isSelected: _selectedMove == 'paper',
+                          isDisabled:
+                              _selectedMove != null && _selectedMove != 'paper',
+                          handAsset: themeController.handAssetFor('paper'),
+                          onTap: () => _select('paper'),
+                        ),
+                      ),
+                    ),
                   ),
-                  _GestureCard(
-                    move: 'scissors',
-                    label: 'SCISSORS',
-                    borderColor: _scissorsBorder,
-                    labelColor: _scissorsDark,
-                    isSelected: _selectedMove == 'scissors',
-                    isDisabled: _selectedMove != null &&
-                        _selectedMove != 'scissors',
-                    handAsset: themeController.handAssetFor('scissors'),
-                    onTap: () => _select('scissors'),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 120),
+                        child: _GestureCard(
+                          move: 'scissors',
+                          label: 'SCISSORS',
+                          borderColor: _scissorsBorder,
+                          labelColor: _scissorsDark,
+                          isSelected: _selectedMove == 'scissors',
+                          isDisabled: _selectedMove != null &&
+                              _selectedMove != 'scissors',
+                          handAsset: themeController.handAssetFor('scissors'),
+                          onTap: () => _select('scissors'),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
+
             const SizedBox(height: 40),
+
             // ── Bottom frame indicator ─────────────────────────────
             Container(
               padding: const EdgeInsets.only(bottom: 12),
@@ -222,19 +307,44 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
               ),
             ),
           ),
+
           Expanded(
             child: Text(
               'PLAYER ${widget.playerNumber}',
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppColors.primaryText,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.2,
               ),
-              textAlign: TextAlign.center,
             ),
           ),
-          const SizedBox(width: 40),
+
+          if (widget.onEndMatch != null)
+            TextButton(
+              onPressed: widget.onEndMatch,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                'END MATCH',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppColors.red,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            )
+          else
+            const SizedBox(width: 40),
         ],
       ),
     );
@@ -267,6 +377,7 @@ class _GestureCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final border = isSelected ? AppColors.green : borderColor;
+
     return GestureDetector(
       onTap: isDisabled ? null : onTap,
       child: AnimatedScale(
@@ -275,7 +386,7 @@ class _GestureCard extends StatelessWidget {
         child: Opacity(
           opacity: isDisabled ? 0.35 : 1.0,
           child: Container(
-            width: 112,
+            width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 14),
             decoration: BoxDecoration(
               color: AppColors.surface,
@@ -316,6 +427,8 @@ class _GestureCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 Text(
                   label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: isSelected ? AppColors.green : labelColor,
                     fontSize: 11,
