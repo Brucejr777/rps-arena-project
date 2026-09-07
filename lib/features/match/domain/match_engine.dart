@@ -1,6 +1,5 @@
 import 'match_format.dart';
 import 'dart:math';
-import 'resolution.dart';
 
 enum RoundPhase {
   scoreDisplay,
@@ -15,6 +14,7 @@ enum RoundPhase {
 }
 
 enum RoundResult { playerAWin, playerBWin, draw }
+enum RoundOutcome { draw, playerAWins, playerBWins }
 
 class MatchEngine {
   final MatchFormatConfig config;
@@ -22,7 +22,7 @@ class MatchEngine {
   int playerBScore = 0;
   int currentRoundNumber = 1;
   int drawCount = 0;
-  int countdownValue = 3; // 3, 2, 1, then 0 represents "GO!"
+  int countdownValue = 3;
   bool playerASelectionLocked = false;
   bool playerBSelectionLocked = false;
   int selectionSecondsRemaining = 10;
@@ -161,10 +161,28 @@ class MatchEngine {
     }
   }
   
+  /// Checks whether the match is complete after this round, and advances
+  /// to the next round otherwise.
   void checkMatchCondition() {
     phase = RoundPhase.roundComplete;
-    if (config.isUnlimited) return;
     
+    // ── FIX: A draw never ends the match and never counts toward winsRequired ──
+    if (lastResult == RoundResult.draw) {
+      if (config.isUnlimited) {
+        // Unlimited: draw count already incremented, next round begins
+        // automatically — no cap on draw count.
+        currentRoundNumber++;
+      }
+      // Standard formats: drawn round replays immediately.
+      // We don't increment currentRoundNumber, so the same round replays.
+      return;
+    }
+
+    if (config.isUnlimited) {
+      currentRoundNumber++;
+      return;
+    }
+
     if (playerAScore >= config.winsRequired) {
       matchFinished = true;
       matchWinner = 'A';
