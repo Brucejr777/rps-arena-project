@@ -18,20 +18,31 @@ class TournamentScreen extends ConsumerStatefulWidget {
 class _TournamentScreenState extends ConsumerState<TournamentScreen> {
   // Tournament bracket: 8 players, 3 rounds (Quarter, Semi, Final)
   final List<String> _playerNames = [
-    'You', 'Shadow', 'Blaze', 'Storm',
-    'Viper', 'Phoenix', 'Titan', 'Nova'
+    'You',
+    'Shadow',
+    'Blaze',
+    'Storm',
+    'Viper',
+    'Phoenix',
+    'Titan',
+    'Nova'
   ];
+
   late List<String> _bracket;
   late List<String> _nextRound;
+
   int _currentRound = 0; // 0=QF, 1=SF, 2=F
   int _currentMatch = 0;
+
   bool _isMatchActive = false;
   String? _selectedMove;
   String? _lastResult;
   bool _showOpponentMove = false;
   String? _opponentMove;
+
   int _matchWins = 0;
   int _matchLosses = 0;
+
   bool _isTournamentComplete = false;
   String _tournamentWinner = '';
 
@@ -57,12 +68,14 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
     // AI makes move
     Future.delayed(const Duration(milliseconds: 500), () {
       final aiMove = _getAIMove();
+
       setState(() {
         _opponentMove = aiMove;
         _showOpponentMove = true;
       });
 
       final result = _determineWinner(move, aiMove);
+
       setState(() {
         _lastResult = result;
       });
@@ -79,16 +92,21 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
 
   String _determineWinner(String playerMove, String aiMove) {
     if (playerMove == aiMove) return 'DRAW!';
+
     if ((playerMove == 'rock' && aiMove == 'scissors') ||
         (playerMove == 'paper' && aiMove == 'rock') ||
         (playerMove == 'scissors' && aiMove == 'paper')) {
       return 'You win this round!';
     }
+
     return 'You lose this round!';
   }
 
   void _advanceMatch(bool playerWon) {
-    final winner = playerWon ? _bracket[_currentMatch * 2] : _bracket[_currentMatch * 2 + 1];
+    final winner = playerWon
+        ? _bracket[_currentMatch * 2]
+        : _bracket[_currentMatch * 2 + 1];
+
     _nextRound.add(winner);
 
     if (playerWon) {
@@ -129,6 +147,7 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
         _isTournamentComplete = true;
         _tournamentWinner = _bracket[0];
       });
+
       _saveResult();
     } else {
       setState(() {
@@ -186,7 +205,7 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: () => context.go('/local-setup'),
+                    onPressed: () => context.go('/single-player-setup'),
                   ),
                   const Spacer(),
                   const Text(
@@ -206,7 +225,10 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
 
               // Round info
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(12),
@@ -216,7 +238,9 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      _currentRound == 2 ? Icons.emoji_events : Icons.sports_martial_arts,
+                      _currentRound == 2
+                          ? Icons.emoji_events
+                          : Icons.sports_martial_arts,
                       color: accent,
                       size: 24,
                     ),
@@ -257,11 +281,23 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
                             border: Border.all(color: accent),
                           ),
                           child: const Center(
-                            child: Text('You', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            child: Text(
+                              'You',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 8),
-                        const Text('YOU', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        const Text(
+                          'YOU',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                     const Text(
@@ -285,14 +321,21 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
                           child: Center(
                             child: Text(
                               currentOpponent[0],
-                              style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 24),
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 24,
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           currentOpponent.toUpperCase(),
-                          style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -346,6 +389,7 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
                     ],
                   ),
                 ),
+
               const Spacer(),
 
               // Move buttons
@@ -457,7 +501,7 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: () => context.go('/local-setup'),
+                  onPressed: () => context.go('/single-player-setup'),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: AppColors.surface),
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -466,7 +510,7 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
                     ),
                   ),
                   child: const Text(
-                    'BACK TO MENU',
+                    'BACK TO SETUP',
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: 16,
@@ -494,7 +538,11 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
         children: [
           Text(
             value,
-            style: TextStyle(color: color, fontSize: 24, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: color,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           Text(
             label,

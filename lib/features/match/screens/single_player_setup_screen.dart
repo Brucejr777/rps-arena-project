@@ -90,7 +90,9 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
               const SizedBox(height: 4),
 
               // ── Hero title ─────────────────────────────────────
-              const Center(child: HeroTitle(first: 'RPS', second: 'ARENA', fontSize: 26)),
+              const Center(
+                child: HeroTitle(first: 'RPS', second: 'ARENA', fontSize: 26),
+              ),
               const SizedBox(height: 8),
 
               // ── Subtitle ──────────────────────────────────────
@@ -161,6 +163,32 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
                           );
                         },
                       ),
+                      const SizedBox(height: 16),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_timer.svg',
+                        title: 'TIME ATTACK',
+                        subtitle: '30 seconds per move',
+                        subtitle2: 'Race the clock against CPU',
+                        badgeLabel: 'AI',
+                        badgeColor: AppColors.svgOrange,
+                        iconColor: AppColors.svgOrange,
+                        onTap: () {
+                          context.push('/time-attack');
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ModeCard(
+                        iconAsset: 'assets/icons/icon_trophy.svg',
+                        title: 'TOURNAMENT',
+                        subtitle: 'Elimination rounds',
+                        subtitle2: '8 players vs AI',
+                        badgeLabel: 'AI',
+                        badgeColor: AppColors.svgDarkRed,
+                        iconColor: AppColors.svgDarkRed,
+                        onTap: () {
+                          context.push('/tournament');
+                        },
+                      ),
                       const SizedBox(height: 24),
                     ],
                   ),
@@ -217,23 +245,54 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          _buildDifficultyOption('EASY', AiDifficulty.easy, AppColors.green, Icons.star_border),
+          _buildDifficultyOption(
+            'EASY',
+            AiDifficulty.easy,
+            AppColors.green,
+            Icons.star_border,
+          ),
           const SizedBox(height: 8),
-          _buildDifficultyOption('NORMAL', AiDifficulty.normal, AppColors.orange, Icons.star_half),
+          _buildDifficultyOption(
+            'NORMAL',
+            AiDifficulty.normal,
+            AppColors.orange,
+            Icons.star_half,
+          ),
           const SizedBox(height: 8),
-          _buildDifficultyOption('HARD', AiDifficulty.hard, AppColors.red, Icons.star),
+          _buildDifficultyOption(
+            'HARD',
+            AiDifficulty.hard,
+            AppColors.red,
+            Icons.star,
+          ),
           const SizedBox(height: 8),
-          _buildDifficultyOption('EXPERT', AiDifficulty.expert, AppColors.purple, Icons.stars),
+          _buildDifficultyOption(
+            'EXPERT',
+            AiDifficulty.expert,
+            AppColors.purple,
+            Icons.stars,
+          ),
           const SizedBox(height: 8),
-          _buildDifficultyOption('ASIAN', AiDifficulty.asian, AppColors.magenta, Icons.whatshot),
+          _buildDifficultyOption(
+            'ASIAN',
+            AiDifficulty.asian,
+            AppColors.magenta,
+            Icons.whatshot,
+          ),
           const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Widget _buildDifficultyOption(String label, AiDifficulty value, Color color, IconData icon) {
+  Widget _buildDifficultyOption(
+    String label,
+    AiDifficulty value,
+    Color color,
+    IconData icon,
+  ) {
     final isSelected = selectedDifficulty == value;
+
     return GestureDetector(
       onTap: () {
         setState(() => selectedDifficulty = value);
@@ -262,12 +321,10 @@ class _SinglePlayerSetupScreenState extends State<SinglePlayerSetupScreen> {
               ),
             ),
             const Spacer(),
-            if (isSelected)
-              Icon(Icons.check_circle, color: color, size: 20),
+            if (isSelected) Icon(Icons.check_circle, color: color, size: 20),
           ],
         ),
       ),
     );
   }
-
 }

@@ -87,7 +87,9 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
               const SizedBox(height: 4),
 
               // ── Hero title ─────────────────────────────────────
-              const Center(child: HeroTitle(first: 'RPS', second: 'ARENA', fontSize: 26)),
+              const Center(
+                child: HeroTitle(first: 'RPS', second: 'ARENA', fontSize: 26),
+              ),
               const SizedBox(height: 8),
 
               // ── Subtitle ──────────────────────────────────────
@@ -137,32 +139,6 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
                         badgeColor: AppColors.svgCyan,
                         iconColor: AppColors.svgCyan,
                         onTap: _openMatchLengthSelect,
-                      ),
-                      const SizedBox(height: 16),
-                      ModeCard(
-                        iconAsset: 'assets/icons/icon_timer.svg',
-                        title: 'TIME ATTACK',
-                        subtitle: '30 seconds per move',
-                        subtitle2: 'Race the clock',
-                        badgeLabel: 'LIVE',
-                        badgeColor: AppColors.svgOrange,
-                        iconColor: AppColors.svgOrange,
-                        onTap: () {
-                          context.push('/time-attack');
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      ModeCard(
-                        iconAsset: 'assets/icons/icon_trophy.svg',
-                        title: 'TOURNAMENT',
-                        subtitle: 'Elimination rounds',
-                        subtitle2: '8 players',
-                        badgeLabel: 'NEW',
-                        badgeColor: AppColors.svgDarkRed,
-                        iconColor: AppColors.svgDarkRed,
-                        onTap: () {
-                          context.push('/tournament');
-                        },
                       ),
                       const SizedBox(height: 16),
                       ModeCard(

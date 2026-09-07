@@ -63,6 +63,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
 
   void _timeOut() {
     if (!_isRoundActive) return;
+
     setState(() {
       _isRoundActive = false;
       _opponentMove = _getAIMove();
@@ -70,6 +71,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
       _lastResult = 'TIME UP! You took too long.';
       _aiScore++;
     });
+
     _nextRoundAfterDelay();
   }
 
@@ -81,6 +83,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
 
   void _selectMove(String move) {
     if (!_isRoundActive || _isPaused) return;
+
     _timer?.cancel();
 
     AudioService.instance.playSound('select');
@@ -94,6 +97,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     // AI makes move
     Future.delayed(const Duration(milliseconds: 500), () {
       final aiMove = _getAIMove();
+
       setState(() {
         _opponentMove = aiMove;
         _showOpponentMove = true;
@@ -101,8 +105,10 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
 
       // Determine winner
       final result = _determineWinner(move, aiMove);
+
       setState(() {
         _lastResult = result;
+
         if (result.contains('You win')) {
           _playerScore++;
         } else if (result.contains('You lose')) {
@@ -116,17 +122,20 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
 
   String _determineWinner(String playerMove, String aiMove) {
     if (playerMove == aiMove) return 'DRAW!';
+
     if ((playerMove == 'rock' && aiMove == 'scissors') ||
         (playerMove == 'paper' && aiMove == 'rock') ||
         (playerMove == 'scissors' && aiMove == 'paper')) {
       return 'You win this round!';
     }
+
     return 'You lose this round!';
   }
 
   void _nextRoundAfterDelay() {
     Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
+
       if (_currentRound >= _totalRounds) {
         _endGame();
       } else {
@@ -139,6 +148,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
           _isRoundActive = true;
           _timeRemaining = 30;
         });
+
         _startTimer();
       }
     });
@@ -148,6 +158,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     setState(() {
       _isGameComplete = true;
     });
+
     _saveResult();
   }
 
@@ -169,6 +180,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
       _isGameComplete = false;
       _timeRemaining = 30;
     });
+
     _startTimer();
   }
 
@@ -194,7 +206,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => context.go('/local-setup'),
+                        onPressed: () => context.go('/single-player-setup'),
                       ),
                       const Spacer(),
                       const Text(
@@ -220,14 +232,19 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
 
                   // Timer
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
                     decoration: BoxDecoration(
                       color: _timeRemaining <= 10
                           ? Colors.red.withValues(alpha: 0.2)
                           : AppColors.surface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: _timeRemaining <= 10 ? Colors.red : AppColors.surface,
+                        color: _timeRemaining <= 10
+                            ? Colors.red
+                            : AppColors.surface,
                       ),
                     ),
                     child: Row(
@@ -235,14 +252,18 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
                       children: [
                         Icon(
                           Icons.timer,
-                          color: _timeRemaining <= 10 ? Colors.red : Colors.white,
+                          color: _timeRemaining <= 10
+                              ? Colors.red
+                              : Colors.white,
                           size: 24,
                         ),
                         const SizedBox(width: 8),
                         Text(
                           '$_timeRemaining',
                           style: TextStyle(
-                            color: _timeRemaining <= 10 ? Colors.red : Colors.white,
+                            color: _timeRemaining <= 10
+                                ? Colors.red
+                                : Colors.white,
                             fontSize: 32,
                             fontWeight: FontWeight.bold,
                           ),
@@ -315,6 +336,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
                         ],
                       ),
                     ),
+
                   const Spacer(),
 
                   // Move buttons
@@ -358,7 +380,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
                 setState(() => _isPaused = false);
                 _startTimer();
               },
-              onExit: () => context.go('/local-setup'),
+              onExit: () => context.go('/single-player-setup'),
             ),
         ],
       ),
@@ -402,7 +424,11 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                won ? Icons.emoji_events : draw ? Icons.handshake : Icons.sentiment_dissatisfied,
+                won
+                    ? Icons.emoji_events
+                    : draw
+                        ? Icons.handshake
+                        : Icons.sentiment_dissatisfied,
                 color: won ? Colors.amber : draw ? Colors.white70 : Colors.red,
                 size: 80,
               ),
@@ -455,7 +481,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: () => context.go('/local-setup'),
+                  onPressed: () => context.go('/single-player-setup'),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: AppColors.surface),
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -464,7 +490,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
                     ),
                   ),
                   child: const Text(
-                    'BACK TO MENU',
+                    'BACK TO SETUP',
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: 16,

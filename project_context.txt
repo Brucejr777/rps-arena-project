@@ -10436,11 +10436,9 @@ class _CustomMatchConfigScreenState extends State<CustomMatchConfigScreen> {
 FILE: lib/features/match/screens/local_match_flow_screen.dart
 ================================================================================
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
 import '../../../core/services/audio_service.dart';
 import '../../../core/services/vibration_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -10452,6 +10450,7 @@ import '../domain/match_format.dart';
 import '../widgets/countdown_animation.dart';
 import '../widgets/draw_animation.dart';
 import '../widgets/final_finish_animation.dart';
+import '../widgets/local_scoreboard.dart';
 import '../widgets/reveal_animation.dart';
 import '../widgets/round_victory_animation.dart';
 import '../widgets/theme_background.dart';
@@ -10503,7 +10502,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
   Future<void> _loadVictoryAnimationSetting() async {
     final settings = await SettingsRepository().load();
     if (!mounted) return;
-
     setState(() {
       _victoryAnimationsEnabled = settings.victoryAnimationsEnabled;
     });
@@ -10613,7 +10611,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         _statsRepo.recordUnlimitedMatchResult(
           winner: _engine.matchWinner,
         );
-
         _statsRepo.recordLocalMatch(
           opponentName: 'Player 2',
           mode: 'local',
@@ -10628,7 +10625,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         _statsRepo.recordStandardMatchResult(
           playerWon: _engine.matchWinner == 'A',
         );
-
         _statsRepo.recordLocalMatch(
           opponentName: 'Player 2',
           mode: 'local',
@@ -10678,48 +10674,18 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
       child: Stack(
         children: [
           _buildStageContent(),
-          
-          // ── FIX: Overlay the current Round Number at the top center ──
-          if (_stage != _LocalFlowStage.roundComplete &&
-              _stage != _LocalFlowStage.finishing)
-            Positioned(
-              top: 50,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Text(
-                  'ROUND ${_engine.currentRoundNumber}',
-                  style: const TextStyle(
-                    color: AppColors.primaryText,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                    letterSpacing: 1.2,
-                    shadows: [
-                      Shadow(
-                        blurRadius: 4,
-                        color: Colors.black87,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            
           if (_canEndMatchNow)
             Positioned(
-              top: 48,
+              top: 140,
               right: 16,
-              child: SafeArea(
-                child: TextButton(
-                  onPressed: _onEndMatchPressed,
-                  child: const Text(
-                    'END MATCH',
-                    style: TextStyle(
-                      color: AppColors.red,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
+              child: TextButton(
+                onPressed: _onEndMatchPressed,
+                child: const Text(
+                  'END MATCH',
+                  style: TextStyle(
+                    color: AppColors.red,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
                   ),
                 ),
               ),
@@ -10734,10 +10700,25 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
       case _LocalFlowStage.countdown:
         return Scaffold(
           backgroundColor: Colors.transparent,
-          body: Center(
-            child: CountdownAnimation(
-              value: _engine.countdownValue,
-              theme: ref.watch(gameThemeProvider),
+          body: SafeArea(
+            child: Column(
+              children: [
+                const SizedBox(height: 8),
+                LocalScoreboard(
+                  playerAScore: _engine.playerAScore,
+                  playerBScore: _engine.playerBScore,
+                  roundNumber: _engine.currentRoundNumber,
+                  draws: _engine.drawCount,
+                ),
+                Expanded(
+                  child: Center(
+                    child: CountdownAnimation(
+                      value: _engine.countdownValue,
+                      theme: ref.watch(gameThemeProvider),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -10746,100 +10727,123 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         return LocalPlayerMoveScreen(
           playerNumber: 1,
           onMoveSelected: _onPlayerOneMove,
+          showScoreboard: true,
+          playerAScore: _engine.playerAScore,
+          playerBScore: _engine.playerBScore,
+          roundNumber: _engine.currentRoundNumber,
+          draws: _engine.drawCount,
         );
 
       case _LocalFlowStage.passDevice:
         return PassDeviceScreen(
           onReady: _onReady,
+          showScoreboard: true,
+          playerAScore: _engine.playerAScore,
+          playerBScore: _engine.playerBScore,
+          roundNumber: _engine.currentRoundNumber,
+          draws: _engine.drawCount,
         );
 
       case _LocalFlowStage.playerTwoMove:
         return LocalPlayerMoveScreen(
           playerNumber: 2,
           onMoveSelected: _onPlayerTwoMove,
+          showScoreboard: true,
+          playerAScore: _engine.playerAScore,
+          playerBScore: _engine.playerBScore,
+          roundNumber: _engine.currentRoundNumber,
+          draws: _engine.drawCount,
         );
 
       case _LocalFlowStage.revealing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.lastResult == RoundResult.playerAWin;
-
         final roundKey = ValueKey(
           'local_round_${_engine.currentRoundNumber}_${_engine.lastResult}',
         );
 
         return Scaffold(
           backgroundColor: Colors.transparent,
-          body: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  'BOTH PLAYERS READY',
-                  style: TextStyle(
-                    color: AppColors.primaryText,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                if (_engine.playerAMove != null &&
-                    _engine.playerBMove != null)
-                  RevealAnimation(
-                    playerAMove: _engine.playerAMove!,
-                    playerBMove: _engine.playerBMove!,
-                    handAssetFor: themeController.handAssetFor,
-                  ),
-
-                const SizedBox(height: 24),
-
-                if (_isMatchWinningRound &&
-                    _victoryAnimationsEnabled &&
-                    _engine.playerAMove != null &&
-                    _engine.playerBMove != null)
-                  FinalFinishAnimation(
-                    key: roundKey,
-                    playerAMove: _engine.playerAMove!,
-                    playerBMove: _engine.playerBMove!,
-                    playerAWon: playerAWon,
-                    theme: ref.watch(gameThemeProvider),
-                    handAssetFor: themeController.handAssetFor,
-                  )
-                else if (_isMatchWinningRound && !_victoryAnimationsEnabled)
-                  const SizedBox.shrink()
-                else if ((_engine.lastResult == RoundResult.playerAWin ||
-                        _engine.lastResult == RoundResult.playerBWin) &&
-                    _engine.playerAMove != null &&
-                    _engine.playerBMove != null)
-                  RoundVictoryAnimation(
-                    key: roundKey,
-                    playerAMove: _engine.playerAMove!,
-                    playerBMove: _engine.playerBMove!,
-                    playerAWon: playerAWon,
-                    playerALabel: 'PLAYER 1',
-                    playerBLabel: 'PLAYER 2',
-                    theme: ref.watch(gameThemeProvider),
-                    handAssetFor: themeController.handAssetFor,
-                  )
-                else if (_engine.lastResult == RoundResult.draw &&
-                    _engine.playerAMove != null &&
-                    _engine.playerBMove != null)
-                  DrawAnimation(
-                    key: roundKey,
-                    playerAMove: _engine.playerAMove!,
-                    playerBMove: _engine.playerBMove!,
-                    theme: ref.watch(gameThemeProvider),
-                  )
-                else
-                  Text(
-                    _resultLabel(),
-                    style: const TextStyle(
-                      color: AppColors.defaultAccent,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+          body: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'BOTH PLAYERS READY',
+                      style: TextStyle(
+                        color: AppColors.primaryText,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-              ],
+                    const SizedBox(height: 12),
+                    LocalScoreboard(
+                      playerAScore: _engine.playerAScore,
+                      playerBScore: _engine.playerBScore,
+                      roundNumber: _engine.currentRoundNumber,
+                      draws: _engine.drawCount,
+                    ),
+                    const SizedBox(height: 16),
+                    if (_engine.playerAMove != null &&
+                        _engine.playerBMove != null)
+                      RevealAnimation(
+                        playerAMove: _engine.playerAMove!,
+                        playerBMove: _engine.playerBMove!,
+                        handAssetFor: themeController.handAssetFor,
+                      ),
+                    const SizedBox(height: 24),
+                    if (_isMatchWinningRound &&
+                        _victoryAnimationsEnabled &&
+                        _engine.playerAMove != null &&
+                        _engine.playerBMove != null)
+                      FinalFinishAnimation(
+                        key: roundKey,
+                        playerAMove: _engine.playerAMove!,
+                        playerBMove: _engine.playerBMove!,
+                        playerAWon: playerAWon,
+                        theme: ref.watch(gameThemeProvider),
+                        handAssetFor: themeController.handAssetFor,
+                      )
+                    else if (_isMatchWinningRound && !_victoryAnimationsEnabled)
+                      const SizedBox.shrink()
+                    else if ((_engine.lastResult == RoundResult.playerAWin ||
+                            _engine.lastResult == RoundResult.playerBWin) &&
+                        _engine.playerAMove != null &&
+                        _engine.playerBMove != null)
+                      RoundVictoryAnimation(
+                        key: roundKey,
+                        playerAMove: _engine.playerAMove!,
+                        playerBMove: _engine.playerBMove!,
+                        playerAWon: playerAWon,
+                        playerALabel: 'PLAYER 1',
+                        playerBLabel: 'PLAYER 2',
+                        theme: ref.watch(gameThemeProvider),
+                        handAssetFor: themeController.handAssetFor,
+                      )
+                    else if (_engine.lastResult == RoundResult.draw &&
+                        _engine.playerAMove != null &&
+                        _engine.playerBMove != null)
+                      DrawAnimation(
+                        key: roundKey,
+                        playerAMove: _engine.playerAMove!,
+                        playerBMove: _engine.playerBMove!,
+                        theme: ref.watch(gameThemeProvider),
+                      )
+                    else
+                      Text(
+                        _resultLabel(),
+                        style: const TextStyle(
+                          color: AppColors.defaultAccent,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         );
@@ -10870,6 +10874,20 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
 
       case _LocalFlowStage.roundComplete:
         if (widget.format.isUnlimited) {
+          final String unlimitedWinnerTitle;
+          final Color unlimitedWinnerColor;
+
+          if (_engine.matchWinner == 'A') {
+            unlimitedWinnerTitle = 'PLAYER 1 WON';
+            unlimitedWinnerColor = AppColors.blue;
+          } else if (_engine.matchWinner == 'B') {
+            unlimitedWinnerTitle = 'PLAYER 2 WON';
+            unlimitedWinnerColor = AppColors.purple;
+          } else {
+            unlimitedWinnerTitle = 'MATCH DRAW';
+            unlimitedWinnerColor = AppColors.orange;
+          }
+
           return UnlimitedResultScreen(
             player1Wins: _engine.playerAScore,
             player2Wins: _engine.playerBScore,
@@ -10877,17 +10895,34 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             totalRounds: _engine.totalRounds,
             player1WinRate: _engine.playerAWinRate,
             player2WinRate: _engine.playerBWinRate,
+            winnerTitle: unlimitedWinnerTitle,
+            winnerColor: unlimitedWinnerColor,
             onPlayAgain: () => GoRouter.of(context).pop(),
             onMainMenu: () => GoRouter.of(context).go('/main'),
           );
         }
 
-        final playerWon = _engine.matchWinner == 'A';
+        final String standardResultTitle;
+        final Color standardResultColor;
+
+        if (_engine.matchWinner == 'A') {
+          standardResultTitle = 'PLAYER 1 WON';
+          standardResultColor = AppColors.blue;
+        } else if (_engine.matchWinner == 'B') {
+          standardResultTitle = 'PLAYER 2 WON';
+          standardResultColor = AppColors.purple;
+        } else {
+          standardResultTitle = 'DRAW';
+          standardResultColor = AppColors.orange;
+        }
 
         return StandardResultScreen(
-          playerWon: playerWon,
+          playerWon: _engine.matchWinner == 'A',
           playerScore: _engine.playerAScore,
           opponentScore: _engine.playerBScore,
+          resultTitle: standardResultTitle,
+          resultColor: standardResultColor,
+          showMatchWon: false,
           onPlayAgain: () => GoRouter.of(context).pop(),
           onMainMenu: () => GoRouter.of(context).go('/main'),
         );
@@ -11000,6 +11035,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/game_theme_controller.dart';
+import '../widgets/local_scoreboard.dart';
 
 /// Colors per gesture card, taken from wireframes 09A/09B:
 /// rock -> orange, paper -> cyan, scissors -> pink.
@@ -11014,10 +11050,21 @@ class LocalPlayerMoveScreen extends ConsumerStatefulWidget {
   final int playerNumber;
   final void Function(String move) onMoveSelected;
 
+  final bool showScoreboard;
+  final int playerAScore;
+  final int playerBScore;
+  final int roundNumber;
+  final int draws;
+
   const LocalPlayerMoveScreen({
     super.key,
     required this.playerNumber,
     required this.onMoveSelected,
+    this.showScoreboard = false,
+    this.playerAScore = 0,
+    this.playerBScore = 0,
+    this.roundNumber = 1,
+    this.draws = 0,
   });
 
   @override
@@ -11030,6 +11077,7 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
 
   void _select(String move) {
     if (_selectedMove != null) return;
+
     setState(() => _selectedMove = move);
 
     // Brief pause so the lock/scale animation and hand image are
@@ -11049,7 +11097,18 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
         child: Column(
           children: [
             _buildTopNav(),
-            const SizedBox(height: 20),
+            if (widget.showScoreboard) ...[
+              const SizedBox(height: 12),
+              LocalScoreboard(
+                playerAScore: widget.playerAScore,
+                playerBScore: widget.playerBScore,
+                roundNumber: widget.roundNumber,
+                draws: widget.draws,
+              ),
+              const SizedBox(height: 8),
+            ] else
+              const SizedBox(height: 20),
+
             // ── Hero title ─────────────────────────────────────────
             Text(
               'PLAYER ${widget.playerNumber}',
@@ -11088,7 +11147,9 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                 letterSpacing: 0.5,
               ),
             ),
+
             const Spacer(),
+
             // ── Gesture cards ─────────────────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 21),
@@ -11101,7 +11162,8 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                     borderColor: _rockBorder,
                     labelColor: _rockDark,
                     isSelected: _selectedMove == 'rock',
-                    isDisabled: _selectedMove != null && _selectedMove != 'rock',
+                    isDisabled:
+                        _selectedMove != null && _selectedMove != 'rock',
                     handAsset: themeController.handAssetFor('rock'),
                     onTap: () => _select('rock'),
                   ),
@@ -11111,7 +11173,8 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                     borderColor: _paperBorder,
                     labelColor: _paperDark,
                     isSelected: _selectedMove == 'paper',
-                    isDisabled: _selectedMove != null && _selectedMove != 'paper',
+                    isDisabled:
+                        _selectedMove != null && _selectedMove != 'paper',
                     handAsset: themeController.handAssetFor('paper'),
                     onTap: () => _select('paper'),
                   ),
@@ -11121,14 +11184,17 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                     borderColor: _scissorsBorder,
                     labelColor: _scissorsDark,
                     isSelected: _selectedMove == 'scissors',
-                    isDisabled: _selectedMove != null && _selectedMove != 'scissors',
+                    isDisabled: _selectedMove != null &&
+                        _selectedMove != 'scissors',
                     handAsset: themeController.handAssetFor('scissors'),
                     onTap: () => _select('scissors'),
                   ),
                 ],
               ),
             ),
+
             const SizedBox(height: 40),
+
             // ── Bottom frame indicator ─────────────────────────────
             Container(
               padding: const EdgeInsets.only(bottom: 12),
@@ -11721,11 +11787,26 @@ FILE: lib/features/match/screens/pass_device_screen.dart
 ================================================================================
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import '../widgets/local_scoreboard.dart';
 
 class PassDeviceScreen extends StatelessWidget {
   final VoidCallback onReady;
 
-  const PassDeviceScreen({super.key, required this.onReady});
+  final bool showScoreboard;
+  final int playerAScore;
+  final int playerBScore;
+  final int roundNumber;
+  final int draws;
+
+  const PassDeviceScreen({
+    super.key,
+    required this.onReady,
+    this.showScoreboard = false,
+    this.playerAScore = 0,
+    this.playerBScore = 0,
+    this.roundNumber = 1,
+    this.draws = 0,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -11737,6 +11818,16 @@ class PassDeviceScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              if (showScoreboard) ...[
+                LocalScoreboard(
+                  playerAScore: playerAScore,
+                  playerBScore: playerBScore,
+                  roundNumber: roundNumber,
+                  draws: draws,
+                  margin: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 24),
+              ],
               const Text(
                 'PLAYER 1 LOCKED',
                 style: TextStyle(
@@ -12629,6 +12720,23 @@ class StandardResultScreen extends StatelessWidget {
   final int? ratingBefore;
   final int? ratingAfter;
 
+  /// Optional override for the result title.
+  ///
+  /// For single-player mode this can remain null, showing VICTORY/DEFEAT.
+  /// For local 2-player mode this should be:
+  /// - PLAYER 1 WON
+  /// - PLAYER 2 WON
+  /// - DRAW
+  final String? resultTitle;
+
+  /// Optional override for the result color.
+  final Color? resultColor;
+
+  /// Whether the single-player "MATCH WON" badge should be shown.
+  ///
+  /// This should be false for local 2-player matches.
+  final bool showMatchWon;
+
   const StandardResultScreen({
     super.key,
     required this.playerWon,
@@ -12638,10 +12746,17 @@ class StandardResultScreen extends StatelessWidget {
     required this.onMainMenu,
     this.ratingBefore,
     this.ratingAfter,
+    this.resultTitle,
+    this.resultColor,
+    this.showMatchWon = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final String title = resultTitle ?? (playerWon ? 'VICTORY' : 'DEFEAT');
+    final Color color =
+        resultColor ?? (playerWon ? AppColors.green : AppColors.red);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -12650,7 +12765,7 @@ class StandardResultScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // ── Victory/Defeat Card ───────────────────────
+              // ── Result Card ─────────────────────────────────
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
@@ -12659,13 +12774,11 @@ class StandardResultScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     width: 1.5,
-                    color: (playerWon ? AppColors.green : AppColors.red)
-                        .withValues(alpha: 0.3),
+                    color: color.withValues(alpha: 0.3),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: (playerWon ? AppColors.green : AppColors.red)
-                          .withValues(alpha: 0.2),
+                      color: color.withValues(alpha: 0.2),
                       blurRadius: 20,
                       offset: const Offset(0, 4),
                     ),
@@ -12674,13 +12787,14 @@ class StandardResultScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     Text(
-                      playerWon ? 'VICTORY' : 'DEFEAT',
+                      title,
                       style: TextStyle(
-                        color: playerWon ? AppColors.green : AppColors.red,
+                        color: color,
                         fontSize: 32,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 2,
                       ),
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
                     Text(
@@ -12691,12 +12805,15 @@ class StandardResultScreen extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    if (playerWon) ...[
+                    if (playerWon && showMatchWon) ...[
                       const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
-                          color: AppColors.green.withValues(alpha: 0.15),
+                          color: color.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(
@@ -12718,7 +12835,10 @@ class StandardResultScreen extends StatelessWidget {
               if (ratingBefore != null && ratingAfter != null) ...[
                 const SizedBox(height: 24),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(12),
@@ -12749,7 +12869,11 @@ class StandardResultScreen extends StatelessWidget {
                           ),
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 12),
-                            child: Icon(Icons.arrow_forward, color: Colors.white38, size: 18),
+                            child: Icon(
+                              Icons.arrow_forward,
+                              color: Colors.white38,
+                              size: 18,
+                            ),
                           ),
                           Text(
                             '$ratingAfter',
@@ -12764,16 +12888,25 @@ class StandardResultScreen extends StatelessWidget {
                             builder: (context) {
                               final diff = ratingAfter! - ratingBefore!;
                               if (diff == 0) return const SizedBox.shrink();
+
                               return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: (diff > 0 ? AppColors.green : AppColors.red).withValues(alpha: 0.2),
+                                  color: (diff > 0
+                                          ? AppColors.green
+                                          : AppColors.red)
+                                      .withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
                                   diff > 0 ? '+$diff' : '$diff',
                                   style: TextStyle(
-                                    color: diff > 0 ? AppColors.green : AppColors.red,
+                                    color: diff > 0
+                                        ? AppColors.green
+                                        : AppColors.red,
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -12787,7 +12920,9 @@ class StandardResultScreen extends StatelessWidget {
                   ),
                 ),
               ],
+
               const SizedBox(height: 48),
+
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -12809,7 +12944,9 @@ class StandardResultScreen extends StatelessWidget {
                   ),
                 ),
               ),
+
               const SizedBox(height: 12),
+
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
@@ -13854,6 +13991,15 @@ class UnlimitedResultScreen extends StatelessWidget {
   final VoidCallback onPlayAgain;
   final VoidCallback onMainMenu;
 
+  /// Optional winner banner for local 2-player matches.
+  ///
+  /// Examples:
+  /// - PLAYER 1 WON
+  /// - PLAYER 2 WON
+  /// - MATCH DRAW
+  final String? winnerTitle;
+  final Color? winnerColor;
+
   const UnlimitedResultScreen({
     super.key,
     required this.player1Wins,
@@ -13864,6 +14010,8 @@ class UnlimitedResultScreen extends StatelessWidget {
     required this.player2WinRate,
     required this.onPlayAgain,
     required this.onMainMenu,
+    this.winnerTitle,
+    this.winnerColor,
   });
 
   Widget _statRow(String label, String value) {
@@ -13872,8 +14020,13 @@ class UnlimitedResultScreen extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: const TextStyle(color: Colors.white60, fontSize: 13)),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white60,
+              fontSize: 13,
+            ),
+          ),
           Text(
             value,
             style: const TextStyle(
@@ -13889,6 +14042,8 @@ class UnlimitedResultScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Color resolvedWinnerColor = winnerColor ?? AppColors.defaultAccent;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -13908,7 +14063,37 @@ class UnlimitedResultScreen extends StatelessWidget {
                   letterSpacing: 1.5,
                 ),
               ),
+
+              if (winnerTitle != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: resolvedWinnerColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      width: 1.5,
+                      color: resolvedWinnerColor.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(
+                    winnerTitle!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: resolvedWinnerColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 32),
+
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -13924,16 +14109,25 @@ class UnlimitedResultScreen extends StatelessWidget {
                     _statRow('PLAYER 1 wins', '$player1Wins'),
                     _statRow('PLAYER 2 wins', '$player2Wins'),
                     _statRow('Draws', '$draws'),
-                    const Divider(color: Colors.white24, height: 24),
+                    const Divider(
+                      color: Colors.white24,
+                      height: 24,
+                    ),
                     _statRow('TOTAL ROUNDS', '$totalRounds'),
-                    _statRow('PLAYER 1 WIN RATE',
-                        '${player1WinRate.toStringAsFixed(1)}%'),
-                    _statRow('PLAYER 2 WIN RATE',
-                        '${player2WinRate.toStringAsFixed(1)}%'),
+                    _statRow(
+                      'PLAYER 1 WIN RATE',
+                      '${player1WinRate.toStringAsFixed(1)}%',
+                    ),
+                    _statRow(
+                      'PLAYER 2 WIN RATE',
+                      '${player2WinRate.toStringAsFixed(1)}%',
+                    ),
                   ],
                 ),
               ),
+
               const Spacer(),
+
               ElevatedButton(
                 onPressed: onPlayAgain,
                 style: ElevatedButton.styleFrom(
@@ -13952,7 +14146,9 @@ class UnlimitedResultScreen extends StatelessWidget {
                   ),
                 ),
               ),
+
               const SizedBox(height: 12),
+
               OutlinedButton(
                 onPressed: onMainMenu,
                 style: OutlinedButton.styleFrom(
@@ -14402,6 +14598,161 @@ class _FinalFinishAnimationState extends ConsumerState<FinalFinishAnimation>
           ],
         );
       },
+    );
+  }
+}
+
+================================================================================
+FILE: lib/features/match/widgets/local_scoreboard.dart
+================================================================================
+import 'package:flutter/material.dart';
+import '../../../core/theme/app_colors.dart';
+
+/// Reusable scoreboard for local 2-player matches.
+///
+/// Shows:
+/// - Player 1 score
+/// - Player 2 score
+/// - Current round
+/// - Draw count when greater than zero
+class LocalScoreboard extends StatelessWidget {
+  final int playerAScore;
+  final int playerBScore;
+  final int roundNumber;
+  final int draws;
+  final EdgeInsetsGeometry margin;
+
+  const LocalScoreboard({
+    super.key,
+    required this.playerAScore,
+    required this.playerBScore,
+    this.roundNumber = 1,
+    this.draws = 0,
+    this.margin = const EdgeInsets.symmetric(horizontal: 24),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: margin,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          width: 1.5,
+          color: Colors.white.withValues(alpha: 0.08),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _scoreSide(
+                  label: 'PLAYER 1',
+                  score: playerAScore,
+                  color: AppColors.blue,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  ':',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _scoreSide(
+                  label: 'PLAYER 2',
+                  score: playerBScore,
+                  color: AppColors.purple,
+                  alignRight: true,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'ROUND $roundNumber',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.55),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              if (draws > 0) ...[
+                const SizedBox(width: 8),
+                Text(
+                  '•',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.35),
+                    fontSize: 10,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'DRAWS $draws',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _scoreSide({
+    required String label,
+    required int score,
+    required Color color,
+    bool alignRight = false,
+  }) {
+    return Column(
+      crossAxisAlignment:
+          alignRight ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '$score',
+          style: const TextStyle(
+            color: AppColors.primaryText,
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 }
