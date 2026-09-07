@@ -37,6 +37,9 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
   String? _opponentMove;
   bool _showOpponentMove = false;
 
+  // ── FIX: single shared repository instance for all stats calls ──
+  final LocalStatsRepository _statsRepo = LocalStatsRepository();
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +65,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     });
   }
 
+  // ── FIX: record round-outcome as lost on timeout ──
   void _timeOut() {
     if (!_isRoundActive) return;
     setState(() {
@@ -71,6 +75,8 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
       _lastResult = 'TIME UP! You took too long.';
       _aiScore++;
     });
+    // FIX: record the timeout as a lost round
+    _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
     _nextRoundAfterDelay();
   }
 
@@ -80,6 +86,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     return moves.first;
   }
 
+  // ── FIX: made async; record move selection + round outcome ──
   void _selectMove(String move) {
     if (!_isRoundActive || _isPaused) return;
     _timer?.cancel();
@@ -89,6 +96,9 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
       _selectedMove = move;
       _isRoundActive = false;
     });
+
+    // FIX: record the player's move selection immediately
+    _statsRepo.recordMoveSelection(move);
 
     // AI makes move
     Future.delayed(const Duration(milliseconds: 500), () {
@@ -108,6 +118,16 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
           _aiScore++;
         }
       });
+
+      // FIX: record the round outcome
+      if (result.contains('You win')) {
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
+      } else if (result.contains('You lose')) {
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
+      } else {
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
+      }
+
       _nextRoundAfterDelay();
     });
   }
@@ -149,9 +169,10 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     _saveResult();
   }
 
+  // ── FIX: use shared _statsRepo instance ──
   void _saveResult() async {
-    final repo = LocalStatsRepository();
-    await repo.recordStandardMatchResult(playerWon: _playerScore > _aiScore);
+    await _statsRepo.recordStandardMatchResult(
+        playerWon: _playerScore > _aiScore);
   }
 
   void _playAgain() {

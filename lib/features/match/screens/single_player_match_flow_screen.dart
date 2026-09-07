@@ -1,3 +1,4 @@
+// lib/features/match/screens/single_player_match_flow_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,7 +15,7 @@ import '../domain/match_format.dart';
 import '../widgets/countdown_animation.dart';
 import '../widgets/draw_animation.dart';
 import '../widgets/final_finish_animation.dart';
-import '../widgets/local_scoreboard.dart'; // ← FIX: import LocalScoreboard
+import '../widgets/local_scoreboard.dart';
 import '../widgets/round_victory_animation.dart';
 import '../widgets/theme_background.dart';
 import 'local_player_move_screen.dart';
@@ -47,7 +48,7 @@ class SinglePlayerMatchFlowScreen extends ConsumerStatefulWidget {
 
 class _SinglePlayerMatchFlowScreenState
     extends ConsumerState<SinglePlayerMatchFlowScreen> {
-  late final MatchEngine _engine;
+  late MatchEngine _engine;
   final AiService _ai = AiService();
   final LocalStatsRepository _statsRepo = LocalStatsRepository();
   _SpFlowStage _stage = _SpFlowStage.countdown;
@@ -88,6 +89,17 @@ class _SinglePlayerMatchFlowScreenState
     super.dispose();
   }
 
+  void _resetAndRestart() {
+    _countdownTimer?.cancel();
+    _engine = MatchEngine(widget.format);
+    _ai.resetForNewMatch();
+    setState(() {
+      _stage = _SpFlowStage.countdown;
+    });
+    _startRound();
+  }
+
+  // ── Round lifecycle ──────────────────────────────────────────
   void _startRound() {
     _engine.startRound();
     _engine.beginCountdown();
@@ -127,7 +139,8 @@ class _SinglePlayerMatchFlowScreenState
     });
   }
 
-  void _reveal() {
+  // ── FIX: made async; all stats calls are awaited ──────────────
+  Future<void> _reveal() async {
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
@@ -137,24 +150,26 @@ class _SinglePlayerMatchFlowScreenState
       _stage = _SpFlowStage.revealing;
     });
 
+    // Await move-selection recording so it completes before the
+    // round-outcome write begins (prevents overwrite).
     if (_engine.playerAMove != null) {
-      _statsRepo.recordMoveSelection(_engine.playerAMove!);
+      await _statsRepo.recordMoveSelection(_engine.playerAMove!);
     }
 
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
         AudioService.instance.playVictory();
-        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
+        await _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
         VibrationService.instance.victory();
         break;
       case RoundResult.playerBWin:
         AudioService.instance.playDefeat();
-        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
+        await _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
         VibrationService.instance.defeat();
         break;
       case RoundResult.draw:
         AudioService.instance.playDraw();
-        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
+        await _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
         VibrationService.instance.draw();
         break;
       case null:
@@ -167,15 +182,17 @@ class _SinglePlayerMatchFlowScreenState
     Future.delayed(delay, _advanceAfterReveal);
   }
 
-  void _advanceAfterReveal() {
+  // ── FIX: made async; all stats calls are awaited ──────────────
+  Future<void> _advanceAfterReveal() async {
     if (!mounted) return;
     _engine.checkMatchCondition();
+
     if (_engine.matchFinished) {
       if (widget.format.isUnlimited) {
-        _statsRepo.recordUnlimitedMatchResult(
+        await _statsRepo.recordUnlimitedMatchResult(
           winner: _engine.matchWinner,
         );
-        _statsRepo.recordLocalMatch(
+        await _statsRepo.recordLocalMatch(
           opponentName: 'AI Bot',
           mode: 'single_player',
           formatType: 'unlimited',
@@ -186,10 +203,10 @@ class _SinglePlayerMatchFlowScreenState
                   : 'loss',
         );
       } else {
-        _statsRepo.recordStandardMatchResult(
+        await _statsRepo.recordStandardMatchResult(
           playerWon: _engine.matchWinner == 'A',
         );
-        _statsRepo.recordLocalMatch(
+        await _statsRepo.recordLocalMatch(
           opponentName: 'AI Bot',
           mode: 'single_player',
           formatType: widget.format.format.name,
@@ -200,6 +217,7 @@ class _SinglePlayerMatchFlowScreenState
                   : 'loss',
         );
       }
+      if (!mounted) return;
       setState(() {
         _stage = _SpFlowStage.roundComplete;
       });
@@ -321,7 +339,6 @@ class _SinglePlayerMatchFlowScreenState
             child: Column(
               children: [
                 _buildTopBar(showEndMatch: _canEndMatchNow),
-                // ── FIX: add scoreboard with draws below round header ──
                 const SizedBox(height: 8),
                 LocalScoreboard(
                   playerAScore: _engine.playerAScore,
@@ -342,6 +359,7 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
+
       case _SpFlowStage.playerMove:
         return LocalPlayerMoveScreen(
           playerNumber: 1,
@@ -351,6 +369,7 @@ class _SinglePlayerMatchFlowScreenState
           showRoundLabel: true,
           onEndMatch: _canEndMatchNow ? _onEndMatchPressed : null,
         );
+
       case _SpFlowStage.aiThinking:
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -369,6 +388,7 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
+
       case _SpFlowStage.revealing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.lastResult == RoundResult.playerAWin;
@@ -381,7 +401,6 @@ class _SinglePlayerMatchFlowScreenState
             child: Column(
               children: [
                 _buildTopBar(),
-                // ── FIX: add scoreboard with draws below round header ──
                 const SizedBox(height: 8),
                 LocalScoreboard(
                   playerAScore: _engine.playerAScore,
@@ -464,6 +483,7 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
+
       case _SpFlowStage.finishing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.matchWinner == 'A';
@@ -488,8 +508,21 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
+
       case _SpFlowStage.roundComplete:
         if (widget.format.isUnlimited) {
+          final String unlimitedWinnerTitle;
+          final Color unlimitedWinnerColor;
+          if (_engine.matchWinner == 'A') {
+            unlimitedWinnerTitle = 'YOU WON';
+            unlimitedWinnerColor = AppColors.green;
+          } else if (_engine.matchWinner == 'B') {
+            unlimitedWinnerTitle = 'AI WON';
+            unlimitedWinnerColor = AppColors.red;
+          } else {
+            unlimitedWinnerTitle = 'MATCH DRAW';
+            unlimitedWinnerColor = AppColors.orange;
+          }
           return UnlimitedResultScreen(
             player1Wins: _engine.playerAScore,
             player2Wins: _engine.playerBScore,
@@ -497,7 +530,9 @@ class _SinglePlayerMatchFlowScreenState
             totalRounds: _engine.totalRounds,
             player1WinRate: _engine.playerAWinRate,
             player2WinRate: _engine.playerBWinRate,
-            onPlayAgain: () => GoRouter.of(context).pop(),
+            winnerTitle: unlimitedWinnerTitle,
+            winnerColor: unlimitedWinnerColor,
+            onPlayAgain: _resetAndRestart,
             onMainMenu: () => GoRouter.of(context).go('/main'),
           );
         }
@@ -506,7 +541,7 @@ class _SinglePlayerMatchFlowScreenState
           playerWon: playerWon,
           playerScore: _engine.playerAScore,
           opponentScore: _engine.playerBScore,
-          onPlayAgain: () => GoRouter.of(context).pop(),
+          onPlayAgain: _resetAndRestart,
           onMainMenu: () => GoRouter.of(context).go('/main'),
         );
     }
@@ -556,14 +591,14 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(context).pop();
               _countdownTimer?.cancel();
               _engine.endUnlimitedMatch();
-              _statsRepo.recordUnlimitedMatchResult(
+              await _statsRepo.recordUnlimitedMatchResult(
                 winner: _engine.matchWinner,
               );
-              _statsRepo.recordLocalMatch(
+              await _statsRepo.recordLocalMatch(
                 opponentName: 'AI Bot',
                 mode: 'single_player',
                 formatType: 'unlimited',
@@ -573,6 +608,7 @@ class _SinglePlayerMatchFlowScreenState
                         ? 'draw'
                         : 'loss',
               );
+              if (!mounted) return;
               if (_engine.matchWinner != null &&
                   _victoryAnimationsEnabled &&
                   _engine.playerAMove != null &&

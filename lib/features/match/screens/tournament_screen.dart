@@ -27,24 +27,22 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
     'Titan',
     'Nova'
   ];
-
   late List<String> _bracket;
   late List<String> _nextRound;
-
   int _currentRound = 0; // 0=QF, 1=SF, 2=F
   int _currentMatch = 0;
-
   bool _isMatchActive = false;
   String? _selectedMove;
   String? _lastResult;
   bool _showOpponentMove = false;
   String? _opponentMove;
-
   int _matchWins = 0;
   int _matchLosses = 0;
-
   bool _isTournamentComplete = false;
   String _tournamentWinner = '';
+
+  // ── FIX: single shared repository instance for all stats calls ──
+  final LocalStatsRepository _statsRepo = LocalStatsRepository();
 
   @override
   void initState() {
@@ -54,31 +52,40 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
     _isMatchActive = true;
   }
 
+  // ── FIX: record move selection + round outcome ──
   void _selectMove(String move) {
     if (!_isMatchActive) return;
-
     AudioService.instance.playSound('select');
     VibrationService.instance.selection();
-
     setState(() {
       _selectedMove = move;
       _isMatchActive = false;
     });
 
+    // FIX: record the player's move selection immediately
+    _statsRepo.recordMoveSelection(move);
+
     // AI makes move
     Future.delayed(const Duration(milliseconds: 500), () {
       final aiMove = _getAIMove();
-
       setState(() {
         _opponentMove = aiMove;
         _showOpponentMove = true;
       });
 
       final result = _determineWinner(move, aiMove);
-
       setState(() {
         _lastResult = result;
       });
+
+      // FIX: record the round outcome
+      if (result.contains('You win')) {
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
+      } else if (result.contains('You lose')) {
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
+      } else {
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
+      }
 
       _advanceMatch(result.contains('You win'));
     });
@@ -92,13 +99,11 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
 
   String _determineWinner(String playerMove, String aiMove) {
     if (playerMove == aiMove) return 'DRAW!';
-
     if ((playerMove == 'rock' && aiMove == 'scissors') ||
         (playerMove == 'paper' && aiMove == 'rock') ||
         (playerMove == 'scissors' && aiMove == 'paper')) {
       return 'You win this round!';
     }
-
     return 'You lose this round!';
   }
 
@@ -106,7 +111,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
     final winner = playerWon
         ? _bracket[_currentMatch * 2]
         : _bracket[_currentMatch * 2 + 1];
-
     _nextRound.add(winner);
 
     if (playerWon) {
@@ -117,7 +121,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
 
     Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
-
       _currentMatch++;
 
       // Check if round is complete
@@ -147,7 +150,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
         _isTournamentComplete = true;
         _tournamentWinner = _bracket[0];
       });
-
       _saveResult();
     } else {
       setState(() {
@@ -160,9 +162,10 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
     }
   }
 
+  // ── FIX: use shared _statsRepo instance ──
   void _saveResult() async {
-    final repo = LocalStatsRepository();
-    await repo.recordStandardMatchResult(playerWon: _bracket[0] == 'You');
+    await _statsRepo.recordStandardMatchResult(
+        playerWon: _bracket[0] == 'You');
   }
 
   void _playAgain() {

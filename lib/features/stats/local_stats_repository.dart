@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/local_storage_keys.dart';
@@ -34,7 +35,8 @@ class LocalMatchEntry {
         'created_at': createdAt,
       };
 
-  factory LocalMatchEntry.fromJson(Map<String, dynamic> json) => LocalMatchEntry(
+  factory LocalMatchEntry.fromJson(Map<String, dynamic> json) =>
+      LocalMatchEntry(
         opponentName: json['opponent_name'] ?? 'Unknown',
         mode: json['mode'] ?? '',
         formatType: json['format_type'] ?? '',
@@ -140,6 +142,26 @@ class LocalStats {
 enum RoundOutcomeForStats { won, lost, drew }
 
 class LocalStatsRepository {
+  // ── Static async mutex shared across ALL instances ──────────────
+  // Prevents concurrent read-modify-write on the same
+  // SharedPreferences key, which was silently discarding updates.
+  static Future<void> _lock = Future.value();
+
+  /// Serializes [action] behind a global async lock so that
+  /// overlapping callers never clobber each other's writes.
+  static Future<T> _synchronized<T>(Future<T> Function() action) {
+    final completer = Completer<T>();
+    _lock = _lock.then((_) async {
+      try {
+        completer.complete(await action());
+      } catch (e, st) {
+        completer.completeError(e, st);
+      }
+    });
+    return completer.future;
+  }
+
+  // ── Read (no lock needed – pure read) ─────────────────────────
   Future<LocalStats> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(LocalStorageKeys.localStatistics);
@@ -147,6 +169,7 @@ class LocalStatsRepository {
     return LocalStats.fromJson(jsonDecode(raw));
   }
 
+  // ── Write helpers (always called inside _synchronized) ─────────
   Future<void> _save(LocalStats stats) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
@@ -155,88 +178,102 @@ class LocalStatsRepository {
     );
   }
 
-  /// Records a single move selection (rock/paper/scissors) toward the
-  /// running move-count stats.
-  Future<void> recordMoveSelection(String move) async {
-    final current = await load();
-    final updated = switch (move) {
-      'rock' =>
-        current.copyWith(rockSelections: current.rockSelections + 1),
-      'paper' =>
-        current.copyWith(paperSelections: current.paperSelections + 1),
-      'scissors' =>
-        current.copyWith(scissorsSelections: current.scissorsSelections + 1),
-      _ => current,
-    };
-    await _save(updated);
+  /// Records a single move selection (rock/paper/scissors).
+  Future<void> recordMoveSelection(String move) {
+    return _synchronized(() async {
+      final current = await load();
+      final updated = switch (move) {
+        'rock' =>
+          current.copyWith(rockSelections: current.rockSelections + 1),
+        'paper' =>
+          current.copyWith(paperSelections: current.paperSelections + 1),
+        'scissors' =>
+          current.copyWith(
+              scissorsSelections: current.scissorsSelections + 1),
+        _ => current,
+      };
+      await _save(updated);
+    });
   }
 
-  /// Records the outcome of a single round (win/loss/draw) toward
-  /// rounds won/lost/draws.
-  Future<void> recordRoundOutcome(RoundOutcomeForStats outcome) async {
-    final current = await load();
-    final updated = switch (outcome) {
-      RoundOutcomeForStats.won =>
-        current.copyWith(roundsWon: current.roundsWon + 1),
-      RoundOutcomeForStats.lost =>
-        current.copyWith(roundsLost: current.roundsLost + 1),
-      RoundOutcomeForStats.drew =>
-        current.copyWith(draws: current.draws + 1),
-    };
-    await _save(updated);
+  /// Records the outcome of a single round (win/loss/draw).
+  Future<void> recordRoundOutcome(RoundOutcomeForStats outcome) {
+    return _synchronized(() async {
+      final current = await load();
+      final updated = switch (outcome) {
+        RoundOutcomeForStats.won =>
+          current.copyWith(roundsWon: current.roundsWon + 1),
+        RoundOutcomeForStats.lost =>
+          current.copyWith(roundsLost: current.roundsLost + 1),
+        RoundOutcomeForStats.drew =>
+          current.copyWith(draws: current.draws + 1),
+      };
+      await _save(updated);
+    });
   }
 
   /// Records a completed standard match (has a clear winner/loser).
-  Future<void> recordStandardMatchResult({required bool playerWon}) async {
-    final current = await load();
-    final newStreak = playerWon ? current.currentStreak + 1 : 0;
-    final updated = playerWon
-        ? current.copyWith(
-            matchesPlayed: current.matchesPlayed + 1,
-            matchesWon: current.matchesWon + 1,
-            currentStreak: newStreak,
-            longestStreak: newStreak > current.longestStreak ? newStreak : current.longestStreak,
-          )
-        : current.copyWith(
-            matchesPlayed: current.matchesPlayed + 1,
-            matchesLost: current.matchesLost + 1,
-            currentStreak: 0,
-          );
-    await _save(updated);
+  Future<void> recordStandardMatchResult({required bool playerWon}) {
+    return _synchronized(() async {
+      final current = await load();
+      final newStreak = playerWon ? current.currentStreak + 1 : 0;
+      final updated = playerWon
+          ? current.copyWith(
+              matchesPlayed: current.matchesPlayed + 1,
+              matchesWon: current.matchesWon + 1,
+              currentStreak: newStreak,
+              longestStreak: newStreak > current.longestStreak
+                  ? newStreak
+                  : current.longestStreak,
+            )
+          : current.copyWith(
+              matchesPlayed: current.matchesPlayed + 1,
+              matchesLost: current.matchesLost + 1,
+              currentStreak: 0,
+            );
+      await _save(updated);
+    });
   }
 
   /// Records a completed Unlimited match. A draw only increments
   /// matches played (no win/loss).
-  Future<void> recordUnlimitedMatchResult({required String? winner}) async {
-    final current = await load();
-    LocalStats updated;
-    if (winner == null) {
-      updated = current.copyWith(
-        matchesPlayed: current.matchesPlayed + 1,
-        currentStreak: 0,
-      );
-    } else if (winner == 'A') {
-      final newStreak = current.currentStreak + 1;
-      updated = current.copyWith(
-        matchesPlayed: current.matchesPlayed + 1,
-        matchesWon: current.matchesWon + 1,
-        currentStreak: newStreak,
-        longestStreak: newStreak > current.longestStreak ? newStreak : current.longestStreak,
-      );
-    } else {
-      updated = current.copyWith(
-        matchesPlayed: current.matchesPlayed + 1,
-        matchesLost: current.matchesLost + 1,
-        currentStreak: 0,
-      );
-    }
-    await _save(updated);
+  Future<void> recordUnlimitedMatchResult({required String? winner}) {
+    return _synchronized(() async {
+      final current = await load();
+      LocalStats updated;
+      if (winner == null) {
+        updated = current.copyWith(
+          matchesPlayed: current.matchesPlayed + 1,
+          currentStreak: 0,
+        );
+      } else if (winner == 'A') {
+        final newStreak = current.currentStreak + 1;
+        updated = current.copyWith(
+          matchesPlayed: current.matchesPlayed + 1,
+          matchesWon: current.matchesWon + 1,
+          currentStreak: newStreak,
+          longestStreak: newStreak > current.longestStreak
+              ? newStreak
+              : current.longestStreak,
+        );
+      } else {
+        updated = current.copyWith(
+          matchesPlayed: current.matchesPlayed + 1,
+          matchesLost: current.matchesLost + 1,
+          currentStreak: 0,
+        );
+      }
+      await _save(updated);
+    });
   }
 
-  Future<void> resetLocalStatistics() async {
-    await _save(const LocalStats());
+  Future<void> resetLocalStatistics() {
+    return _synchronized(() async {
+      await _save(const LocalStats());
+    });
   }
 
+  // ── Local match history (separate key – no conflict) ──────────
   static const _matchHistoryKey = 'local_match_history';
 
   /// Load local match history entries.
@@ -256,23 +293,26 @@ class LocalStatsRepository {
     required String mode,
     required String formatType,
     required String result,
-  }) async {
-    final entries = await loadMatchHistory();
-    entries.insert(
-      0,
-      LocalMatchEntry(
-        opponentName: opponentName,
-        mode: mode,
-        formatType: formatType,
-        result: result,
-        createdAt: DateTime.now().toIso8601String(),
-      ),
-    );
-    // Keep last 100 entries
-    if (entries.length > 100) {
-      entries.removeRange(100, entries.length);
-    }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_matchHistoryKey, jsonEncode(entries.map((e) => e.toJson()).toList()));
+  }) {
+    return _synchronized(() async {
+      final entries = await loadMatchHistory();
+      entries.insert(
+        0,
+        LocalMatchEntry(
+          opponentName: opponentName,
+          mode: mode,
+          formatType: formatType,
+          result: result,
+          createdAt: DateTime.now().toIso8601String(),
+        ),
+      );
+      // Keep last 100 entries
+      if (entries.length > 100) {
+        entries.removeRange(100, entries.length);
+      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          _matchHistoryKey, jsonEncode(entries.map((e) => e.toJson()).toList()));
+    });
   }
 }
