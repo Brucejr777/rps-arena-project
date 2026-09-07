@@ -37,6 +37,15 @@ class LocalPlayerMoveScreen extends ConsumerStatefulWidget {
   /// normal top layout instead of a floating overlay.
   final VoidCallback? onEndMatch;
 
+  /// FIX:
+  /// Controls whether this screen draws its own back button.
+  ///
+  /// In Single Player mode this can remain true.
+  /// In Local 2 Players mode, LocalMatchFlowScreen already provides a
+  /// centralized exit button, so this should be false to avoid duplicate
+  /// back buttons.
+  final bool showBackButton;
+
   const LocalPlayerMoveScreen({
     super.key,
     required this.playerNumber,
@@ -49,6 +58,7 @@ class LocalPlayerMoveScreen extends ConsumerStatefulWidget {
     this.modeLabel,
     this.showRoundLabel = false,
     this.onEndMatch,
+    this.showBackButton = true,
   });
 
   @override
@@ -97,7 +107,6 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
               const SizedBox(height: 8),
             ] else ...[
               const SizedBox(height: 12),
-
               if (widget.showRoundLabel)
                 FittedBox(
                   fit: BoxFit.scaleDown,
@@ -113,7 +122,6 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                     ),
                   ),
                 ),
-
               if (widget.modeLabel != null) ...[
                 SizedBox(height: widget.showRoundLabel ? 4 : 0),
                 FittedBox(
@@ -131,7 +139,6 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                   ),
                 ),
               ],
-
               const SizedBox(height: 8),
             ],
 
@@ -281,32 +288,40 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: () => Navigator.of(context).maybePop(),
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  width: 1.5,
-                  color: AppColors.blue,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.blue.withValues(alpha: 0.35),
-                    blurRadius: 10,
+          // FIX:
+          // Only draw the internal back button when showBackButton is true.
+          //
+          // In Local 2 Players mode, LocalMatchFlowScreen provides the
+          // centralized exit button, so this internal button must be hidden.
+          if (widget.showBackButton)
+            GestureDetector(
+              onTap: () => Navigator.of(context).maybePop(),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    width: 1.5,
+                    color: AppColors.blue,
                   ),
-                ],
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.blue.withValues(alpha: 0.35),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.arrow_back,
+                  color: Colors.white70,
+                  size: 20,
+                ),
               ),
-              child: const Icon(
-                Icons.arrow_back,
-                color: Colors.white70,
-                size: 20,
-              ),
-            ),
-          ),
+            )
+          else
+            const SizedBox(width: 40),
 
           Expanded(
             child: Text(
