@@ -3753,7 +3753,7 @@ FILE: backend/lib/ready_up_manager.js
  *   3. If either fails to confirm → match cancelled.
  */
 
-const READY_TIMEOUT_MS = 20_000;
+const READY_TIMEOUT_MS = 15_000; // T89: ready period 15 seconds
 
 /**
  * @typedef {{ matchId: number, playerA: {playerId, username, rating}, playerB: {playerId, username, rating}, readyPlayers: Set<number>, timer: NodeJS.Timeout, formatType: string, winsRequired: number }} PendingMatch
@@ -3888,9 +3888,7 @@ class ReadyUpManager {
 }
 
 const readyUpManager = new ReadyUpManager();
-
 module.exports = { ReadyUpManager, readyUpManager, READY_TIMEOUT_MS };
-
 
 ================================================================================
 FILE: backend/lib/resolution.js
@@ -5502,15 +5500,17 @@ module.exports = { createMatchesRouter };
 FILE: backend/routes/quick_match.js
 ================================================================================
 /**
- * Quick Match routes (T87).
+ * Quick Match routes (T87/T89).
  *
  * POST   /quick-match/join    — enter the queue for a format
- * DELETE /quick-match/cancel  — leave the queue
+ * GET    /quick-match/status  — poll queue / ready-up / confirmed state
+ * DELETE /quick-match/cancel  — leave the queue or cancel pending ready-up
  * POST   /quick-match/ready   — confirm readiness after opponent found
  *
- * IMPORTANT: Quick Match uses the in-memory MatchQueue (match_queue.js).
- * It is completely separate from Private Rooms (rooms.js / room table).
- * Quick Match search will NEVER match Private Room entries.
+ * IMPORTANT:
+ * - Quick Match uses the in-memory MatchQueue.
+ * - It is separate from Private Rooms.
+ * - Quick Match search will NEVER match Private Room entries.
  */
 
 const { Router } = require('express');
@@ -5518,179 +5518,460 @@ const { requireAuth } = require('../lib/auth_middleware');
 const { matchQueue } = require('../lib/match_queue');
 const { readyUpManager } = require('../lib/ready_up_manager');
 
+const VALID_FORMATS = [
+  'bestOf3',
+  'bestOf5',
+  'bestOf7',
+  'bestOf9',
+  'custom',
+  'unlimited',
+];
+
+const STANDARD_WINS_REQUIRED = {
+  bestOf3: 2,
+  bestOf5: 3,
+  bestOf7: 4,
+  bestOf9: 5,
+};
+
+/**
+ * Confirmed matches are kept briefly in memory so both clients can poll
+ * /quick-match/status and discover that the match is ready to start.
+ *
+ * This is needed because the player who pressed READY first receives
+ * "waiting" from POST /quick-match/ready, then must learn via polling
+ * that the second player also pressed READY.
+ */
+const CONFIRMED_STATUS_TTL_MS = 120_000;
+const confirmedByPlayer = new Map();
+
+function clearExpiredConfirmed() {
+  const now = Date.now();
+
+  for (const [playerId, entry] of confirmedByPlayer.entries()) {
+    if (!entry || entry.expiresAt <= now) {
+      confirmedByPlayer.delete(playerId);
+    }
+  }
+}
+
+function getConfirmed(playerId) {
+  clearExpiredConfirmed();
+
+  const entry = confirmedByPlayer.get(playerId);
+  if (!entry) return null;
+
+  if (entry.expiresAt <= Date.now()) {
+    confirmedByPlayer.delete(playerId);
+    return null;
+  }
+
+  return entry;
+}
+
+function storeConfirmed({ matchId, player, opponent, formatType, winsRequired }) {
+  confirmedByPlayer.set(player.playerId, {
+    matchId,
+    formatType,
+    winsRequired,
+    opponent: {
+      playerId: opponent.playerId,
+      username: opponent.username,
+      rating: opponent.rating,
+    },
+    expiresAt: Date.now() + CONFIRMED_STATUS_TTL_MS,
+  });
+}
+
+/**
+ * Normalize wins_required according to format.
+ *
+ * - bestOf3  -> 2
+ * - bestOf5  -> 3
+ * - bestOf7  -> 4
+ * - bestOf9  -> 5
+ * - custom   -> 2 through 99
+ * - unlimited-> 0
+ */
+function normalizeWinsRequired(formatType, rawWinsRequired) {
+  if (formatType === 'unlimited') {
+    return { ok: true, winsRequired: 0 };
+  }
+
+  if (formatType === 'custom') {
+    const value = Number(rawWinsRequired);
+
+    if (!Number.isInteger(value) || value < 2 || value > 99) {
+      return { ok: false, error: 'INVALID VALUE' };
+    }
+
+    return { ok: true, winsRequired: value };
+  }
+
+  if (Object.prototype.hasOwnProperty.call(STANDARD_WINS_REQUIRED, formatType)) {
+    return { ok: true, winsRequired: STANDARD_WINS_REQUIRED[formatType] };
+  }
+
+  return { ok: false, error: 'Invalid format type.' };
+}
+
 function createQuickMatchRouter(pool) {
   const router = Router();
 
-  // All quick-match routes require authentication
+  // All quick-match routes require authentication.
   router.use(requireAuth);
 
-  // ── POST /quick-match/join ────────────────────────────────────
+  /**
+   * When both players confirm READY, store the confirmed match state briefly
+   * so either client can poll /quick-match/status and proceed.
+   */
+  readyUpManager.onConfirmed((matchId, playerA, playerB, formatType, winsRequired) => {
+    storeConfirmed({
+      matchId,
+      player: playerA,
+      opponent: playerB,
+      formatType,
+      winsRequired,
+    });
+
+    storeConfirmed({
+      matchId,
+      player: playerB,
+      opponent: playerA,
+      formatType,
+      winsRequired,
+    });
+  });
+
+  // ── POST /quick-match/join ────────────────────────────────────────────
   router.post('/join', async (req, res) => {
     try {
       const { playerId, username } = req.player;
-      const { formatType, winsRequired = 0 } = req.body;
+      const { formatType, winsRequired } = req.body;
 
       if (!formatType) {
         return res.status(400).json({ error: 'formatType is required.' });
       }
 
-      const validFormats = ['bestOf3', 'bestOf5', 'bestOf7', 'bestOf9', 'custom', 'unlimited'];
-      if (!validFormats.includes(formatType)) {
+      if (!VALID_FORMATS.includes(formatType)) {
         return res.status(400).json({ error: 'Invalid format type.' });
       }
 
-      // Fetch player rating
+      const normalized = normalizeWinsRequired(formatType, winsRequired);
+      if (!normalized.ok) {
+        return res.status(400).json({ error: normalized.error });
+      }
+
+      const normalizedWinsRequired = normalized.winsRequired;
+
+      // Fetch player rating.
       const ratingResult = await pool.query(
         'SELECT rating FROM account WHERE player_id = $1',
         [playerId]
       );
-      const rating = ratingResult.rows.length > 0 ? ratingResult.rows[0].rating : 1000;
 
-      // Idempotent join: remove any stale queue entry first (F8)
+      const rating =
+        ratingResult.rows.length > 0 ? ratingResult.rows[0].rating : 1000;
+
+      /**
+       * Clean up stale state before joining:
+       * - remove old queue entries
+       * - cancel old pending ready-up entries
+       * - remove old confirmed polling entries
+       */
       matchQueue.removeByPlayerId(playerId);
 
-      // Try to match
+      const existingPending = readyUpManager.getPendingMatch(playerId);
+      if (existingPending) {
+        readyUpManager.cancelPlayer(existingPending.matchId, playerId);
+      }
+
+      const existingConfirmed = getConfirmed(playerId);
+      if (existingConfirmed) {
+        confirmedByPlayer.delete(playerId);
+      }
+
+      // Try to match.
       const match = matchQueue.join({
         playerId,
         username,
         rating,
         formatType,
-        winsRequired: formatType === 'unlimited' ? 0 : winsRequired,
+        winsRequired: normalizedWinsRequired,
+        mode: 'casual',
       });
 
       if (match) {
-        // Matched! Create a match record and room
         const { player1, player2 } = match;
 
         const matchResult = await pool.query(
           `INSERT INTO match (mode, format_type, wins_required, player_a_id, player_b_id)
            VALUES ('casual', $1, $2, $3, $4)
            RETURNING match_id`,
-          [formatType, winsRequired, player1.playerId, player2.playerId]
+          [
+            formatType,
+            normalizedWinsRequired,
+            player1.playerId,
+            player2.playerId,
+          ]
         );
 
         const matchId = matchResult.rows[0].match_id;
 
-        // Start the ready-up countdown (T89)
         readyUpManager.startReadyUp({
           matchId,
-          playerA: { playerId: player1.playerId, username: player1.username, rating: player1.rating },
-          playerB: { playerId: player2.playerId, username: player2.username, rating: player2.rating },
-          formatType,
-          winsRequired,
-        });
-
-        res.json({
-          status: 'matched',
-          matchId,
-          opponent: {
+          playerA: {
+            playerId: player1.playerId,
+            username: player1.username,
+            rating: player1.rating,
+          },
+          playerB: {
             playerId: player2.playerId,
             username: player2.username,
             rating: player2.rating,
           },
-        });
-      } else {
-        // Enqueued — waiting for opponent
-        res.json({
-          status: 'searching',
           formatType,
-          winsRequired,
+          winsRequired: normalizedWinsRequired,
+        });
+
+        /**
+         * Return the actual opponent.
+         *
+         * The previous implementation returned player2 unconditionally,
+         * which caused the joining player to see themselves as opponent.
+         */
+        const opponent =
+          player1.playerId === playerId ? player2 : player1;
+
+        return res.json({
+          status: 'matched',
+          matchId,
+          formatType,
+          winsRequired: normalizedWinsRequired,
           rating,
-          message: 'SEARCHING FOR OPPONENT...',
+          opponent: {
+            playerId: opponent.playerId,
+            username: opponent.username,
+            rating: opponent.rating,
+          },
         });
       }
+
+      // Enqueued — waiting for opponent.
+      return res.json({
+        status: 'searching',
+        formatType,
+        winsRequired: normalizedWinsRequired,
+        rating,
+        message: 'SEARCHING FOR OPPONENT...',
+      });
     } catch (err) {
       console.error('Quick match join error:', err);
-      res.status(500).json({ error: 'Internal server error.' });
+      return res.status(500).json({ error: 'Internal server error.' });
     }
   });
 
-  // ── GET /quick-match/status ──────────────────────────────────
-  // Returns the player's current queue status (for polling from the
-  // create screen while waiting for an opponent).
+  // ── GET /quick-match/status ───────────────────────────────────────────
+  /**
+   * Polling states:
+   *
+   * searching -> still in queue
+   * ready_up  -> opponent found, waiting for READY confirmation
+   * confirmed -> both players READY, client may proceed to match
+   * idle      -> no active Quick Match state
+   */
   router.get('/status', (req, res) => {
     const { playerId } = req.player;
-    const entry = matchQueue.getStatus(playerId);
 
+    clearExpiredConfirmed();
+
+    // 1. Still searching in queue.
+    const entry = matchQueue.getStatus(playerId);
     if (entry) {
       return res.json({
         status: 'searching',
         formatType: entry.formatType,
         winsRequired: entry.winsRequired,
+        rating: entry.rating,
+        message: 'SEARCHING FOR OPPONENT...',
       });
     }
 
-    // Check if player is in a pending ready-up (matched but not confirmed)
+    // 2. Both players confirmed READY.
+    const confirmed = getConfirmed(playerId);
+    if (confirmed) {
+      return res.json({
+        status: 'confirmed',
+        matchId: confirmed.matchId,
+        formatType: confirmed.formatType,
+        winsRequired: confirmed.winsRequired,
+        opponentName: confirmed.opponent.username,
+        opponent: {
+          playerId: confirmed.opponent.playerId,
+          username: confirmed.opponent.username,
+          rating: confirmed.opponent.rating,
+        },
+      });
+    }
+
+    // 3. Matched, but READY confirmation is still pending.
     const pending = readyUpManager.getPendingMatch(playerId);
     if (pending) {
+      const opponent =
+        pending.playerA.playerId === playerId
+          ? pending.playerB
+          : pending.playerA;
+
       return res.json({
         status: 'ready_up',
         matchId: pending.matchId,
-        opponentName: pending.playerA.playerId === playerId
-          ? pending.playerB.username
-          : pending.playerA.username,
+        formatType: pending.formatType,
+        winsRequired: pending.winsRequired,
+        opponentName: opponent.username,
+        opponent: {
+          playerId: opponent.playerId,
+          username: opponent.username,
+          rating: opponent.rating,
+        },
       });
     }
 
-    res.json({ status: 'idle' });
+    // 4. No active Quick Match state.
+    return res.json({ status: 'idle' });
   });
 
-  // ── DELETE /quick-match/cancel ────────────────────────────────
+  // ── DELETE /quick-match/cancel ────────────────────────────────────────
   router.delete('/cancel', (req, res) => {
     const { playerId } = req.player;
-    const removed = matchQueue.cancel(playerId);
 
-    res.json({
-      message: removed ? 'Queue entry cancelled.' : 'No queue entry found.',
+    const removedFromQueue = matchQueue.cancel(playerId);
+
+    const pending = readyUpManager.getPendingMatch(playerId);
+    let cancelledPending = false;
+
+    if (pending) {
+      cancelledPending = readyUpManager.cancelPlayer(pending.matchId, playerId);
+    }
+
+    clearExpiredConfirmed();
+
+    const confirmed = getConfirmed(playerId);
+    if (confirmed) {
+      confirmedByPlayer.delete(playerId);
+    }
+
+    return res.json({
+      message:
+        removedFromQueue || cancelledPending
+          ? 'Quick match cancelled.'
+          : 'No active quick match entry found.',
     });
   });
 
-  // ── POST /quick-match/ready ───────────────────────────────────
-  // After opponent is found, both players must confirm readiness
-  // within 15 seconds or the match is cancelled.
+  // ── POST /quick-match/ready ───────────────────────────────────────────
   router.post('/ready', async (req, res) => {
     try {
       const { playerId } = req.player;
       const { matchId } = req.body;
 
-      if (!matchId) {
+      const requestedMatchId = Number(matchId);
+
+      if (!matchId || !Number.isInteger(requestedMatchId)) {
         return res.status(400).json({ error: 'matchId is required.' });
       }
 
-      // Verify the player is part of this match via the pending ready-up
+      clearExpiredConfirmed();
+
+      // Already confirmed through polling state.
+      const confirmed = getConfirmed(playerId);
+      if (confirmed && confirmed.matchId === requestedMatchId) {
+        return res.json({
+          status: 'confirmed',
+          matchId: confirmed.matchId,
+          formatType: confirmed.formatType,
+          winsRequired: confirmed.winsRequired,
+          opponentName: confirmed.opponent.username,
+          opponent: {
+            playerId: confirmed.opponent.playerId,
+            username: confirmed.opponent.username,
+            rating: confirmed.opponent.rating,
+          },
+          message: 'Both players ready. Match starting!',
+        });
+      }
+
+      // Verify the player is part of this pending ready-up.
       const pending = readyUpManager.getPendingMatch(playerId);
-      if (!pending || pending.matchId !== matchId) {
-        // Also check the database for already-confirmed matches
+
+      if (!pending || pending.matchId !== requestedMatchId) {
+        // Fallback: check whether the match already exists in DB.
         const matchResult = await pool.query(
           'SELECT player_a_id, player_b_id FROM match WHERE match_id = $1',
-          [matchId]
+          [requestedMatchId]
         );
+
         if (matchResult.rows.length === 0) {
           return res.status(404).json({ error: 'Match not found.' });
         }
+
         const match = matchResult.rows[0];
-        if (match.player_a_id !== playerId && match.player_b_id !== playerId) {
-          return res.status(403).json({ error: 'You are not part of this match.' });
+
+        if (
+          match.player_a_id !== playerId &&
+          match.player_b_id !== playerId
+        ) {
+          return res
+            .status(403)
+            .json({ error: 'You are not part of this match.' });
         }
-        return res.json({ status: 'already_confirmed', matchId });
+
+        return res.json({
+          status: 'already_confirmed',
+          matchId: requestedMatchId,
+        });
       }
 
-      const result = readyUpManager.playerReady(matchId, playerId);
+      const result = readyUpManager.playerReady(requestedMatchId, playerId);
 
-      if (result.status === 'not_found' || result.status === 'not_participant') {
+      if (
+        result.status === 'not_found' ||
+        result.status === 'not_participant'
+      ) {
         return res.status(400).json({ error: 'Invalid ready-up request.' });
       }
 
       if (result.status === 'confirmed') {
-        return res.json({ status: 'confirmed', matchId, message: 'Both players ready. Match starting!' });
+        const confirmedAfter = getConfirmed(playerId);
+
+        return res.json({
+          status: 'confirmed',
+          matchId: requestedMatchId,
+          formatType: confirmedAfter?.formatType,
+          winsRequired: confirmedAfter?.winsRequired,
+          opponentName: confirmedAfter?.opponent?.username,
+          opponent: confirmedAfter?.opponent,
+          message: 'Both players ready. Match starting!',
+        });
       }
 
-      // Still waiting for the other player
-      const opponent = readyUpManager.getOpponent(matchId, playerId);
-      res.json({ status: 'waiting', matchId, opponentName: opponent?.username });
+      // Still waiting for the other player.
+      const opponent = readyUpManager.getOpponent(requestedMatchId, playerId);
+
+      return res.json({
+        status: 'waiting',
+        matchId: requestedMatchId,
+        opponentName: opponent?.username,
+        opponent: opponent
+          ? {
+              playerId: opponent.playerId,
+              username: opponent.username,
+              rating: opponent.rating,
+            }
+          : null,
+      });
     } catch (err) {
       console.error('Quick match ready error:', err);
-      res.status(500).json({ error: 'Internal server error.' });
+      return res.status(500).json({ error: 'Internal server error.' });
     }
   });
 
@@ -5698,7 +5979,6 @@ function createQuickMatchRouter(pool) {
 }
 
 module.exports = { createQuickMatchRouter };
-
 
 ================================================================================
 FILE: backend/routes/ranked.js
@@ -18071,16 +18351,29 @@ class _OnlineStatsScreenState extends ConsumerState<OnlineStatsScreen> {
 FILE: lib/features/online/screens/opponent_found_screen.dart
 ================================================================================
 import 'dart:async';
+import 'dart:ui' show FontFeature;
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
 
-/// Opponent found screen (T90).
+/// Opponent found screen (T89/T90).
 ///
 /// Shows after a Quick Match pairing. Displays opponent info, a READY button,
-/// and a 20-second countdown. If either player fails to confirm, the match
+/// and a 15-second countdown. If either player fails to confirm, the match
 /// is cancelled.
+///
+/// Corrected behavior:
+/// - Countdown is 15 seconds, matching T89/T90.
+/// - The first player who presses READY and receives "waiting" is now able
+///   to detect when the second player also confirms via polling.
+/// - Polling handles:
+///   - ready_up  -> stay on this screen
+///   - confirmed -> both players ready, proceed to match
+///   - idle      -> match cancelled
+/// - READY failures no longer permanently cancel the countdown.
 class OpponentFoundScreen extends StatefulWidget {
   final int matchId;
   final String opponentName;
@@ -18102,18 +18395,28 @@ class OpponentFoundScreen extends StatefulWidget {
 }
 
 class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
-  static const int _countdownDuration = 20;
+  static const int _countdownDuration = 15;
+
   int _secondsRemaining = _countdownDuration;
+
   bool _isReady = false;
-  bool _readyFailed = false;
+  bool _isSubmitting = false;
+  bool _isPolling = false;
+  bool _hasNavigated = false;
+  bool _isCancelled = false;
+
+  String? _errorMessage;
+
   Timer? _timer;
   Timer? _pollTimer;
+
   late final AuthClient _authClient;
 
   @override
   void initState() {
     super.initState();
     _authClient = AuthClient();
+
     _startCountdown();
     _startPolling();
   }
@@ -18126,10 +18429,19 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
   }
 
   void _startCountdown() {
+    _timer?.cancel();
+
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _hasNavigated || _isCancelled) {
+        timer.cancel();
+        return;
+      }
+
       if (_secondsRemaining <= 1) {
         timer.cancel();
-        widget.onCancel(); // Time's up — match cancelled
+        _handleCancelled(
+          'Match cancelled — ready period expired.',
+        );
       } else {
         setState(() => _secondsRemaining--);
       }
@@ -18137,75 +18449,150 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
   }
 
   void _startPolling() {
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      if (!mounted) return;
+    _pollTimer?.cancel();
+
+    _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      if (!mounted || _hasNavigated || _isCancelled || _isPolling) {
+        return;
+      }
+
+      _isPolling = true;
+
       try {
         final res = await _authClient.get('/quick-match/status');
-        if (!mounted) return;
+
+        if (!mounted || _hasNavigated || _isCancelled) {
+          return;
+        }
+
         final data = res.data as Map<String, dynamic>;
         final status = data['status'] as String?;
 
-        if (status == 'idle') {
-          // Match was cancelled (ready-up timeout or opponent left)
-          _timer?.cancel();
-          _pollTimer?.cancel();
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Match cancelled — opponent did not confirm.')),
-            );
-            widget.onCancel();
-          }
+        if (status == 'confirmed') {
+          _proceedToMatch();
+        } else if (status == 'idle') {
+          _handleCancelled(
+            'Match cancelled — opponent did not confirm.',
+          );
         }
       } catch (_) {
-        // Polling failed — will retry
+        // Polling failed — retry on next tick.
+      } finally {
+        _isPolling = false;
       }
     });
   }
 
-  Future<void> _onReadyPressed() async {
+  void _proceedToMatch() {
+    if (_hasNavigated || _isCancelled) return;
+
+    _hasNavigated = true;
     _timer?.cancel();
-    setState(() { _isReady = true; _readyFailed = false; });
+    _pollTimer?.cancel();
+
+    if (mounted) {
+      widget.onReady();
+    }
+  }
+
+  void _handleCancelled(String message) {
+    if (_hasNavigated || _isCancelled) return;
+
+    _isCancelled = true;
+    _timer?.cancel();
+    _pollTimer?.cancel();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+
+      widget.onCancel();
+    }
+  }
+
+  Future<void> _onClosePressed() async {
+    if (_hasNavigated || _isCancelled) return;
+
+    _isCancelled = true;
+    _timer?.cancel();
+    _pollTimer?.cancel();
+
+    try {
+      await _authClient.delete('/quick-match/cancel');
+    } catch (_) {
+      // Best-effort cancel.
+    }
+
+    if (mounted) {
+      widget.onCancel();
+    }
+  }
+
+  Future<void> _onReadyPressed() async {
+    if (_isSubmitting || _isReady || _hasNavigated || _isCancelled) {
+      return;
+    }
+
+    if (widget.matchId <= 0) {
+      setState(() {
+        _errorMessage = 'Invalid match.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
 
     try {
       final res = await _authClient.post(
         '/quick-match/ready',
         data: {'matchId': widget.matchId},
       );
-      if (!mounted) return;
+
+      if (!mounted || _hasNavigated || _isCancelled) return;
+
       final data = res.data as Map<String, dynamic>;
       final status = data['status'] as String?;
 
-      if (status == 'confirmed') {
-        // Both players ready — navigate to match
-        _pollTimer?.cancel();
-        widget.onReady();
+      if (status == 'confirmed' || status == 'already_confirmed') {
+        _proceedToMatch();
+        return;
       }
-      // If 'waiting', keep showing "WAITING FOR OPPONENT..."
+
+      // Status is "waiting": this player is ready, but the opponent
+      // has not confirmed yet. Keep the countdown running and poll.
+      setState(() {
+        _isReady = true;
+        _isSubmitting = false;
+      });
     } on DioException catch (e) {
-      if (!mounted) return;
+      if (!mounted || _isCancelled) return;
+
       final msg = (e.response?.data is Map<String, dynamic>)
           ? (e.response!.data as Map<String, dynamic>)['error'] as String?
           : null;
-      setState(() { _isReady = false; _readyFailed = true; });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(msg ?? 'Ready-up failed. Please try again.'),
-        ));
-      }
+
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = msg ?? 'Ready-up failed. Please try again.';
+      });
     } catch (_) {
-      if (!mounted) return;
-      setState(() { _isReady = false; _readyFailed = true; });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ready-up failed. Please try again.')),
-        );
-      }
+      if (!mounted || _isCancelled) return;
+
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = 'Ready-up failed. Please try again.';
+      });
     }
   }
 
   String get _countdownText {
     final minutes = _secondsRemaining ~/ 60;
     final seconds = _secondsRemaining % 60;
+
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
@@ -18226,12 +18613,13 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
             children: [
               // ── Header ──────────────────────────────────────────
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
                   children: [
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: widget.onCancel,
+                      onPressed: _onClosePressed,
                     ),
                     const Expanded(
                       child: Text(
@@ -18249,6 +18637,7 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
                   ],
                 ),
               ),
+
               const Spacer(),
 
               // ── Opponent info card ──────────────────────────────
@@ -18296,6 +18685,7 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
                   ],
                 ),
               ),
+
               const SizedBox(height: 32),
 
               // ── Countdown ───────────────────────────────────────
@@ -18316,29 +18706,59 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
 
               const Spacer(),
 
+              // ── Error message ───────────────────────────────────
+              if (_errorMessage != null) ...[
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(
+                    color: AppColors.red,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+              ],
+
               // ── Ready / Waiting status ──────────────────────────
               if (_isReady)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.green.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Text(
-                    'WAITING FOR OPPONENT...',
-                    style: TextStyle(
-                      color: AppColors.green,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.green.withValues(alpha: 0.8),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'WAITING FOR OPPONENT...',
+                        style: TextStyle(
+                          color: AppColors.green,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ],
                   ),
                 )
               else
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _onReadyPressed,
+                    onPressed: _isSubmitting ? null : _onReadyPressed,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.green,
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -18346,15 +18766,24 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: const Text(
-                      'READY',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                        fontSize: 16,
-                      ),
-                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'READY',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                              fontSize: 16,
+                            ),
+                          ),
                   ),
                 ),
             ],
@@ -18364,7 +18793,6 @@ class _OpponentFoundScreenState extends State<OpponentFoundScreen> {
     );
   }
 }
-
 
 ================================================================================
 FILE: lib/features/online/screens/player_profile_screen.dart
@@ -19825,9 +20253,11 @@ class _PrivateRoomSetupScreenState extends State<PrivateRoomSetupScreen> {
 FILE: lib/features/online/screens/quick_match_create_screen.dart
 ================================================================================
 import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
 
@@ -19853,38 +20283,25 @@ class QuickMatchCreateScreen extends StatefulWidget {
   State<QuickMatchCreateScreen> createState() => _QuickMatchCreateScreenState();
 }
 
-class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
+class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen> {
   late final AuthClient _authClient;
   Timer? _pollTimer;
-  bool _joining = false;
-  String? _error;
+  bool _isCancelling = false;
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-    _pulseAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
     _authClient = AuthClient();
     _joinQueue();
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
     _pollTimer?.cancel();
     super.dispose();
   }
 
   Future<void> _joinQueue() async {
-    setState(() { _joining = true; _error = null; });
     try {
       final res = await _authClient.post(
         '/quick-match/join',
@@ -19893,7 +20310,9 @@ class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
           'winsRequired': widget.winsRequired,
         },
       );
+
       if (!mounted) return;
+
       final data = res.data as Map<String, dynamic>;
       final status = data['status'] as String?;
 
@@ -19902,48 +20321,64 @@ class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
         return;
       }
 
-      // Enqueued — start polling for match
-      setState(() => _joining = false);
+      // If searching, start polling.
       _startPolling();
-    } on DioException catch (e) {
+    } catch (e) {
       if (!mounted) return;
-      final msg = (e.response?.data is Map<String, dynamic>)
-          ? (e.response!.data as Map<String, dynamic>)['error'] as String?
-          : null;
-      setState(() { _error = msg ?? 'Failed to join queue.'; _joining = false; });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() { _error = 'Failed to join queue.'; _joining = false; });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to join queue: $e')),
+      );
+      widget.onCancel();
     }
   }
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
       if (!mounted) return;
+
       try {
         final res = await _authClient.get('/quick-match/status');
         if (!mounted) return;
+
         final data = res.data as Map<String, dynamic>;
         final status = data['status'] as String?;
 
-        if (status == 'idle') {
-          // Matched and removed from queue — the /join response already
-          // handled navigation. Stop polling.
+        if (status == 'ready_up' || status == 'confirmed') {
           _pollTimer?.cancel();
+          _navigateToOpponentFoundFromStatus(data);
           return;
         }
+
+        if (status == 'idle') {
+          _pollTimer?.cancel();
+
+          if (mounted && !_isCancelling) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Match search ended.'),
+              ),
+            );
+
+            widget.onCancel();
+          }
+        }
       } catch (_) {
-        // Polling failed — will retry on next tick
+        // Polling failed — retry on next tick.
       }
     });
   }
 
   void _navigateToOpponentFound(Map<String, dynamic> data) {
     _pollTimer?.cancel();
+
     final matchId = data['matchId'] as int?;
     final opponent = data['opponent'] as Map<String, dynamic>?;
+
     if (matchId == null || opponent == null) return;
+
+    if (!mounted) return;
 
     context.push('/opponent-found', extra: {
       'matchId': matchId,
@@ -19952,147 +20387,112 @@ class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
     });
   }
 
-  Future<void> _cancelQueue() async {
+  void _navigateToOpponentFoundFromStatus(Map<String, dynamic> data) {
+    final matchId = data['matchId'] as int?;
+    if (matchId == null) return;
+
+    final opponent = data['opponent'] as Map<String, dynamic>?;
+
+    final opponentName = opponent?['username'] as String? ??
+        data['opponentName'] as String? ??
+        'Unknown';
+
+    final opponentRating = opponent?['rating'] as int? ?? 1000;
+
+    if (!mounted) return;
+
+    context.push('/opponent-found', extra: {
+      'matchId': matchId,
+      'opponentName': opponentName,
+      'opponentRating': opponentRating,
+    });
+  }
+
+  Future<void> _cancelSearch() async {
+    if (_isCancelling) return;
+    setState(() {
+      _isCancelling = true;
+    });
+
     _pollTimer?.cancel();
+
     try {
       await _authClient.delete('/quick-match/cancel');
     } catch (_) {
-      // Best-effort cancel
+      // Ignore cancel errors.
     }
-    if (mounted) widget.onCancel();
+
+    if (!mounted) return;
+    
+    widget.onCancel();
   }
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _cancelQueue();
-      },
-      child: Scaffold(
+    return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+        child: Center(
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // ── Header ──────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: _cancelQueue,
-                    ),
-                    const Expanded(
-                      child: Text(
-                        'QUICK MATCH',
-                        style: TextStyle(
-                          color: AppColors.primaryText,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    const SizedBox(width: 48),
-                  ],
+              const Text(
+                'QUICK MATCH',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2.0,
                 ),
               ),
-              const Spacer(),
-
-              // ── Waiting indicator ─────────────────────────────
-              AnimatedBuilder(
-                animation: _pulseAnimation,
-                builder: (context, child) {
-                  return Opacity(
-                    opacity: _pulseAnimation.value,
-                    child: child,
-                  );
-                },
-                child: const SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 3,
-                    color: AppColors.defaultAccent,
-                  ),
+              const SizedBox(height: 12),
+              Text(
+                widget.formatLabel,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
                 ),
               ),
-              const SizedBox(height: 24),
-
-              // ── Status text ──────────────────────────────────
-              if (_error != null)
-                Text(
-                  _error!,
-                  style: const TextStyle(color: AppColors.red, fontSize: 14),
-                  textAlign: TextAlign.center,
-                )
-              else if (_joining)
-                const Text(
-                  'JOINING QUEUE...',
-                  style: TextStyle(
-                    color: AppColors.primaryText,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                  ),
-                )
-              else ...[
-                  const Text(
-                    'WAITING FOR OPPONENT...',
-                    style: TextStyle(
-                      color: AppColors.primaryText,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Your match will start when someone searches.',
-                    style: TextStyle(color: Colors.white54, fontSize: 13),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+              const SizedBox(height: 48),
+              const SizedBox(
+                width: 64,
+                height: 64,
+                child: CircularProgressIndicator(
+                  strokeWidth: 4,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                ),
+              ),
               const SizedBox(height: 32),
-
-              // ── Info cards ──────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    _infoRow('MATCH LENGTH', widget.formatLabel),
-                  ],
+              const Text(
+                'WAITING FOR OPPONENT...',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
                 ),
               ),
-
-              const Spacer(),
-
-              // ── Cancel button ───────────────────────────────────
+              const SizedBox(height: 48),
               SizedBox(
-                width: double.infinity,
+                width: 200,
                 child: OutlinedButton(
-                  onPressed: _cancelQueue,
+                  onPressed: _isCancelling ? null : _cancelSearch,
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.white38),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: const BorderSide(color: Colors.redAccent),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text(
-                    'CANCEL',
-                    style: TextStyle(
-                      color: Colors.white70,
+                  child: Text(
+                    _isCancelling ? 'CANCELLING...' : 'CANCEL',
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
+                      letterSpacing: 1.2,
                     ),
                   ),
                 ),
@@ -20101,37 +20501,19 @@ class _QuickMatchCreateScreenState extends State<QuickMatchCreateScreen>
           ),
         ),
       ),
-    ),
-    );
-  }
-
-  Widget _infoRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label,
-            style: const TextStyle(color: Colors.white54, fontSize: 13)),
-        Text(
-          value,
-          style: const TextStyle(
-            color: AppColors.primaryText,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
     );
   }
 }
-
 
 ================================================================================
 FILE: lib/features/online/screens/quick_match_searching_screen.dart
 ================================================================================
 import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
 
@@ -20164,22 +20546,29 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+
   late final AuthClient _authClient;
+
   Timer? _pollTimer;
   bool _joining = false;
+  bool _isCancelling = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+
     _pulseAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+
     _authClient = AuthClient();
+
     _joinQueue();
   }
 
@@ -20191,7 +20580,11 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
   }
 
   Future<void> _joinQueue() async {
-    setState(() { _joining = true; _error = null; });
+    setState(() {
+      _joining = true;
+      _error = null;
+    });
+
     try {
       final res = await _authClient.post(
         '/quick-match/join',
@@ -20200,7 +20593,9 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
           'winsRequired': widget.winsRequired,
         },
       );
+
       if (!mounted) return;
+
       final data = res.data as Map<String, dynamic>;
       final status = data['status'] as String?;
 
@@ -20209,62 +20604,159 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
         return;
       }
 
-      // Enqueued — start polling for match
+      // Defensive handling in case backend returns an already paired state.
+      if (status == 'ready_up') {
+        _navigateToOpponentFoundFromStatus(data);
+        return;
+      }
+
+      if (status == 'confirmed') {
+        _navigateToOnlineGameplayFromStatus(data);
+        return;
+      }
+
+      // Enqueued — start polling for match.
       setState(() => _joining = false);
       _startPolling();
     } on DioException catch (e) {
       if (!mounted) return;
+
       final msg = (e.response?.data is Map<String, dynamic>)
           ? (e.response!.data as Map<String, dynamic>)['error'] as String?
           : null;
-      setState(() { _error = msg ?? 'Failed to join queue.'; _joining = false; });
+
+      setState(() {
+        _error = msg ?? 'Failed to join queue.';
+        _joining = false;
+      });
     } catch (_) {
       if (!mounted) return;
-      setState(() { _error = 'Failed to join queue.'; _joining = false; });
+
+      setState(() {
+        _error = 'Failed to join queue.';
+        _joining = false;
+      });
     }
   }
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
       if (!mounted) return;
+
       try {
         final res = await _authClient.get('/quick-match/status');
         if (!mounted) return;
+
         final data = res.data as Map<String, dynamic>;
         final status = data['status'] as String?;
 
-        if (status == 'idle') {
+        if (status == 'ready_up') {
           _pollTimer?.cancel();
+          _navigateToOpponentFoundFromStatus(data);
           return;
         }
+
+        if (status == 'confirmed') {
+          _pollTimer?.cancel();
+          _navigateToOnlineGameplayFromStatus(data);
+          return;
+        }
+
+        if (status == 'idle') {
+          _pollTimer?.cancel();
+
+          if (mounted && !_isCancelling) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Match search ended.'),
+              ),
+            );
+
+            widget.onCancel();
+          }
+        }
       } catch (_) {
-        // Polling failed — will retry on next tick
+        // Polling failed — retry on next tick.
       }
     });
   }
 
   void _navigateToOpponentFound(Map<String, dynamic> data) {
     _pollTimer?.cancel();
-    final matchId = data['matchId'] as int?;
+
+    final matchId = (data['matchId'] as num?)?.toInt();
     final opponent = data['opponent'] as Map<String, dynamic>?;
+
     if (matchId == null || opponent == null) return;
+
+    if (!mounted) return;
 
     context.push('/opponent-found', extra: {
       'matchId': matchId,
       'opponentName': opponent['username'] as String? ?? 'Unknown',
-      'opponentRating': opponent['rating'] as int? ?? 1000,
+      'opponentRating': (opponent['rating'] as num?)?.toInt() ?? 1000,
+    });
+  }
+
+  void _navigateToOpponentFoundFromStatus(Map<String, dynamic> data) {
+    final matchId = (data['matchId'] as num?)?.toInt();
+    if (matchId == null) return;
+
+    final opponent = data['opponent'] as Map<String, dynamic>?;
+
+    final opponentName = opponent?['username'] as String? ??
+        data['opponentName'] as String? ??
+        'Unknown';
+
+    final opponentRating = (opponent?['rating'] as num?)?.toInt() ?? 1000;
+
+    if (!mounted) return;
+
+    context.push('/opponent-found', extra: {
+      'matchId': matchId,
+      'opponentName': opponentName,
+      'opponentRating': opponentRating,
+    });
+  }
+
+  void _navigateToOnlineGameplayFromStatus(Map<String, dynamic> data) {
+    final matchId = (data['matchId'] as num?)?.toInt();
+    if (matchId == null) return;
+
+    final opponent = data['opponent'] as Map<String, dynamic>?;
+
+    final opponentName = opponent?['username'] as String? ??
+        data['opponentName'] as String? ??
+        'Unknown';
+
+    if (!mounted) return;
+
+    context.go('/online-gameplay', extra: {
+      'matchId': matchId,
+      'opponentName': opponentName,
     });
   }
 
   Future<void> _cancelQueue() async {
+    if (_isCancelling) return;
+
+    setState(() {
+      _isCancelling = true;
+    });
+
     _pollTimer?.cancel();
+
     try {
       await _authClient.delete('/quick-match/cancel');
     } catch (_) {
-      // Best-effort cancel
+      // Best-effort cancel.
     }
-    if (mounted) widget.onCancel();
+
+    if (!mounted) return;
+
+    widget.onCancel();
   }
 
   @override
@@ -20280,128 +20772,135 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
-            children: [
-              // ── Header ──────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: _cancelQueue,
-                    ),
-                    const Expanded(
-                      child: Text(
-                        'QUICK MATCH',
-                        style: TextStyle(
-                          color: AppColors.primaryText,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
+              children: [
+                // ── Header ──────────────────────────────────────────
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white70),
+                        onPressed: _cancelQueue,
+                      ),
+                      const Expanded(
+                        child: Text(
+                          'QUICK MATCH',
+                          style: TextStyle(
+                            color: AppColors.primaryText,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(width: 48),
+                    ],
+                  ),
+                ),
+
+                const Spacer(),
+
+                // ── Searching indicator ─────────────────────────────
+                AnimatedBuilder(
+                  animation: _pulseAnimation,
+                  builder: (context, child) {
+                    return Opacity(
+                      opacity: _pulseAnimation.value,
+                      child: child,
+                    );
+                  },
+                  child: const SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      color: AppColors.defaultAccent,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // ── Status text ──────────────────────────────────
+                if (_error != null)
+                  Text(
+                    _error!,
+                    style: const TextStyle(
+                      color: AppColors.red,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
+                  )
+                else if (_joining)
+                  const Text(
+                    'JOINING QUEUE...',
+                    style: TextStyle(
+                      color: AppColors.primaryText,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                    ),
+                  )
+                else
+                  const Text(
+                    'SEARCHING FOR OPPONENT...',
+                    style: TextStyle(
+                      color: AppColors.primaryText,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+
+                const SizedBox(height: 32),
+
+                // ── Info cards ──────────────────────────────────────
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: [
+                      _infoRow('Rating', '${widget.rating}'),
+                      const SizedBox(height: 12),
+                      _infoRow('MATCH LENGTH', widget.formatLabel),
+                    ],
+                  ),
+                ),
+
+                const Spacer(),
+
+                // ── Cancel button ───────────────────────────────────
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _isCancelling ? null : _cancelQueue,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.white38),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    const SizedBox(width: 48),
-                  ],
-                ),
-              ),
-              const Spacer(),
-
-              // ── Searching indicator ─────────────────────────────
-              AnimatedBuilder(
-                animation: _pulseAnimation,
-                builder: (context, child) {
-                  return Opacity(
-                    opacity: _pulseAnimation.value,
-                    child: child,
-                  );
-                },
-                child: const SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 3,
-                    color: AppColors.defaultAccent,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // ── Status text ──────────────────────────────────
-              if (_error != null)
-                Text(
-                  _error!,
-                  style: const TextStyle(color: AppColors.red, fontSize: 14),
-                  textAlign: TextAlign.center,
-                )
-              else if (_joining)
-                const Text(
-                  'JOINING QUEUE...',
-                  style: TextStyle(
-                    color: AppColors.primaryText,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                  ),
-                )
-              else
-                const Text(
-                  'SEARCHING FOR OPPONENT...',
-                  style: TextStyle(
-                    color: AppColors.primaryText,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-              const SizedBox(height: 32),
-
-              // ── Info cards ──────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    _infoRow('Rating', '${widget.rating}'),
-                    const SizedBox(height: 12),
-                    _infoRow('MATCH LENGTH', widget.formatLabel),
-                  ],
-                ),
-              ),
-
-              const Spacer(),
-
-              // ── Cancel button ───────────────────────────────────
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: _cancelQueue,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.white38),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: const Text(
-                    'CANCEL',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
+                    child: Text(
+                      _isCancelling ? 'CANCELLING...' : 'CANCEL',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 
@@ -20409,8 +20908,10 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label,
-            style: const TextStyle(color: Colors.white54, fontSize: 13)),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white54, fontSize: 13),
+        ),
         Text(
           value,
           style: const TextStyle(
@@ -20423,7 +20924,6 @@ class _QuickMatchSearchingScreenState extends State<QuickMatchSearchingScreen>
     );
   }
 }
-
 
 ================================================================================
 FILE: lib/features/online/screens/quick_match_setup_screen.dart
