@@ -48,6 +48,7 @@ class LocalMatchFlowScreen extends ConsumerStatefulWidget {
 class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
   late final MatchEngine _engine;
   final LocalStatsRepository _statsRepo = LocalStatsRepository();
+
   _LocalFlowStage _stage = _LocalFlowStage.countdown;
   Timer? _countdownTimer;
   bool _victoryAnimationsEnabled = true;
@@ -79,12 +80,55 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     super.dispose();
   }
 
+  // ── Exit helper ──────────────────────────────────────────────
+  void _confirmExit() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text(
+          'EXIT MATCH?',
+          style: TextStyle(color: AppColors.primaryText),
+        ),
+        content: const Text(
+          'Current match progress will be lost.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text(
+              'RESUME',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // close dialog
+              _countdownTimer?.cancel();
+              Navigator.of(context).maybePop(); // pop /local-match
+            },
+            child: const Text(
+              'EXIT',
+              style: TextStyle(color: AppColors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Round lifecycle ──────────────────────────────────────────
   void _startRound() {
     _engine.startRound();
     _engine.beginCountdown();
     setState(() {
       _stage = _LocalFlowStage.countdown;
     });
+
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final finished = _engine.tickCountdown();
@@ -105,7 +149,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
 
   void _onPlayerOneMove(String move) {
     _engine.submitPlayerAMove(move);
-    // Link the transition mp3 to the hand-off transition.
     AudioService.instance.playTransition();
     setState(() {
       _stage = _LocalFlowStage.passDevice;
@@ -113,7 +156,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
   }
 
   void _onReady() {
-    // Link the transition mp3 to the hand-off transition.
     AudioService.instance.playTransition();
     setState(() {
       _stage = _LocalFlowStage.playerTwoMove;
@@ -129,16 +171,18 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
-    // Link the reveal mp3 to the reveal stage.
+
     AudioService.instance.playReveal();
     VibrationService.instance.reveal();
+
     setState(() {
       _stage = _LocalFlowStage.revealing;
     });
+
     if (_engine.playerAMove != null) {
       _statsRepo.recordMoveSelection(_engine.playerAMove!);
     }
-    // Link outcome mp3s (victory / draw) to the round result.
+
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
         AudioService.instance.playVictory();
@@ -158,6 +202,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
       case null:
         break;
     }
+
     final delay = (_isMatchWinningRound && _victoryAnimationsEnabled)
         ? const Duration(seconds: 3)
         : const Duration(seconds: 2);
@@ -166,7 +211,9 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
 
   void _advanceAfterReveal() {
     if (!mounted) return;
+
     _engine.checkMatchCondition();
+
     if (_engine.matchFinished) {
       if (widget.format.isUnlimited) {
         _statsRepo.recordUnlimitedMatchResult(
@@ -197,6 +244,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                   : 'loss',
         );
       }
+
       setState(() {
         _stage = _LocalFlowStage.roundComplete;
       });
@@ -223,6 +271,12 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         _stage == _LocalFlowStage.playerOneMove;
   }
 
+  /// Whether the persistent exit button should be shown.
+  /// Hidden on the result screen (which already has MAIN MENU).
+  bool get _showExitButton =>
+      _stage != _LocalFlowStage.roundComplete &&
+      _stage != _LocalFlowStage.finishing;
+
   @override
   Widget build(BuildContext context) {
     return ThemeBackground(
@@ -230,6 +284,43 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
       child: Stack(
         children: [
           _buildStageContent(),
+
+          // ── Persistent exit button (top-left) ──────────────────
+          if (_showExitButton)
+            Positioned(
+              top: 16,
+              left: 16,
+              child: SafeArea(
+                child: GestureDetector(
+                  onTap: _confirmExit,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        width: 1.5,
+                        color: AppColors.blue,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.blue.withValues(alpha: 0.35),
+                          blurRadius: 10,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.arrow_back,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // ── END MATCH (Unlimited only) ─────────────────────────
           if (_canEndMatchNow)
             Positioned(
               top: 140,
@@ -259,7 +350,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           body: SafeArea(
             child: Column(
               children: [
-                const SizedBox(height: 8),
+                const SizedBox(height: 56), // room for the exit button
                 LocalScoreboard(
                   playerAScore: _engine.playerAScore,
                   playerBScore: _engine.playerBScore,
@@ -279,6 +370,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             ),
           ),
         );
+
       case _LocalFlowStage.playerOneMove:
         return LocalPlayerMoveScreen(
           playerNumber: 1,
@@ -290,9 +382,11 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           draws: _engine.drawCount,
           modeLabel: _modeLabel,
         );
+
       case _LocalFlowStage.passDevice:
         return PassDeviceScreen(
           onReady: _onReady,
+          onBack: _confirmExit,
           showScoreboard: true,
           playerAScore: _engine.playerAScore,
           playerBScore: _engine.playerBScore,
@@ -300,6 +394,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           draws: _engine.drawCount,
           modeLabel: _modeLabel,
         );
+
       case _LocalFlowStage.playerTwoMove:
         return LocalPlayerMoveScreen(
           playerNumber: 2,
@@ -311,12 +406,14 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           draws: _engine.drawCount,
           modeLabel: _modeLabel,
         );
+
       case _LocalFlowStage.revealing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.lastResult == RoundResult.playerAWin;
         final roundKey = ValueKey(
           'local_round_${_engine.currentRoundNumber}_${_engine.lastResult}',
         );
+
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: SafeArea(
@@ -326,6 +423,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    const SizedBox(height: 32), // room for exit button
                     const Text(
                       'BOTH PLAYERS READY',
                       style: TextStyle(
@@ -403,11 +501,13 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             ),
           ),
         );
+
       case _LocalFlowStage.finishing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.matchWinner == 'A';
         final playerAMove = _engine.playerAMove;
         final playerBMove = _engine.playerBMove;
+
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: Center(
@@ -425,6 +525,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                 : const SizedBox.shrink(),
           ),
         );
+
       case _LocalFlowStage.roundComplete:
         if (widget.format.isUnlimited) {
           final String unlimitedWinnerTitle;
@@ -439,6 +540,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             unlimitedWinnerTitle = 'MATCH DRAW';
             unlimitedWinnerColor = AppColors.orange;
           }
+
           return UnlimitedResultScreen(
             player1Wins: _engine.playerAScore,
             player2Wins: _engine.playerBScore,
@@ -452,6 +554,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             onMainMenu: () => GoRouter.of(context).go('/main'),
           );
         }
+
         final String standardResultTitle;
         final Color standardResultColor;
         if (_engine.matchWinner == 'A') {
@@ -464,6 +567,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           standardResultTitle = 'DRAW';
           standardResultColor = AppColors.orange;
         }
+
         return StandardResultScreen(
           playerWon: _engine.matchWinner == 'A',
           playerScore: _engine.playerAScore,
@@ -525,6 +629,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
               Navigator.of(context).pop();
               _countdownTimer?.cancel();
               _engine.endUnlimitedMatch();
+
               _statsRepo.recordUnlimitedMatchResult(
                 winner: _engine.matchWinner,
               );
@@ -538,6 +643,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                         ? 'draw'
                         : 'loss',
               );
+
               if (_engine.matchWinner != null &&
                   _victoryAnimationsEnabled &&
                   _engine.playerAMove != null &&

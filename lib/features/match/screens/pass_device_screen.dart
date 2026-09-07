@@ -5,6 +5,7 @@ import '../widgets/local_scoreboard.dart';
 
 class PassDeviceScreen extends StatelessWidget {
   final VoidCallback onReady;
+  final VoidCallback? onBack;
   final bool showScoreboard;
   final int playerAScore;
   final int playerBScore;
@@ -15,6 +16,7 @@ class PassDeviceScreen extends StatelessWidget {
   const PassDeviceScreen({
     super.key,
     required this.onReady,
+    this.onBack,
     this.showScoreboard = false,
     this.playerAScore = 0,
     this.playerBScore = 0,
@@ -31,8 +33,41 @@ class PassDeviceScreen extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // ── Back button (top-left) ─────────────────────────
+              if (onBack != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: GestureDetector(
+                    onTap: onBack,
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          width: 1.5,
+                          color: AppColors.blue,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.blue.withValues(alpha: 0.35),
+                            blurRadius: 10,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back,
+                        color: Colors.white70,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+
+              const Spacer(),
+
               if (showScoreboard) ...[
                 LocalScoreboard(
                   playerAScore: playerAScore,
@@ -55,6 +90,7 @@ class PassDeviceScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
               ],
+
               const Text(
                 'PLAYER 1 LOCKED',
                 style: TextStyle(
@@ -81,11 +117,11 @@ class PassDeviceScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 48),
+
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    // Link the click mp3 to the READY button.
                     AudioService.instance.playClick();
                     onReady();
                   },
@@ -106,6 +142,8 @@ class PassDeviceScreen extends StatelessWidget {
                   ),
                 ),
               ),
+
+              const Spacer(),
             ],
           ),
         ),

@@ -7217,13 +7217,25 @@ class MatchSocketClient {
 FILE: lib/core/services/audio_service.dart
 ================================================================================
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import '../../features/settings/settings_repository.dart';
 
+/// Central audio service (T70 / T71 / T74).
+///
+/// Sound codes are linked to theme mp3 assets using the pattern:
+///   assets/audio/<theme>/<theme>_<code>.mp3
+///
+/// Supported codes: click, transition, countdown, select, reveal,
+/// victory, defeat, draw, opponent_found, connected, disconnected,
+/// reconnect.
 class AudioService {
   AudioService._();
   static final AudioService instance = AudioService._();
 
+  /// Short sound-effects player (interrupts previous SFX automatically).
   final AudioPlayer _sfxPlayer = AudioPlayer();
+
+  /// Looping background music player.
   final AudioPlayer _musicPlayer = AudioPlayer();
 
   double _masterVolume = 1.0;
@@ -7240,33 +7252,47 @@ class AudioService {
     await _musicPlayer.setVolume(_masterVolume * _musicVolume);
   }
 
-  /// Call this whenever the active Game Theme changes so subsequent
-  /// sound effects and music use the correct theme's audio files.
+  /// Call whenever the active Game Theme changes so subsequent sounds
+  /// and music use the correct theme's audio files.
   void setTheme(String themeFolder) {
     _themeFolder = themeFolder;
   }
 
-  Future<void> playSound(String assetName) async {
+  // ── Core linker: sound code -> theme mp3 asset ─────────────────
+  Future<void> playSound(String code) async {
+    final path = 'audio/$_themeFolder/${_themeFolder}_$code.mp3';
     try {
       await _sfxPlayer.setVolume(_masterVolume * _sfxVolume);
-      await _sfxPlayer.play(
-        AssetSource('audio/$_themeFolder/${_themeFolder}_$assetName.mp3'),
-      );
-    } catch (_) {
-      // Asset not yet available — ignore silently.
+      await _sfxPlayer.play(AssetSource(path));
+    } catch (e) {
+      // Never swallow silently in debug builds so missing assets show up.
+      debugPrint('AudioService: failed to play "$path": $e');
     }
   }
 
+  // ── Named sound codes ──────────────────────────────────────────
+  Future<void> playClick() => playSound('click');
+  Future<void> playTransition() => playSound('transition');
+  Future<void> playCountdown() => playSound('countdown');
+  Future<void> playSelect() => playSound('select');
+  Future<void> playReveal() => playSound('reveal');
+  Future<void> playVictory() => playSound('victory');
+  Future<void> playDefeat() => playSound('defeat');
+  Future<void> playDraw() => playSound('draw');
+  Future<void> playOpponentFound() => playSound('opponent_found');
+  Future<void> playConnected() => playSound('connected');
+  Future<void> playDisconnected() => playSound('disconnected');
+  Future<void> playReconnect() => playSound('reconnect');
+
+  // ── Background music ───────────────────────────────────────────
   Future<void> playMusic([String? themeFolder]) async {
     final folder = themeFolder ?? _themeFolder;
     try {
       await _musicPlayer.setReleaseMode(ReleaseMode.loop);
       await _musicPlayer.setVolume(_masterVolume * _musicVolume);
-      await _musicPlayer.play(
-        AssetSource('audio/$folder/${folder}_music.mp3'),
-      );
-    } catch (_) {
-      // Asset not yet available — ignore silently.
+      await _musicPlayer.play(AssetSource('audio/$folder/${folder}_music.mp3'));
+    } catch (e) {
+      debugPrint('AudioService: failed to play music: $e');
     }
   }
 
@@ -10551,12 +10577,16 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
 
   void _onPlayerOneMove(String move) {
     _engine.submitPlayerAMove(move);
+    // Link the transition mp3 to the hand-off transition.
+    AudioService.instance.playTransition();
     setState(() {
       _stage = _LocalFlowStage.passDevice;
     });
   }
 
   void _onReady() {
+    // Link the transition mp3 to the hand-off transition.
+    AudioService.instance.playTransition();
     setState(() {
       _stage = _LocalFlowStage.playerTwoMove;
     });
@@ -10571,6 +10601,8 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
+    // Link the reveal mp3 to the reveal stage.
+    AudioService.instance.playReveal();
     VibrationService.instance.reveal();
     setState(() {
       _stage = _LocalFlowStage.revealing;
@@ -10578,16 +10610,20 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     if (_engine.playerAMove != null) {
       _statsRepo.recordMoveSelection(_engine.playerAMove!);
     }
+    // Link outcome mp3s (victory / draw) to the round result.
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
+        AudioService.instance.playVictory();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
         VibrationService.instance.victory();
         break;
       case RoundResult.playerBWin:
+        AudioService.instance.playVictory();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
-        VibrationService.instance.defeat();
+        VibrationService.instance.victory();
         break;
       case RoundResult.draw:
+        AudioService.instance.playDraw();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
         VibrationService.instance.draw();
         break;
@@ -10715,7 +10751,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             ),
           ),
         );
-
       case _LocalFlowStage.playerOneMove:
         return LocalPlayerMoveScreen(
           playerNumber: 1,
@@ -10727,7 +10762,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           draws: _engine.drawCount,
           modeLabel: _modeLabel,
         );
-
       case _LocalFlowStage.passDevice:
         return PassDeviceScreen(
           onReady: _onReady,
@@ -10738,7 +10772,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           draws: _engine.drawCount,
           modeLabel: _modeLabel,
         );
-
       case _LocalFlowStage.playerTwoMove:
         return LocalPlayerMoveScreen(
           playerNumber: 2,
@@ -10750,7 +10783,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           draws: _engine.drawCount,
           modeLabel: _modeLabel,
         );
-
       case _LocalFlowStage.revealing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.lastResult == RoundResult.playerAWin;
@@ -10843,7 +10875,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             ),
           ),
         );
-
       case _LocalFlowStage.finishing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.matchWinner == 'A';
@@ -10866,7 +10897,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                 : const SizedBox.shrink(),
           ),
         );
-
       case _LocalFlowStage.roundComplete:
         if (widget.format.isUnlimited) {
           final String unlimitedWinnerTitle;
@@ -11019,6 +11049,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/game_theme_controller.dart';
+import '../../../core/services/audio_service.dart';
 import '../widgets/local_scoreboard.dart';
 
 /// Colors per gesture card, taken from wireframes 09A/09B:
@@ -11033,14 +11064,11 @@ const _scissorsDark = Color(0xFF831843);
 class LocalPlayerMoveScreen extends ConsumerStatefulWidget {
   final int playerNumber;
   final void Function(String move) onMoveSelected;
-
   final bool showScoreboard;
   final int playerAScore;
   final int playerBScore;
   final int roundNumber;
   final int draws;
-
-  /// Optional game-mode label, e.g. "Easy - Best of 3" / "Best of 3".
   final String? modeLabel;
 
   const LocalPlayerMoveScreen({
@@ -11065,6 +11093,8 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
 
   void _select(String move) {
     if (_selectedMove != null) return;
+    // Link the select mp3 to the gesture selection.
+    AudioService.instance.playSelect();
     setState(() => _selectedMove = move);
     // Brief pause so the lock/scale animation and hand image are
     // actually visible before advancing to the next stage.
@@ -11213,7 +11243,6 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
-          // Rounded back button matching the wireframe top nav
           GestureDetector(
             onTap: () => Navigator.of(context).maybePop(),
             child: Container(
@@ -11314,7 +11343,6 @@ class _GestureCard extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Circular hand image area
                 Container(
                   width: 68,
                   height: 68,
@@ -11754,18 +11782,16 @@ FILE: lib/features/match/screens/pass_device_screen.dart
 ================================================================================
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/services/audio_service.dart';
 import '../widgets/local_scoreboard.dart';
 
 class PassDeviceScreen extends StatelessWidget {
   final VoidCallback onReady;
-
   final bool showScoreboard;
   final int playerAScore;
   final int playerBScore;
   final int roundNumber;
   final int draws;
-
-  /// Optional game-mode label, e.g. "Best of 3".
   final String? modeLabel;
 
   const PassDeviceScreen({
@@ -11840,7 +11866,11 @@ class PassDeviceScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: onReady,
+                  onPressed: () {
+                    // Link the click mp3 to the READY button.
+                    AudioService.instance.playClick();
+                    onReady();
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.defaultAccent,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -11985,6 +12015,8 @@ class _SinglePlayerMatchFlowScreenState
 
   void _onPlayerMove(String move) {
     _engine.submitPlayerAMove(move);
+    // Link the transition mp3 to the stage change (selection -> AI thinking).
+    AudioService.instance.playTransition();
     setState(() {
       _stage = _SpFlowStage.aiThinking;
     });
@@ -12001,6 +12033,8 @@ class _SinglePlayerMatchFlowScreenState
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
+    // Link the reveal mp3 to the reveal stage.
+    AudioService.instance.playReveal();
     VibrationService.instance.reveal();
     setState(() {
       _stage = _SpFlowStage.revealing;
@@ -12008,16 +12042,20 @@ class _SinglePlayerMatchFlowScreenState
     if (_engine.playerAMove != null) {
       _statsRepo.recordMoveSelection(_engine.playerAMove!);
     }
+    // Link outcome mp3s (victory / defeat / draw) to the round result.
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
+        AudioService.instance.playVictory();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
         VibrationService.instance.victory();
         break;
       case RoundResult.playerBWin:
+        AudioService.instance.playDefeat();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
         VibrationService.instance.defeat();
         break;
       case RoundResult.draw:
+        AudioService.instance.playDraw();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
         VibrationService.instance.draw();
         break;
@@ -12096,7 +12134,6 @@ class _SinglePlayerMatchFlowScreenState
       child: Stack(
         children: [
           _buildStageContent(),
-          // ── Round number + game-mode label at the top center ──
           if (_stage != _SpFlowStage.roundComplete &&
               _stage != _SpFlowStage.finishing)
             Positioned(
@@ -12164,14 +12201,12 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
-
       case _SpFlowStage.playerMove:
         return LocalPlayerMoveScreen(
           playerNumber: 1,
           onMoveSelected: _onPlayerMove,
           modeLabel: _modeLabel,
         );
-
       case _SpFlowStage.aiThinking:
         return const Scaffold(
           backgroundColor: Colors.transparent,
@@ -12181,7 +12216,6 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
-
       case _SpFlowStage.revealing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.lastResult == RoundResult.playerAWin;
@@ -12194,25 +12228,6 @@ class _SinglePlayerMatchFlowScreenState
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  'ROUND ${_engine.currentRoundNumber}',
-                  style: const TextStyle(
-                    color: AppColors.primaryText,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                    letterSpacing: 1.2,
-                    shadows: [
-                      Shadow(
-                        blurRadius: 4,
-                        color: Colors.black87,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(_modeLabel, style: _modeTextStyle),
-                const SizedBox(height: 16),
                 if (_isMatchWinningRound &&
                     _victoryAnimationsEnabled &&
                     _engine.playerAMove != null &&
@@ -12263,7 +12278,6 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
-
       case _SpFlowStage.finishing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.matchWinner == 'A';
@@ -12286,7 +12300,6 @@ class _SinglePlayerMatchFlowScreenState
                 : const SizedBox.shrink(),
           ),
         );
-
       case _SpFlowStage.roundComplete:
         if (widget.format.isUnlimited) {
           return UnlimitedResultScreen(
@@ -14287,6 +14300,7 @@ FILE: lib/features/match/widgets/countdown_animation.dart
 ================================================================================
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/services/audio_service.dart';
 import 'theme_background.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/animation_speed_controller.dart';
@@ -14306,7 +14320,7 @@ class CountdownAnimation extends ConsumerStatefulWidget {
 }
 
 class _CountdownAnimationState extends ConsumerState<CountdownAnimation>
-  with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   late Animation<double> _opacityAnimation;
@@ -14323,6 +14337,8 @@ class _CountdownAnimationState extends ConsumerState<CountdownAnimation>
     );
     _setupAnimation();
     _controller.forward();
+    // Link the countdown mp3 to each countdown tick.
+    AudioService.instance.playCountdown();
   }
 
   void _setupAnimation() {
@@ -14338,7 +14354,6 @@ class _CountdownAnimationState extends ConsumerState<CountdownAnimation>
         weight: 40,
       ),
     ]).animate(_controller);
-
     _opacityAnimation = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.0), weight: 70),
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 30),
@@ -14351,6 +14366,8 @@ class _CountdownAnimationState extends ConsumerState<CountdownAnimation>
     if (oldWidget.value != widget.value) {
       _controller.reset();
       _controller.forward();
+      // Play the countdown sound on every value change (3, 2, 1, GO!).
+      AudioService.instance.playCountdown();
     }
   }
 
@@ -14910,7 +14927,8 @@ class MoveButton extends ConsumerWidget {
 
   void _handleTap() {
     if (isDisabled) return;
-    AudioService.instance.playSound('select');
+    // Link the select mp3 to the move-selection action.
+    AudioService.instance.playSelect();
     VibrationService.instance.selection();
     onSelected();
   }
@@ -14918,7 +14936,6 @@ class MoveButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final accent = ref.watch(appAccentColorProvider);
-
     return GestureDetector(
       onTap: _handleTap,
       child: AnimatedScale(

@@ -170,6 +170,31 @@ class _LocalSetupScreenState extends State<LocalSetupScreen> {
                   },
                 ),
               ),
+
+              const SizedBox(height: 12),
+
+              // ── BACK button (T39 requirement) ──────────────────
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.white38),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18.5),
+                    ),
+                  ),
+                  child: const Text(
+                    'BACK',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
