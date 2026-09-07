@@ -603,6 +603,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _isRematchWaiting = true;
       _showRematchRequest = false;
     });
+
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/request');
       _startRematchPolling();
@@ -640,10 +641,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _acceptRematch() async {
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
+
     try {
       final res = await _authClient.post('/matches/${widget.matchId}/rematch/accept');
       final data = res.data as Map<String, dynamic>;
       final newMatchId = (data['newMatchId'] as num?)?.toInt();
+
       if (!mounted) return;
 
       if (newMatchId == null) {
@@ -676,10 +679,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _declineRematch() async {
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
+
     setState(() {
       _showRematchRequest = false;
       _isRematchWaiting = false;
     });
+
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/decline');
     } catch (_) {
@@ -690,6 +695,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _handleRematchAccepted(Map<String, dynamic> data) {
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
+
     final newMatchId = (data['newMatchId'] as num?)?.toInt();
     if (!mounted || newMatchId == null) return;
 
@@ -724,13 +730,16 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         return;
       }
       try {
+        // FIX: Changed from '/matches/${widget.matchId}/rematch-status'
+        // to '/matches/${widget.matchId}/state'.
+        // The /state endpoint already returns rematchStatus and newMatchId.
         final res = await _authClient.get(
-          '/matches/${widget.matchId}/state', // <--- Changed from '/rematch-status'
+          '/matches/${widget.matchId}/state',
         );
         final data = res.data as Map<String, dynamic>;
         final status = data['rematchStatus'] as String?;
         final newMatchId = (data['newMatchId'] as num?)?.toInt();
-        
+
         if (status == 'accepted' && newMatchId != null) {
           _rematchPollTimer?.cancel();
           if (!mounted) return;
@@ -1049,7 +1058,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                     ),
                   ),
                   child: const Text(
-                    'REMATCH', // <--- Changed from 'PLAY AGAIN'
+                    'REMATCH',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,

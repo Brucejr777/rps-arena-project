@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../features/auth/screens/login_screen.dart';
 import '../features/auth/screens/register_screen.dart';
 import '../features/online/screens/multiplayer_screen.dart';
@@ -37,7 +38,6 @@ import '../features/stats/screens/view_statistics_screen.dart';
 import '../features/stats/screens/achievements_screen.dart';
 import '../features/settings/screens/gameplay_settings_screen.dart';
 import '../features/settings/screens/audio_settings_screen.dart';
-import 'network/api_client.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
@@ -88,7 +88,8 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/local-match',
       builder: (context, state) {
-        final format = state.extra as MatchFormatConfig? ?? MatchFormatConfig.bestOf3();
+        final format =
+            state.extra as MatchFormatConfig? ?? MatchFormatConfig.bestOf3();
         return LocalMatchFlowScreen(format: format);
       },
     ),
@@ -108,7 +109,10 @@ final GoRouter appRouter = GoRouter(
       path: '/single-player-match',
       builder: (context, state) {
         final args = state.extra as (MatchFormatConfig, AiDifficulty);
-        return SinglePlayerMatchFlowScreen(format: args.$1, difficulty: args.$2);
+        return SinglePlayerMatchFlowScreen(
+          format: args.$1,
+          difficulty: args.$2,
+        );
       },
     ),
     GoRoute(
@@ -186,6 +190,7 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) {
         final args = state.extra as Map<String, dynamic>? ?? {};
         final matchId = args['matchId'] as int?;
+
         return OpponentFoundScreen(
           matchId: matchId ?? 0,
           opponentName: args['opponentName'] as String? ?? 'Unknown',
@@ -241,9 +246,10 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) {
         final args = state.extra as Map<String, dynamic>? ?? {};
         final rawId = args['matchId'];
-        final matchId =
-            rawId is int ? rawId : int.tryParse('$rawId') ?? 0;
+        final matchId = rawId is int ? rawId : int.tryParse('$rawId') ?? 0;
+
         return OnlineMatchLoaderScreen(
+          key: ValueKey(matchId),
           matchId: matchId,
           playerName: args['playerName'] as String?,
           opponentName: args['opponentName'] as String?,
