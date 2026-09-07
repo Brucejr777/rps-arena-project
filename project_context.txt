@@ -10482,11 +10482,9 @@ class _CustomMatchConfigScreenState extends State<CustomMatchConfigScreen> {
 FILE: lib/features/match/screens/local_match_flow_screen.dart
 ================================================================================
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
 import '../../../core/services/audio_service.dart';
 import '../../../core/services/vibration_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -10531,15 +10529,12 @@ class LocalMatchFlowScreen extends ConsumerStatefulWidget {
 }
 
 class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
-  // FIX: removed `final` so the engine can be reassigned on rematch.
   late MatchEngine _engine;
   final LocalStatsRepository _statsRepo = LocalStatsRepository();
-
   _LocalFlowStage _stage = _LocalFlowStage.countdown;
   Timer? _countdownTimer;
   bool _victoryAnimationsEnabled = true;
 
-  /// Game-mode label shown on every in-game screen, e.g. "Best of 3".
   String get _modeLabel => widget.format.displayLabel;
 
   @override
@@ -10566,7 +10561,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     super.dispose();
   }
 
-  // ── Exit helper ──────────────────────────────────────────────
   void _confirmExit() {
     showDialog(
       context: context,
@@ -10593,9 +10587,9 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           ),
           TextButton(
             onPressed: () {
-              Navigator.of(context).pop(); // close dialog
+              Navigator.of(context).pop();
               _countdownTimer?.cancel();
-              Navigator.of(context).maybePop(); // pop /local-match
+              Navigator.of(context).maybePop();
             },
             child: const Text(
               'EXIT',
@@ -10607,7 +10601,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     );
   }
 
-  // ── FIX: Reset and restart the match in-place (Rematch) ─────
   void _resetAndRestart() {
     _countdownTimer?.cancel();
     _engine = MatchEngine(widget.format);
@@ -10621,18 +10614,15 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
   void _startRound() {
     _engine.startRound();
     _engine.beginCountdown();
-
     setState(() {
       _stage = _LocalFlowStage.countdown;
     });
-
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final finished = _engine.tickCountdown();
       if (mounted) {
         setState(() {});
       }
-
       if (finished) {
         timer.cancel();
         _engine.beginSelection();
@@ -10665,36 +10655,39 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     _reveal();
   }
 
-  void _reveal() {
+  // ── FIX: made async; all stats calls are awaited ──────────────
+  Future<void> _reveal() async {
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
-
     AudioService.instance.playReveal();
     VibrationService.instance.reveal();
-
     setState(() {
       _stage = _LocalFlowStage.revealing;
     });
 
+    // Record BOTH players' move selections sequentially.
     if (_engine.playerAMove != null) {
-      _statsRepo.recordMoveSelection(_engine.playerAMove!);
+      await _statsRepo.recordMoveSelection(_engine.playerAMove!);
+    }
+    if (_engine.playerBMove != null) {
+      await _statsRepo.recordMoveSelection(_engine.playerBMove!);
     }
 
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
         AudioService.instance.playVictory();
-        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
+        await _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
         VibrationService.instance.victory();
         break;
       case RoundResult.playerBWin:
         AudioService.instance.playVictory();
-        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
+        await _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
         VibrationService.instance.victory();
         break;
       case RoundResult.draw:
         AudioService.instance.playDraw();
-        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
+        await _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
         VibrationService.instance.draw();
         break;
       case null:
@@ -10704,21 +10697,20 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     final delay = (_isMatchWinningRound && _victoryAnimationsEnabled)
         ? const Duration(seconds: 3)
         : const Duration(seconds: 2);
-
     Future.delayed(delay, _advanceAfterReveal);
   }
 
-  void _advanceAfterReveal() {
+  // ── FIX: made async; all stats calls are awaited ──────────────
+  Future<void> _advanceAfterReveal() async {
     if (!mounted) return;
-
     _engine.checkMatchCondition();
 
     if (_engine.matchFinished) {
       if (widget.format.isUnlimited) {
-        _statsRepo.recordUnlimitedMatchResult(
+        await _statsRepo.recordUnlimitedMatchResult(
           winner: _engine.matchWinner,
         );
-        _statsRepo.recordLocalMatch(
+        await _statsRepo.recordLocalMatch(
           opponentName: 'Player 2',
           mode: 'local',
           formatType: 'unlimited',
@@ -10729,10 +10721,10 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                   : 'loss',
         );
       } else {
-        _statsRepo.recordStandardMatchResult(
+        await _statsRepo.recordStandardMatchResult(
           playerWon: _engine.matchWinner == 'A',
         );
-        _statsRepo.recordLocalMatch(
+        await _statsRepo.recordLocalMatch(
           opponentName: 'Player 2',
           mode: 'local',
           formatType: widget.format.format.name,
@@ -10743,7 +10735,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                   : 'loss',
         );
       }
-
+      if (!mounted) return;
       setState(() {
         _stage = _LocalFlowStage.roundComplete;
       });
@@ -10754,28 +10746,22 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
 
   bool get _isMatchWinningRound {
     if (widget.format.isUnlimited) return false;
-
     if (_engine.lastResult == RoundResult.playerAWin) {
       return widget.format.isMatchWon(_engine.playerAScore);
     }
-
     if (_engine.lastResult == RoundResult.playerBWin) {
       return widget.format.isMatchWon(_engine.playerBScore);
     }
-
     return false;
   }
 
   bool get _canEndMatchNow {
     if (!widget.format.isUnlimited) return false;
     if (_engine.totalRounds == 0) return false;
-
     return _stage == _LocalFlowStage.countdown ||
         _stage == _LocalFlowStage.playerOneMove;
   }
 
-  /// Whether the persistent exit button should be shown.
-  /// Hidden on the result screen (which already has MAIN MENU).
   bool get _showExitButton =>
       _stage != _LocalFlowStage.roundComplete &&
       _stage != _LocalFlowStage.finishing;
@@ -10787,8 +10773,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
       child: Stack(
         children: [
           _buildStageContent(),
-
-          // ── Persistent exit button (top-left) ──────────────────
           if (_showExitButton)
             Positioned(
               top: 16,
@@ -10822,8 +10806,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                 ),
               ),
             ),
-
-          // ── END MATCH (Unlimited only) ─────────────────────────
           if (_canEndMatchNow)
             Positioned(
               top: 140,
@@ -10853,7 +10835,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           body: SafeArea(
             child: Column(
               children: [
-                const SizedBox(height: 56), // room for the exit button
+                const SizedBox(height: 56),
                 LocalScoreboard(
                   playerAScore: _engine.playerAScore,
                   playerBScore: _engine.playerBScore,
@@ -10884,20 +10866,13 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           roundNumber: _engine.currentRoundNumber,
           draws: _engine.drawCount,
           modeLabel: _modeLabel,
-
-          // FIX: hide the internal back button because LocalMatchFlowScreen
-          // already provides the centralized exit button.
           showBackButton: false,
         );
 
       case _LocalFlowStage.passDevice:
         return PassDeviceScreen(
           onReady: _onReady,
-
-          // FIX: hide PassDeviceScreen's own back button.
-          // The centralized exit button in LocalMatchFlowScreen remains.
           onBack: null,
-
           showScoreboard: true,
           playerAScore: _engine.playerAScore,
           playerBScore: _engine.playerBScore,
@@ -10916,9 +10891,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           roundNumber: _engine.currentRoundNumber,
           draws: _engine.drawCount,
           modeLabel: _modeLabel,
-
-          // FIX: hide the internal back button because LocalMatchFlowScreen
-          // already provides the centralized exit button.
           showBackButton: false,
         );
 
@@ -10928,7 +10900,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         final roundKey = ValueKey(
           'local_round_${_engine.currentRoundNumber}_${_engine.lastResult}',
         );
-
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: SafeArea(
@@ -10938,7 +10909,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const SizedBox(height: 32), // room for exit button
+                    const SizedBox(height: 32),
                     const Text(
                       'BOTH PLAYERS READY',
                       style: TextStyle(
@@ -11022,7 +10993,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         final playerAWon = _engine.matchWinner == 'A';
         final playerAMove = _engine.playerAMove;
         final playerBMove = _engine.playerBMove;
-
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: Center(
@@ -11045,7 +11015,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         if (widget.format.isUnlimited) {
           final String unlimitedWinnerTitle;
           final Color unlimitedWinnerColor;
-
           if (_engine.matchWinner == 'A') {
             unlimitedWinnerTitle = 'PLAYER 1 WON';
             unlimitedWinnerColor = AppColors.blue;
@@ -11056,7 +11025,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             unlimitedWinnerTitle = 'MATCH DRAW';
             unlimitedWinnerColor = AppColors.orange;
           }
-
           return UnlimitedResultScreen(
             player1Wins: _engine.playerAScore,
             player2Wins: _engine.playerBScore,
@@ -11066,16 +11034,12 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             player2WinRate: _engine.playerBWinRate,
             winnerTitle: unlimitedWinnerTitle,
             winnerColor: unlimitedWinnerColor,
-
-            // FIX: restart in-place instead of popping.
             onPlayAgain: _resetAndRestart,
             onMainMenu: () => GoRouter.of(context).go('/main'),
           );
         }
-
         final String standardResultTitle;
         final Color standardResultColor;
-
         if (_engine.matchWinner == 'A') {
           standardResultTitle = 'PLAYER 1 WON';
           standardResultColor = AppColors.blue;
@@ -11086,7 +11050,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           standardResultTitle = 'DRAW';
           standardResultColor = AppColors.orange;
         }
-
         return StandardResultScreen(
           playerWon: _engine.matchWinner == 'A',
           playerScore: _engine.playerAScore,
@@ -11094,8 +11057,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           resultTitle: standardResultTitle,
           resultColor: standardResultColor,
           showMatchWon: false,
-
-          // FIX: restart in-place instead of popping.
           onPlayAgain: _resetAndRestart,
           onMainMenu: () => GoRouter.of(context).go('/main'),
         );
@@ -11146,16 +11107,14 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             ),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(context).pop();
               _countdownTimer?.cancel();
               _engine.endUnlimitedMatch();
-
-              _statsRepo.recordUnlimitedMatchResult(
+              await _statsRepo.recordUnlimitedMatchResult(
                 winner: _engine.matchWinner,
               );
-
-              _statsRepo.recordLocalMatch(
+              await _statsRepo.recordLocalMatch(
                 opponentName: 'Player 2',
                 mode: 'local',
                 formatType: 'unlimited',
@@ -11165,7 +11124,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                         ? 'draw'
                         : 'loss',
               );
-
+              if (!mounted) return;
               if (_engine.matchWinner != null &&
                   _victoryAnimationsEnabled &&
                   _engine.playerAMove != null &&
@@ -11173,7 +11132,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                 setState(() {
                   _stage = _LocalFlowStage.finishing;
                 });
-
                 Future.delayed(const Duration(seconds: 3), () {
                   if (!mounted) return;
                   setState(() {
@@ -12235,7 +12193,6 @@ class PassDeviceScreen extends StatelessWidget {
 FILE: lib/features/match/screens/single_player_match_flow_screen.dart
 ================================================================================
 // lib/features/match/screens/single_player_match_flow_screen.dart
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12285,9 +12242,7 @@ class SinglePlayerMatchFlowScreen extends ConsumerStatefulWidget {
 
 class _SinglePlayerMatchFlowScreenState
     extends ConsumerState<SinglePlayerMatchFlowScreen> {
-  // ── FIX 1: removed `final` so the engine can be reassigned on rematch ──
   late MatchEngine _engine;
-
   final AiService _ai = AiService();
   final LocalStatsRepository _statsRepo = LocalStatsRepository();
   _SpFlowStage _stage = _SpFlowStage.countdown;
@@ -12328,11 +12283,10 @@ class _SinglePlayerMatchFlowScreenState
     super.dispose();
   }
 
-  // ── FIX 2: Reset and restart the match in-place (Play Again / Rematch) ──
   void _resetAndRestart() {
     _countdownTimer?.cancel();
     _engine = MatchEngine(widget.format);
-    _ai.resetForNewMatch(); // clear AI pattern history between matches
+    _ai.resetForNewMatch();
     setState(() {
       _stage = _SpFlowStage.countdown;
     });
@@ -12346,7 +12300,6 @@ class _SinglePlayerMatchFlowScreenState
     setState(() {
       _stage = _SpFlowStage.countdown;
     });
-
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final finished = _engine.tickCountdown();
@@ -12371,7 +12324,6 @@ class _SinglePlayerMatchFlowScreenState
     setState(() {
       _stage = _SpFlowStage.aiThinking;
     });
-
     Future.delayed(const Duration(milliseconds: 500), () {
       if (!mounted) return;
       final aiMove = _ai.getMove(widget.difficulty);
@@ -12381,35 +12333,37 @@ class _SinglePlayerMatchFlowScreenState
     });
   }
 
-  void _reveal() {
+  // ── FIX: made async; all stats calls are awaited ──────────────
+  Future<void> _reveal() async {
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
     AudioService.instance.playReveal();
     VibrationService.instance.reveal();
-
     setState(() {
       _stage = _SpFlowStage.revealing;
     });
 
+    // Await move-selection recording so it completes before the
+    // round-outcome write begins (prevents overwrite).
     if (_engine.playerAMove != null) {
-      _statsRepo.recordMoveSelection(_engine.playerAMove!);
+      await _statsRepo.recordMoveSelection(_engine.playerAMove!);
     }
 
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
         AudioService.instance.playVictory();
-        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
+        await _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
         VibrationService.instance.victory();
         break;
       case RoundResult.playerBWin:
         AudioService.instance.playDefeat();
-        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
+        await _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
         VibrationService.instance.defeat();
         break;
       case RoundResult.draw:
         AudioService.instance.playDraw();
-        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
+        await _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
         VibrationService.instance.draw();
         break;
       case null:
@@ -12422,16 +12376,17 @@ class _SinglePlayerMatchFlowScreenState
     Future.delayed(delay, _advanceAfterReveal);
   }
 
-  void _advanceAfterReveal() {
+  // ── FIX: made async; all stats calls are awaited ──────────────
+  Future<void> _advanceAfterReveal() async {
     if (!mounted) return;
     _engine.checkMatchCondition();
 
     if (_engine.matchFinished) {
       if (widget.format.isUnlimited) {
-        _statsRepo.recordUnlimitedMatchResult(
+        await _statsRepo.recordUnlimitedMatchResult(
           winner: _engine.matchWinner,
         );
-        _statsRepo.recordLocalMatch(
+        await _statsRepo.recordLocalMatch(
           opponentName: 'AI Bot',
           mode: 'single_player',
           formatType: 'unlimited',
@@ -12442,10 +12397,10 @@ class _SinglePlayerMatchFlowScreenState
                   : 'loss',
         );
       } else {
-        _statsRepo.recordStandardMatchResult(
+        await _statsRepo.recordStandardMatchResult(
           playerWon: _engine.matchWinner == 'A',
         );
-        _statsRepo.recordLocalMatch(
+        await _statsRepo.recordLocalMatch(
           opponentName: 'AI Bot',
           mode: 'single_player',
           formatType: widget.format.format.name,
@@ -12456,7 +12411,7 @@ class _SinglePlayerMatchFlowScreenState
                   : 'loss',
         );
       }
-
+      if (!mounted) return;
       setState(() {
         _stage = _SpFlowStage.roundComplete;
       });
@@ -12634,7 +12589,6 @@ class _SinglePlayerMatchFlowScreenState
         final roundKey = ValueKey(
           'sp_round_${_engine.currentRoundNumber}_${_engine.lastResult}',
         );
-
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: SafeArea(
@@ -12729,7 +12683,6 @@ class _SinglePlayerMatchFlowScreenState
         final playerAWon = _engine.matchWinner == 'A';
         final playerAMove = _engine.playerAMove;
         final playerBMove = _engine.playerBMove;
-
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: SafeArea(
@@ -12764,7 +12717,6 @@ class _SinglePlayerMatchFlowScreenState
             unlimitedWinnerTitle = 'MATCH DRAW';
             unlimitedWinnerColor = AppColors.orange;
           }
-
           return UnlimitedResultScreen(
             player1Wins: _engine.playerAScore,
             player2Wins: _engine.playerBScore,
@@ -12774,18 +12726,15 @@ class _SinglePlayerMatchFlowScreenState
             player2WinRate: _engine.playerBWinRate,
             winnerTitle: unlimitedWinnerTitle,
             winnerColor: unlimitedWinnerColor,
-            // ── FIX 3: restart in-place instead of popping ──
             onPlayAgain: _resetAndRestart,
             onMainMenu: () => GoRouter.of(context).go('/main'),
           );
         }
-
         final playerWon = _engine.matchWinner == 'A';
         return StandardResultScreen(
           playerWon: playerWon,
           playerScore: _engine.playerAScore,
           opponentScore: _engine.playerBScore,
-          // ── FIX 3: restart in-place instead of popping ──
           onPlayAgain: _resetAndRestart,
           onMainMenu: () => GoRouter.of(context).go('/main'),
         );
@@ -12836,15 +12785,14 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(context).pop();
               _countdownTimer?.cancel();
               _engine.endUnlimitedMatch();
-
-              _statsRepo.recordUnlimitedMatchResult(
+              await _statsRepo.recordUnlimitedMatchResult(
                 winner: _engine.matchWinner,
               );
-              _statsRepo.recordLocalMatch(
+              await _statsRepo.recordLocalMatch(
                 opponentName: 'AI Bot',
                 mode: 'single_player',
                 formatType: 'unlimited',
@@ -12854,7 +12802,7 @@ class _SinglePlayerMatchFlowScreenState
                         ? 'draw'
                         : 'loss',
               );
-
+              if (!mounted) return;
               if (_engine.matchWinner != null &&
                   _victoryAnimationsEnabled &&
                   _engine.playerAMove != null &&
@@ -13535,6 +13483,9 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
   String? _opponentMove;
   bool _showOpponentMove = false;
 
+  // ── FIX: single shared repository instance for all stats calls ──
+  final LocalStatsRepository _statsRepo = LocalStatsRepository();
+
   @override
   void initState() {
     super.initState();
@@ -13560,6 +13511,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     });
   }
 
+  // ── FIX: record round-outcome as lost on timeout ──
   void _timeOut() {
     if (!_isRoundActive) return;
     setState(() {
@@ -13569,6 +13521,8 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
       _lastResult = 'TIME UP! You took too long.';
       _aiScore++;
     });
+    // FIX: record the timeout as a lost round
+    _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
     _nextRoundAfterDelay();
   }
 
@@ -13578,6 +13532,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     return moves.first;
   }
 
+  // ── FIX: made async; record move selection + round outcome ──
   void _selectMove(String move) {
     if (!_isRoundActive || _isPaused) return;
     _timer?.cancel();
@@ -13587,6 +13542,9 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
       _selectedMove = move;
       _isRoundActive = false;
     });
+
+    // FIX: record the player's move selection immediately
+    _statsRepo.recordMoveSelection(move);
 
     // AI makes move
     Future.delayed(const Duration(milliseconds: 500), () {
@@ -13606,6 +13564,16 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
           _aiScore++;
         }
       });
+
+      // FIX: record the round outcome
+      if (result.contains('You win')) {
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
+      } else if (result.contains('You lose')) {
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
+      } else {
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
+      }
+
       _nextRoundAfterDelay();
     });
   }
@@ -13647,9 +13615,10 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     _saveResult();
   }
 
+  // ── FIX: use shared _statsRepo instance ──
   void _saveResult() async {
-    final repo = LocalStatsRepository();
-    await repo.recordStandardMatchResult(playerWon: _playerScore > _aiScore);
+    await _statsRepo.recordStandardMatchResult(
+        playerWon: _playerScore > _aiScore);
   }
 
   void _playAgain() {
@@ -14023,24 +13992,22 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
     'Titan',
     'Nova'
   ];
-
   late List<String> _bracket;
   late List<String> _nextRound;
-
   int _currentRound = 0; // 0=QF, 1=SF, 2=F
   int _currentMatch = 0;
-
   bool _isMatchActive = false;
   String? _selectedMove;
   String? _lastResult;
   bool _showOpponentMove = false;
   String? _opponentMove;
-
   int _matchWins = 0;
   int _matchLosses = 0;
-
   bool _isTournamentComplete = false;
   String _tournamentWinner = '';
+
+  // ── FIX: single shared repository instance for all stats calls ──
+  final LocalStatsRepository _statsRepo = LocalStatsRepository();
 
   @override
   void initState() {
@@ -14050,31 +14017,40 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
     _isMatchActive = true;
   }
 
+  // ── FIX: record move selection + round outcome ──
   void _selectMove(String move) {
     if (!_isMatchActive) return;
-
     AudioService.instance.playSound('select');
     VibrationService.instance.selection();
-
     setState(() {
       _selectedMove = move;
       _isMatchActive = false;
     });
 
+    // FIX: record the player's move selection immediately
+    _statsRepo.recordMoveSelection(move);
+
     // AI makes move
     Future.delayed(const Duration(milliseconds: 500), () {
       final aiMove = _getAIMove();
-
       setState(() {
         _opponentMove = aiMove;
         _showOpponentMove = true;
       });
 
       final result = _determineWinner(move, aiMove);
-
       setState(() {
         _lastResult = result;
       });
+
+      // FIX: record the round outcome
+      if (result.contains('You win')) {
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
+      } else if (result.contains('You lose')) {
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
+      } else {
+        _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
+      }
 
       _advanceMatch(result.contains('You win'));
     });
@@ -14088,13 +14064,11 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
 
   String _determineWinner(String playerMove, String aiMove) {
     if (playerMove == aiMove) return 'DRAW!';
-
     if ((playerMove == 'rock' && aiMove == 'scissors') ||
         (playerMove == 'paper' && aiMove == 'rock') ||
         (playerMove == 'scissors' && aiMove == 'paper')) {
       return 'You win this round!';
     }
-
     return 'You lose this round!';
   }
 
@@ -14102,7 +14076,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
     final winner = playerWon
         ? _bracket[_currentMatch * 2]
         : _bracket[_currentMatch * 2 + 1];
-
     _nextRound.add(winner);
 
     if (playerWon) {
@@ -14113,7 +14086,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
 
     Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
-
       _currentMatch++;
 
       // Check if round is complete
@@ -14143,7 +14115,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
         _isTournamentComplete = true;
         _tournamentWinner = _bracket[0];
       });
-
       _saveResult();
     } else {
       setState(() {
@@ -14156,9 +14127,10 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
     }
   }
 
+  // ── FIX: use shared _statsRepo instance ──
   void _saveResult() async {
-    final repo = LocalStatsRepository();
-    await repo.recordStandardMatchResult(playerWon: _bracket[0] == 'You');
+    await _statsRepo.recordStandardMatchResult(
+        playerWon: _bracket[0] == 'You');
   }
 
   void _playAgain() {
@@ -23833,6 +23805,7 @@ class ConfirmResetDialog extends StatelessWidget {
 ================================================================================
 FILE: lib/features/stats/local_stats_repository.dart
 ================================================================================
+import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/local_storage_keys.dart';
@@ -23869,7 +23842,8 @@ class LocalMatchEntry {
         'created_at': createdAt,
       };
 
-  factory LocalMatchEntry.fromJson(Map<String, dynamic> json) => LocalMatchEntry(
+  factory LocalMatchEntry.fromJson(Map<String, dynamic> json) =>
+      LocalMatchEntry(
         opponentName: json['opponent_name'] ?? 'Unknown',
         mode: json['mode'] ?? '',
         formatType: json['format_type'] ?? '',
@@ -23975,6 +23949,26 @@ class LocalStats {
 enum RoundOutcomeForStats { won, lost, drew }
 
 class LocalStatsRepository {
+  // ── Static async mutex shared across ALL instances ──────────────
+  // Prevents concurrent read-modify-write on the same
+  // SharedPreferences key, which was silently discarding updates.
+  static Future<void> _lock = Future.value();
+
+  /// Serializes [action] behind a global async lock so that
+  /// overlapping callers never clobber each other's writes.
+  static Future<T> _synchronized<T>(Future<T> Function() action) {
+    final completer = Completer<T>();
+    _lock = _lock.then((_) async {
+      try {
+        completer.complete(await action());
+      } catch (e, st) {
+        completer.completeError(e, st);
+      }
+    });
+    return completer.future;
+  }
+
+  // ── Read (no lock needed – pure read) ─────────────────────────
   Future<LocalStats> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(LocalStorageKeys.localStatistics);
@@ -23982,6 +23976,7 @@ class LocalStatsRepository {
     return LocalStats.fromJson(jsonDecode(raw));
   }
 
+  // ── Write helpers (always called inside _synchronized) ─────────
   Future<void> _save(LocalStats stats) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
@@ -23990,88 +23985,102 @@ class LocalStatsRepository {
     );
   }
 
-  /// Records a single move selection (rock/paper/scissors) toward the
-  /// running move-count stats.
-  Future<void> recordMoveSelection(String move) async {
-    final current = await load();
-    final updated = switch (move) {
-      'rock' =>
-        current.copyWith(rockSelections: current.rockSelections + 1),
-      'paper' =>
-        current.copyWith(paperSelections: current.paperSelections + 1),
-      'scissors' =>
-        current.copyWith(scissorsSelections: current.scissorsSelections + 1),
-      _ => current,
-    };
-    await _save(updated);
+  /// Records a single move selection (rock/paper/scissors).
+  Future<void> recordMoveSelection(String move) {
+    return _synchronized(() async {
+      final current = await load();
+      final updated = switch (move) {
+        'rock' =>
+          current.copyWith(rockSelections: current.rockSelections + 1),
+        'paper' =>
+          current.copyWith(paperSelections: current.paperSelections + 1),
+        'scissors' =>
+          current.copyWith(
+              scissorsSelections: current.scissorsSelections + 1),
+        _ => current,
+      };
+      await _save(updated);
+    });
   }
 
-  /// Records the outcome of a single round (win/loss/draw) toward
-  /// rounds won/lost/draws.
-  Future<void> recordRoundOutcome(RoundOutcomeForStats outcome) async {
-    final current = await load();
-    final updated = switch (outcome) {
-      RoundOutcomeForStats.won =>
-        current.copyWith(roundsWon: current.roundsWon + 1),
-      RoundOutcomeForStats.lost =>
-        current.copyWith(roundsLost: current.roundsLost + 1),
-      RoundOutcomeForStats.drew =>
-        current.copyWith(draws: current.draws + 1),
-    };
-    await _save(updated);
+  /// Records the outcome of a single round (win/loss/draw).
+  Future<void> recordRoundOutcome(RoundOutcomeForStats outcome) {
+    return _synchronized(() async {
+      final current = await load();
+      final updated = switch (outcome) {
+        RoundOutcomeForStats.won =>
+          current.copyWith(roundsWon: current.roundsWon + 1),
+        RoundOutcomeForStats.lost =>
+          current.copyWith(roundsLost: current.roundsLost + 1),
+        RoundOutcomeForStats.drew =>
+          current.copyWith(draws: current.draws + 1),
+      };
+      await _save(updated);
+    });
   }
 
   /// Records a completed standard match (has a clear winner/loser).
-  Future<void> recordStandardMatchResult({required bool playerWon}) async {
-    final current = await load();
-    final newStreak = playerWon ? current.currentStreak + 1 : 0;
-    final updated = playerWon
-        ? current.copyWith(
-            matchesPlayed: current.matchesPlayed + 1,
-            matchesWon: current.matchesWon + 1,
-            currentStreak: newStreak,
-            longestStreak: newStreak > current.longestStreak ? newStreak : current.longestStreak,
-          )
-        : current.copyWith(
-            matchesPlayed: current.matchesPlayed + 1,
-            matchesLost: current.matchesLost + 1,
-            currentStreak: 0,
-          );
-    await _save(updated);
+  Future<void> recordStandardMatchResult({required bool playerWon}) {
+    return _synchronized(() async {
+      final current = await load();
+      final newStreak = playerWon ? current.currentStreak + 1 : 0;
+      final updated = playerWon
+          ? current.copyWith(
+              matchesPlayed: current.matchesPlayed + 1,
+              matchesWon: current.matchesWon + 1,
+              currentStreak: newStreak,
+              longestStreak: newStreak > current.longestStreak
+                  ? newStreak
+                  : current.longestStreak,
+            )
+          : current.copyWith(
+              matchesPlayed: current.matchesPlayed + 1,
+              matchesLost: current.matchesLost + 1,
+              currentStreak: 0,
+            );
+      await _save(updated);
+    });
   }
 
   /// Records a completed Unlimited match. A draw only increments
   /// matches played (no win/loss).
-  Future<void> recordUnlimitedMatchResult({required String? winner}) async {
-    final current = await load();
-    LocalStats updated;
-    if (winner == null) {
-      updated = current.copyWith(
-        matchesPlayed: current.matchesPlayed + 1,
-        currentStreak: 0,
-      );
-    } else if (winner == 'A') {
-      final newStreak = current.currentStreak + 1;
-      updated = current.copyWith(
-        matchesPlayed: current.matchesPlayed + 1,
-        matchesWon: current.matchesWon + 1,
-        currentStreak: newStreak,
-        longestStreak: newStreak > current.longestStreak ? newStreak : current.longestStreak,
-      );
-    } else {
-      updated = current.copyWith(
-        matchesPlayed: current.matchesPlayed + 1,
-        matchesLost: current.matchesLost + 1,
-        currentStreak: 0,
-      );
-    }
-    await _save(updated);
+  Future<void> recordUnlimitedMatchResult({required String? winner}) {
+    return _synchronized(() async {
+      final current = await load();
+      LocalStats updated;
+      if (winner == null) {
+        updated = current.copyWith(
+          matchesPlayed: current.matchesPlayed + 1,
+          currentStreak: 0,
+        );
+      } else if (winner == 'A') {
+        final newStreak = current.currentStreak + 1;
+        updated = current.copyWith(
+          matchesPlayed: current.matchesPlayed + 1,
+          matchesWon: current.matchesWon + 1,
+          currentStreak: newStreak,
+          longestStreak: newStreak > current.longestStreak
+              ? newStreak
+              : current.longestStreak,
+        );
+      } else {
+        updated = current.copyWith(
+          matchesPlayed: current.matchesPlayed + 1,
+          matchesLost: current.matchesLost + 1,
+          currentStreak: 0,
+        );
+      }
+      await _save(updated);
+    });
   }
 
-  Future<void> resetLocalStatistics() async {
-    await _save(const LocalStats());
+  Future<void> resetLocalStatistics() {
+    return _synchronized(() async {
+      await _save(const LocalStats());
+    });
   }
 
+  // ── Local match history (separate key – no conflict) ──────────
   static const _matchHistoryKey = 'local_match_history';
 
   /// Load local match history entries.
@@ -24091,24 +24100,27 @@ class LocalStatsRepository {
     required String mode,
     required String formatType,
     required String result,
-  }) async {
-    final entries = await loadMatchHistory();
-    entries.insert(
-      0,
-      LocalMatchEntry(
-        opponentName: opponentName,
-        mode: mode,
-        formatType: formatType,
-        result: result,
-        createdAt: DateTime.now().toIso8601String(),
-      ),
-    );
-    // Keep last 100 entries
-    if (entries.length > 100) {
-      entries.removeRange(100, entries.length);
-    }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_matchHistoryKey, jsonEncode(entries.map((e) => e.toJson()).toList()));
+  }) {
+    return _synchronized(() async {
+      final entries = await loadMatchHistory();
+      entries.insert(
+        0,
+        LocalMatchEntry(
+          opponentName: opponentName,
+          mode: mode,
+          formatType: formatType,
+          result: result,
+          createdAt: DateTime.now().toIso8601String(),
+        ),
+      );
+      // Keep last 100 entries
+      if (entries.length > 100) {
+        entries.removeRange(100, entries.length);
+      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          _matchHistoryKey, jsonEncode(entries.map((e) => e.toJson()).toList()));
+    });
   }
 }
 
