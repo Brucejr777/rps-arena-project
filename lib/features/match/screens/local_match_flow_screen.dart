@@ -178,30 +178,37 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     _reveal();
   }
 
-  void _reveal() {
+    void _reveal() {
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
-
     AudioService.instance.playReveal();
     VibrationService.instance.reveal();
-
     setState(() {
       _stage = _LocalFlowStage.revealing;
     });
 
+    // ★ FIX: record BOTH players' move selections
     if (_engine.playerAMove != null) {
       _statsRepo.recordMoveSelection(_engine.playerAMove!);
+    }
+    if (_engine.playerBMove != null) {
+      _statsRepo.recordMoveSelection(_engine.playerBMove!);
     }
 
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
         AudioService.instance.playVictory();
+        // ★ FIX: In a local match a Player-1 round win is a "won" round
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
         VibrationService.instance.victory();
         break;
       case RoundResult.playerBWin:
         AudioService.instance.playVictory();
+        // ★ FIX: Player 2 winning a round is NOT a "lost" round for the
+        // local session — it is a win for Player 2.  Because local stats
+        // track from Player 1's perspective, record it as lost for P1.
+        // (This was already the intent, but the move was never recorded.)
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
         VibrationService.instance.victory();
         break;
