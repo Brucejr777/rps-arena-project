@@ -6432,6 +6432,7 @@ FILE: lib/core/router.dart
 ================================================================================
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../features/auth/screens/login_screen.dart';
 import '../features/auth/screens/register_screen.dart';
 import '../features/online/screens/multiplayer_screen.dart';
@@ -6469,7 +6470,6 @@ import '../features/stats/screens/view_statistics_screen.dart';
 import '../features/stats/screens/achievements_screen.dart';
 import '../features/settings/screens/gameplay_settings_screen.dart';
 import '../features/settings/screens/audio_settings_screen.dart';
-import 'network/api_client.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
@@ -6520,7 +6520,8 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/local-match',
       builder: (context, state) {
-        final format = state.extra as MatchFormatConfig? ?? MatchFormatConfig.bestOf3();
+        final format =
+            state.extra as MatchFormatConfig? ?? MatchFormatConfig.bestOf3();
         return LocalMatchFlowScreen(format: format);
       },
     ),
@@ -6540,7 +6541,10 @@ final GoRouter appRouter = GoRouter(
       path: '/single-player-match',
       builder: (context, state) {
         final args = state.extra as (MatchFormatConfig, AiDifficulty);
-        return SinglePlayerMatchFlowScreen(format: args.$1, difficulty: args.$2);
+        return SinglePlayerMatchFlowScreen(
+          format: args.$1,
+          difficulty: args.$2,
+        );
       },
     ),
     GoRoute(
@@ -6618,6 +6622,7 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) {
         final args = state.extra as Map<String, dynamic>? ?? {};
         final matchId = args['matchId'] as int?;
+
         return OpponentFoundScreen(
           matchId: matchId ?? 0,
           opponentName: args['opponentName'] as String? ?? 'Unknown',
@@ -6673,9 +6678,10 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) {
         final args = state.extra as Map<String, dynamic>? ?? {};
         final rawId = args['matchId'];
-        final matchId =
-            rawId is int ? rawId : int.tryParse('$rawId') ?? 0;
+        final matchId = rawId is int ? rawId : int.tryParse('$rawId') ?? 0;
+
         return OnlineMatchLoaderScreen(
+          key: ValueKey(matchId),
           matchId: matchId,
           playerName: args['playerName'] as String?,
           opponentName: args['opponentName'] as String?,
@@ -14872,6 +14878,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _isRematchWaiting = true;
       _showRematchRequest = false;
     });
+
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/request');
       _startRematchPolling();
@@ -14909,10 +14916,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _acceptRematch() async {
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
+
     try {
       final res = await _authClient.post('/matches/${widget.matchId}/rematch/accept');
       final data = res.data as Map<String, dynamic>;
       final newMatchId = (data['newMatchId'] as num?)?.toInt();
+
       if (!mounted) return;
 
       if (newMatchId == null) {
@@ -14945,10 +14954,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _declineRematch() async {
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
+
     setState(() {
       _showRematchRequest = false;
       _isRematchWaiting = false;
     });
+
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/decline');
     } catch (_) {
@@ -14959,6 +14970,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _handleRematchAccepted(Map<String, dynamic> data) {
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
+
     final newMatchId = (data['newMatchId'] as num?)?.toInt();
     if (!mounted || newMatchId == null) return;
 
@@ -14993,13 +15005,16 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         return;
       }
       try {
+        // FIX: Changed from '/matches/${widget.matchId}/rematch-status'
+        // to '/matches/${widget.matchId}/state'.
+        // The /state endpoint already returns rematchStatus and newMatchId.
         final res = await _authClient.get(
-          '/matches/${widget.matchId}/state', // <--- Changed from '/rematch-status'
+          '/matches/${widget.matchId}/state',
         );
         final data = res.data as Map<String, dynamic>;
         final status = data['rematchStatus'] as String?;
         final newMatchId = (data['newMatchId'] as num?)?.toInt();
-        
+
         if (status == 'accepted' && newMatchId != null) {
           _rematchPollTimer?.cancel();
           if (!mounted) return;
@@ -15318,7 +15333,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                     ),
                   ),
                   child: const Text(
-                    'REMATCH', // <--- Changed from 'PLAY AGAIN'
+                    'REMATCH',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
