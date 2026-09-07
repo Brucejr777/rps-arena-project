@@ -1,9 +1,7 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
 import '../../../core/services/audio_service.dart';
 import '../../../core/services/vibration_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -15,6 +13,7 @@ import '../domain/match_format.dart';
 import '../widgets/countdown_animation.dart';
 import '../widgets/draw_animation.dart';
 import '../widgets/final_finish_animation.dart';
+import '../widgets/local_scoreboard.dart';
 import '../widgets/reveal_animation.dart';
 import '../widgets/round_victory_animation.dart';
 import '../widgets/theme_background.dart';
@@ -66,7 +65,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
   Future<void> _loadVictoryAnimationSetting() async {
     final settings = await SettingsRepository().load();
     if (!mounted) return;
-
     setState(() {
       _victoryAnimationsEnabled = settings.victoryAnimationsEnabled;
     });
@@ -176,7 +174,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         _statsRepo.recordUnlimitedMatchResult(
           winner: _engine.matchWinner,
         );
-
         _statsRepo.recordLocalMatch(
           opponentName: 'Player 2',
           mode: 'local',
@@ -191,7 +188,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         _statsRepo.recordStandardMatchResult(
           playerWon: _engine.matchWinner == 'A',
         );
-
         _statsRepo.recordLocalMatch(
           opponentName: 'Player 2',
           mode: 'local',
@@ -241,48 +237,18 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
       child: Stack(
         children: [
           _buildStageContent(),
-          
-          // ── FIX: Overlay the current Round Number at the top center ──
-          if (_stage != _LocalFlowStage.roundComplete &&
-              _stage != _LocalFlowStage.finishing)
-            Positioned(
-              top: 50,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Text(
-                  'ROUND ${_engine.currentRoundNumber}',
-                  style: const TextStyle(
-                    color: AppColors.primaryText,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                    letterSpacing: 1.2,
-                    shadows: [
-                      Shadow(
-                        blurRadius: 4,
-                        color: Colors.black87,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            
           if (_canEndMatchNow)
             Positioned(
-              top: 48,
+              top: 140,
               right: 16,
-              child: SafeArea(
-                child: TextButton(
-                  onPressed: _onEndMatchPressed,
-                  child: const Text(
-                    'END MATCH',
-                    style: TextStyle(
-                      color: AppColors.red,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
+              child: TextButton(
+                onPressed: _onEndMatchPressed,
+                child: const Text(
+                  'END MATCH',
+                  style: TextStyle(
+                    color: AppColors.red,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
                   ),
                 ),
               ),
@@ -297,10 +263,25 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
       case _LocalFlowStage.countdown:
         return Scaffold(
           backgroundColor: Colors.transparent,
-          body: Center(
-            child: CountdownAnimation(
-              value: _engine.countdownValue,
-              theme: ref.watch(gameThemeProvider),
+          body: SafeArea(
+            child: Column(
+              children: [
+                const SizedBox(height: 8),
+                LocalScoreboard(
+                  playerAScore: _engine.playerAScore,
+                  playerBScore: _engine.playerBScore,
+                  roundNumber: _engine.currentRoundNumber,
+                  draws: _engine.drawCount,
+                ),
+                Expanded(
+                  child: Center(
+                    child: CountdownAnimation(
+                      value: _engine.countdownValue,
+                      theme: ref.watch(gameThemeProvider),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -309,100 +290,123 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         return LocalPlayerMoveScreen(
           playerNumber: 1,
           onMoveSelected: _onPlayerOneMove,
+          showScoreboard: true,
+          playerAScore: _engine.playerAScore,
+          playerBScore: _engine.playerBScore,
+          roundNumber: _engine.currentRoundNumber,
+          draws: _engine.drawCount,
         );
 
       case _LocalFlowStage.passDevice:
         return PassDeviceScreen(
           onReady: _onReady,
+          showScoreboard: true,
+          playerAScore: _engine.playerAScore,
+          playerBScore: _engine.playerBScore,
+          roundNumber: _engine.currentRoundNumber,
+          draws: _engine.drawCount,
         );
 
       case _LocalFlowStage.playerTwoMove:
         return LocalPlayerMoveScreen(
           playerNumber: 2,
           onMoveSelected: _onPlayerTwoMove,
+          showScoreboard: true,
+          playerAScore: _engine.playerAScore,
+          playerBScore: _engine.playerBScore,
+          roundNumber: _engine.currentRoundNumber,
+          draws: _engine.drawCount,
         );
 
       case _LocalFlowStage.revealing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.lastResult == RoundResult.playerAWin;
-
         final roundKey = ValueKey(
           'local_round_${_engine.currentRoundNumber}_${_engine.lastResult}',
         );
 
         return Scaffold(
           backgroundColor: Colors.transparent,
-          body: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  'BOTH PLAYERS READY',
-                  style: TextStyle(
-                    color: AppColors.primaryText,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                if (_engine.playerAMove != null &&
-                    _engine.playerBMove != null)
-                  RevealAnimation(
-                    playerAMove: _engine.playerAMove!,
-                    playerBMove: _engine.playerBMove!,
-                    handAssetFor: themeController.handAssetFor,
-                  ),
-
-                const SizedBox(height: 24),
-
-                if (_isMatchWinningRound &&
-                    _victoryAnimationsEnabled &&
-                    _engine.playerAMove != null &&
-                    _engine.playerBMove != null)
-                  FinalFinishAnimation(
-                    key: roundKey,
-                    playerAMove: _engine.playerAMove!,
-                    playerBMove: _engine.playerBMove!,
-                    playerAWon: playerAWon,
-                    theme: ref.watch(gameThemeProvider),
-                    handAssetFor: themeController.handAssetFor,
-                  )
-                else if (_isMatchWinningRound && !_victoryAnimationsEnabled)
-                  const SizedBox.shrink()
-                else if ((_engine.lastResult == RoundResult.playerAWin ||
-                        _engine.lastResult == RoundResult.playerBWin) &&
-                    _engine.playerAMove != null &&
-                    _engine.playerBMove != null)
-                  RoundVictoryAnimation(
-                    key: roundKey,
-                    playerAMove: _engine.playerAMove!,
-                    playerBMove: _engine.playerBMove!,
-                    playerAWon: playerAWon,
-                    playerALabel: 'PLAYER 1',
-                    playerBLabel: 'PLAYER 2',
-                    theme: ref.watch(gameThemeProvider),
-                    handAssetFor: themeController.handAssetFor,
-                  )
-                else if (_engine.lastResult == RoundResult.draw &&
-                    _engine.playerAMove != null &&
-                    _engine.playerBMove != null)
-                  DrawAnimation(
-                    key: roundKey,
-                    playerAMove: _engine.playerAMove!,
-                    playerBMove: _engine.playerBMove!,
-                    theme: ref.watch(gameThemeProvider),
-                  )
-                else
-                  Text(
-                    _resultLabel(),
-                    style: const TextStyle(
-                      color: AppColors.defaultAccent,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+          body: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'BOTH PLAYERS READY',
+                      style: TextStyle(
+                        color: AppColors.primaryText,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-              ],
+                    const SizedBox(height: 12),
+                    LocalScoreboard(
+                      playerAScore: _engine.playerAScore,
+                      playerBScore: _engine.playerBScore,
+                      roundNumber: _engine.currentRoundNumber,
+                      draws: _engine.drawCount,
+                    ),
+                    const SizedBox(height: 16),
+                    if (_engine.playerAMove != null &&
+                        _engine.playerBMove != null)
+                      RevealAnimation(
+                        playerAMove: _engine.playerAMove!,
+                        playerBMove: _engine.playerBMove!,
+                        handAssetFor: themeController.handAssetFor,
+                      ),
+                    const SizedBox(height: 24),
+                    if (_isMatchWinningRound &&
+                        _victoryAnimationsEnabled &&
+                        _engine.playerAMove != null &&
+                        _engine.playerBMove != null)
+                      FinalFinishAnimation(
+                        key: roundKey,
+                        playerAMove: _engine.playerAMove!,
+                        playerBMove: _engine.playerBMove!,
+                        playerAWon: playerAWon,
+                        theme: ref.watch(gameThemeProvider),
+                        handAssetFor: themeController.handAssetFor,
+                      )
+                    else if (_isMatchWinningRound && !_victoryAnimationsEnabled)
+                      const SizedBox.shrink()
+                    else if ((_engine.lastResult == RoundResult.playerAWin ||
+                            _engine.lastResult == RoundResult.playerBWin) &&
+                        _engine.playerAMove != null &&
+                        _engine.playerBMove != null)
+                      RoundVictoryAnimation(
+                        key: roundKey,
+                        playerAMove: _engine.playerAMove!,
+                        playerBMove: _engine.playerBMove!,
+                        playerAWon: playerAWon,
+                        playerALabel: 'PLAYER 1',
+                        playerBLabel: 'PLAYER 2',
+                        theme: ref.watch(gameThemeProvider),
+                        handAssetFor: themeController.handAssetFor,
+                      )
+                    else if (_engine.lastResult == RoundResult.draw &&
+                        _engine.playerAMove != null &&
+                        _engine.playerBMove != null)
+                      DrawAnimation(
+                        key: roundKey,
+                        playerAMove: _engine.playerAMove!,
+                        playerBMove: _engine.playerBMove!,
+                        theme: ref.watch(gameThemeProvider),
+                      )
+                    else
+                      Text(
+                        _resultLabel(),
+                        style: const TextStyle(
+                          color: AppColors.defaultAccent,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         );
@@ -433,6 +437,20 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
 
       case _LocalFlowStage.roundComplete:
         if (widget.format.isUnlimited) {
+          final String unlimitedWinnerTitle;
+          final Color unlimitedWinnerColor;
+
+          if (_engine.matchWinner == 'A') {
+            unlimitedWinnerTitle = 'PLAYER 1 WON';
+            unlimitedWinnerColor = AppColors.blue;
+          } else if (_engine.matchWinner == 'B') {
+            unlimitedWinnerTitle = 'PLAYER 2 WON';
+            unlimitedWinnerColor = AppColors.purple;
+          } else {
+            unlimitedWinnerTitle = 'MATCH DRAW';
+            unlimitedWinnerColor = AppColors.orange;
+          }
+
           return UnlimitedResultScreen(
             player1Wins: _engine.playerAScore,
             player2Wins: _engine.playerBScore,
@@ -440,17 +458,34 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             totalRounds: _engine.totalRounds,
             player1WinRate: _engine.playerAWinRate,
             player2WinRate: _engine.playerBWinRate,
+            winnerTitle: unlimitedWinnerTitle,
+            winnerColor: unlimitedWinnerColor,
             onPlayAgain: () => GoRouter.of(context).pop(),
             onMainMenu: () => GoRouter.of(context).go('/main'),
           );
         }
 
-        final playerWon = _engine.matchWinner == 'A';
+        final String standardResultTitle;
+        final Color standardResultColor;
+
+        if (_engine.matchWinner == 'A') {
+          standardResultTitle = 'PLAYER 1 WON';
+          standardResultColor = AppColors.blue;
+        } else if (_engine.matchWinner == 'B') {
+          standardResultTitle = 'PLAYER 2 WON';
+          standardResultColor = AppColors.purple;
+        } else {
+          standardResultTitle = 'DRAW';
+          standardResultColor = AppColors.orange;
+        }
 
         return StandardResultScreen(
-          playerWon: playerWon,
+          playerWon: _engine.matchWinner == 'A',
           playerScore: _engine.playerAScore,
           opponentScore: _engine.playerBScore,
+          resultTitle: standardResultTitle,
+          resultColor: standardResultColor,
+          showMatchWon: false,
           onPlayAgain: () => GoRouter.of(context).pop(),
           onMainMenu: () => GoRouter.of(context).go('/main'),
         );

@@ -12,6 +12,23 @@ class StandardResultScreen extends StatelessWidget {
   final int? ratingBefore;
   final int? ratingAfter;
 
+  /// Optional override for the result title.
+  ///
+  /// For single-player mode this can remain null, showing VICTORY/DEFEAT.
+  /// For local 2-player mode this should be:
+  /// - PLAYER 1 WON
+  /// - PLAYER 2 WON
+  /// - DRAW
+  final String? resultTitle;
+
+  /// Optional override for the result color.
+  final Color? resultColor;
+
+  /// Whether the single-player "MATCH WON" badge should be shown.
+  ///
+  /// This should be false for local 2-player matches.
+  final bool showMatchWon;
+
   const StandardResultScreen({
     super.key,
     required this.playerWon,
@@ -21,10 +38,17 @@ class StandardResultScreen extends StatelessWidget {
     required this.onMainMenu,
     this.ratingBefore,
     this.ratingAfter,
+    this.resultTitle,
+    this.resultColor,
+    this.showMatchWon = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final String title = resultTitle ?? (playerWon ? 'VICTORY' : 'DEFEAT');
+    final Color color =
+        resultColor ?? (playerWon ? AppColors.green : AppColors.red);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -33,7 +57,7 @@ class StandardResultScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // ── Victory/Defeat Card ───────────────────────
+              // ── Result Card ─────────────────────────────────
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
@@ -42,13 +66,11 @@ class StandardResultScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     width: 1.5,
-                    color: (playerWon ? AppColors.green : AppColors.red)
-                        .withValues(alpha: 0.3),
+                    color: color.withValues(alpha: 0.3),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: (playerWon ? AppColors.green : AppColors.red)
-                          .withValues(alpha: 0.2),
+                      color: color.withValues(alpha: 0.2),
                       blurRadius: 20,
                       offset: const Offset(0, 4),
                     ),
@@ -57,13 +79,14 @@ class StandardResultScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     Text(
-                      playerWon ? 'VICTORY' : 'DEFEAT',
+                      title,
                       style: TextStyle(
-                        color: playerWon ? AppColors.green : AppColors.red,
+                        color: color,
                         fontSize: 32,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 2,
                       ),
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
                     Text(
@@ -74,12 +97,15 @@ class StandardResultScreen extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    if (playerWon) ...[
+                    if (playerWon && showMatchWon) ...[
                       const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
-                          color: AppColors.green.withValues(alpha: 0.15),
+                          color: color.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(
@@ -101,7 +127,10 @@ class StandardResultScreen extends StatelessWidget {
               if (ratingBefore != null && ratingAfter != null) ...[
                 const SizedBox(height: 24),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(12),
@@ -132,7 +161,11 @@ class StandardResultScreen extends StatelessWidget {
                           ),
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 12),
-                            child: Icon(Icons.arrow_forward, color: Colors.white38, size: 18),
+                            child: Icon(
+                              Icons.arrow_forward,
+                              color: Colors.white38,
+                              size: 18,
+                            ),
                           ),
                           Text(
                             '$ratingAfter',
@@ -147,16 +180,25 @@ class StandardResultScreen extends StatelessWidget {
                             builder: (context) {
                               final diff = ratingAfter! - ratingBefore!;
                               if (diff == 0) return const SizedBox.shrink();
+
                               return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: (diff > 0 ? AppColors.green : AppColors.red).withValues(alpha: 0.2),
+                                  color: (diff > 0
+                                          ? AppColors.green
+                                          : AppColors.red)
+                                      .withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
                                   diff > 0 ? '+$diff' : '$diff',
                                   style: TextStyle(
-                                    color: diff > 0 ? AppColors.green : AppColors.red,
+                                    color: diff > 0
+                                        ? AppColors.green
+                                        : AppColors.red,
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -170,7 +212,9 @@ class StandardResultScreen extends StatelessWidget {
                   ),
                 ),
               ],
+
               const SizedBox(height: 48),
+
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -192,7 +236,9 @@ class StandardResultScreen extends StatelessWidget {
                   ),
                 ),
               ),
+
               const SizedBox(height: 12),
+
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(

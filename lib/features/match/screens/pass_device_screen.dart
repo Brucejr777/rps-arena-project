@@ -1,10 +1,25 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import '../widgets/local_scoreboard.dart';
 
 class PassDeviceScreen extends StatelessWidget {
   final VoidCallback onReady;
 
-  const PassDeviceScreen({super.key, required this.onReady});
+  final bool showScoreboard;
+  final int playerAScore;
+  final int playerBScore;
+  final int roundNumber;
+  final int draws;
+
+  const PassDeviceScreen({
+    super.key,
+    required this.onReady,
+    this.showScoreboard = false,
+    this.playerAScore = 0,
+    this.playerBScore = 0,
+    this.roundNumber = 1,
+    this.draws = 0,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -16,6 +31,16 @@ class PassDeviceScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              if (showScoreboard) ...[
+                LocalScoreboard(
+                  playerAScore: playerAScore,
+                  playerBScore: playerBScore,
+                  roundNumber: roundNumber,
+                  draws: draws,
+                  margin: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 24),
+              ],
               const Text(
                 'PLAYER 1 LOCKED',
                 style: TextStyle(

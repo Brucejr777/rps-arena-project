@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/game_theme_controller.dart';
+import '../widgets/local_scoreboard.dart';
 
 /// Colors per gesture card, taken from wireframes 09A/09B:
 /// rock -> orange, paper -> cyan, scissors -> pink.
@@ -16,10 +17,21 @@ class LocalPlayerMoveScreen extends ConsumerStatefulWidget {
   final int playerNumber;
   final void Function(String move) onMoveSelected;
 
+  final bool showScoreboard;
+  final int playerAScore;
+  final int playerBScore;
+  final int roundNumber;
+  final int draws;
+
   const LocalPlayerMoveScreen({
     super.key,
     required this.playerNumber,
     required this.onMoveSelected,
+    this.showScoreboard = false,
+    this.playerAScore = 0,
+    this.playerBScore = 0,
+    this.roundNumber = 1,
+    this.draws = 0,
   });
 
   @override
@@ -32,6 +44,7 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
 
   void _select(String move) {
     if (_selectedMove != null) return;
+
     setState(() => _selectedMove = move);
 
     // Brief pause so the lock/scale animation and hand image are
@@ -51,7 +64,18 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
         child: Column(
           children: [
             _buildTopNav(),
-            const SizedBox(height: 20),
+            if (widget.showScoreboard) ...[
+              const SizedBox(height: 12),
+              LocalScoreboard(
+                playerAScore: widget.playerAScore,
+                playerBScore: widget.playerBScore,
+                roundNumber: widget.roundNumber,
+                draws: widget.draws,
+              ),
+              const SizedBox(height: 8),
+            ] else
+              const SizedBox(height: 20),
+
             // ── Hero title ─────────────────────────────────────────
             Text(
               'PLAYER ${widget.playerNumber}',
@@ -90,7 +114,9 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                 letterSpacing: 0.5,
               ),
             ),
+
             const Spacer(),
+
             // ── Gesture cards ─────────────────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 21),
@@ -103,7 +129,8 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                     borderColor: _rockBorder,
                     labelColor: _rockDark,
                     isSelected: _selectedMove == 'rock',
-                    isDisabled: _selectedMove != null && _selectedMove != 'rock',
+                    isDisabled:
+                        _selectedMove != null && _selectedMove != 'rock',
                     handAsset: themeController.handAssetFor('rock'),
                     onTap: () => _select('rock'),
                   ),
@@ -113,7 +140,8 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                     borderColor: _paperBorder,
                     labelColor: _paperDark,
                     isSelected: _selectedMove == 'paper',
-                    isDisabled: _selectedMove != null && _selectedMove != 'paper',
+                    isDisabled:
+                        _selectedMove != null && _selectedMove != 'paper',
                     handAsset: themeController.handAssetFor('paper'),
                     onTap: () => _select('paper'),
                   ),
@@ -123,14 +151,17 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
                     borderColor: _scissorsBorder,
                     labelColor: _scissorsDark,
                     isSelected: _selectedMove == 'scissors',
-                    isDisabled: _selectedMove != null && _selectedMove != 'scissors',
+                    isDisabled: _selectedMove != null &&
+                        _selectedMove != 'scissors',
                     handAsset: themeController.handAssetFor('scissors'),
                     onTap: () => _select('scissors'),
                   ),
                 ],
               ),
             ),
+
             const SizedBox(height: 40),
+
             // ── Bottom frame indicator ─────────────────────────────
             Container(
               padding: const EdgeInsets.only(bottom: 12),
