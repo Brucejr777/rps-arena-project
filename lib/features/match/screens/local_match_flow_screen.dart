@@ -46,7 +46,8 @@ class LocalMatchFlowScreen extends ConsumerStatefulWidget {
 }
 
 class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
-  late final MatchEngine _engine;
+  // ── FIX: removed `final` so the engine can be reassigned on rematch ──
+  late MatchEngine _engine;
   final LocalStatsRepository _statsRepo = LocalStatsRepository();
 
   _LocalFlowStage _stage = _LocalFlowStage.countdown;
@@ -119,6 +120,16 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         ],
       ),
     );
+  }
+
+  // ── FIX: Reset and restart the match in-place (Rematch) ─────
+  void _resetAndRestart() {
+    _countdownTimer?.cancel();
+    _engine = MatchEngine(widget.format);
+    setState(() {
+      _stage = _LocalFlowStage.countdown;
+    });
+    _startRound();
   }
 
   // ── Round lifecycle ──────────────────────────────────────────
@@ -550,7 +561,8 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             player2WinRate: _engine.playerBWinRate,
             winnerTitle: unlimitedWinnerTitle,
             winnerColor: unlimitedWinnerColor,
-            onPlayAgain: () => GoRouter.of(context).pop(),
+            // ── FIX: restart in-place instead of popping ──
+            onPlayAgain: _resetAndRestart,
             onMainMenu: () => GoRouter.of(context).go('/main'),
           );
         }
@@ -575,7 +587,8 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           resultTitle: standardResultTitle,
           resultColor: standardResultColor,
           showMatchWon: false,
-          onPlayAgain: () => GoRouter.of(context).pop(),
+          // ── FIX: restart in-place instead of popping ──
+          onPlayAgain: _resetAndRestart,
           onMainMenu: () => GoRouter.of(context).go('/main'),
         );
     }
