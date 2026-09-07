@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 
-/// Reusable scoreboard for local 2-player matches.
+/// Reusable scoreboard for in-game screens.
 ///
 /// Shows:
-/// - Player 1 score
-/// - Player 2 score
-/// - Current round
-/// - Draw count when greater than zero
+/// - Player A score / Player B score (labels configurable)
+/// - Current round + draw count (can be hidden with [showRoundLine])
 class LocalScoreboard extends StatelessWidget {
   final int playerAScore;
   final int playerBScore;
   final int roundNumber;
   final int draws;
   final EdgeInsetsGeometry margin;
+  final String playerALabel;
+  final String playerBLabel;
+  final bool showRoundLine;
 
   const LocalScoreboard({
     super.key,
@@ -22,6 +23,9 @@ class LocalScoreboard extends StatelessWidget {
     this.roundNumber = 1,
     this.draws = 0,
     this.margin = const EdgeInsets.symmetric(horizontal: 24),
+    this.playerALabel = 'PLAYER 1',
+    this.playerBLabel = 'PLAYER 2',
+    this.showRoundLine = true,
   });
 
   @override
@@ -51,7 +55,7 @@ class LocalScoreboard extends StatelessWidget {
             children: [
               Expanded(
                 child: _scoreSide(
-                  label: 'PLAYER 1',
+                  label: playerALabel,
                   score: playerAScore,
                   color: AppColors.blue,
                 ),
@@ -69,7 +73,7 @@ class LocalScoreboard extends StatelessWidget {
               ),
               Expanded(
                 child: _scoreSide(
-                  label: 'PLAYER 2',
+                  label: playerBLabel,
                   score: playerBScore,
                   color: AppColors.purple,
                   alignRight: true,
@@ -77,31 +81,13 @@ class LocalScoreboard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'ROUND $roundNumber',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.55),
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.0,
-                ),
-              ),
-              if (draws > 0) ...[
-                const SizedBox(width: 8),
+          if (showRoundLine) ...[
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
                 Text(
-                  '•',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.35),
-                    fontSize: 10,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'DRAWS $draws',
+                  'ROUND $roundNumber',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.55),
                     fontSize: 10,
@@ -109,9 +95,29 @@ class LocalScoreboard extends StatelessWidget {
                     letterSpacing: 1.0,
                   ),
                 ),
+                if (draws > 0) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    '•',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.35),
+                      fontSize: 10,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'DRAWS $draws',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );
