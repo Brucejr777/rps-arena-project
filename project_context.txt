@@ -9448,6 +9448,25 @@ import 'dart:math';
 
 enum AiDifficulty { easy, normal, hard, expert, asian }
 
+/// Human-readable difficulty label used by the in-game HUD,
+/// e.g. "Easy", "Normal", "Hard", "Expert", "Asian".
+extension AiDifficultyLabel on AiDifficulty {
+  String get label {
+    switch (this) {
+      case AiDifficulty.easy:
+        return 'Easy';
+      case AiDifficulty.normal:
+        return 'Normal';
+      case AiDifficulty.hard:
+        return 'Hard';
+      case AiDifficulty.expert:
+        return 'Expert';
+      case AiDifficulty.asian:
+        return 'Asian';
+    }
+  }
+}
+
 class AiService {
   final Random _random;
 
@@ -9456,6 +9475,7 @@ class AiService {
   final List<String> _playerMoveHistory = [];
 
   static const List<String> _moves = ['rock', 'paper', 'scissors'];
+
   AiService({Random? random}) : _random = random ?? Random();
 
   /// Call after each round to record what the player actually played,
@@ -9491,22 +9511,19 @@ class AiService {
   }
 
   /// Normal AI: counters the player's most frequent move.
-/// - No recorded moves yet -> equal random (33.33% each).
-/// - Tied frequency -> uses the latest move among the tied ones.
-/// - Counter probability: 50%, remaining two moves: 25% each.
+  /// - No recorded moves yet -> equal random (33.33% each).
+  /// - Tied frequency -> uses the latest move among the tied ones.
+  /// - Counter probability: 50%, remaining two moves: 25% each.
   String _normalMove() {
     if (_playerMoveHistory.isEmpty) {
       return _easyMove(); // no record uses equal random
     }
-
     final mostFrequent = _mostFrequentMove(_playerMoveHistory);
     final counter = _counterTo(mostFrequent);
-
     final roll = _random.nextDouble(); // [0.0, 1.0)
     if (roll < 0.5) {
       return counter;
     }
-
     // remaining two moves at 25% each
     final others = _moves.where((m) => m != counter).toList();
     return others[_random.nextInt(others.length)];
@@ -9520,15 +9537,12 @@ class AiService {
     for (final move in history) {
       counts[move] = (counts[move] ?? 0) + 1;
     }
-
     final maxCount = counts.values.reduce(max);
     final tiedMoves =
         counts.entries.where((e) => e.value == maxCount).map((e) => e.key).toSet();
-
     if (tiedMoves.length == 1) {
       return tiedMoves.first;
     }
-
     // Tie: scan history from the end, return the first move that's
     // among the tied set — i.e. the latest-played tied move.
     for (var i = history.length - 1; i >= 0; i--) {
@@ -9549,65 +9563,58 @@ class AiService {
     return counters[move]!;
   }
 
-    /// Hard AI: predicts the player's next move using weighted recent history.
-/// - No recorded moves yet -> equal random.
-/// - Weight 4 to latest move, 3 to second-latest, 2 to third-latest,
-///   1 to every older move.
-/// - Predicted move = highest weighted score; ties use latest move among tied.
-/// - Counter probability: 60%, remaining two moves: 20% each.
-String _hardMove() {
-  if (_playerMoveHistory.isEmpty) {
-    return _easyMove();
-  }
-
-  final predicted = _predictNextMove(_playerMoveHistory);
-  final counter = _counterTo(predicted);
-
-  final roll = _random.nextDouble();
-  if (roll < 0.6) {
-    return counter;
-  }
-
-  final others = _moves.where((m) => m != counter).toList();
-  return others[_random.nextInt(others.length)];
-}
-
-/// Weights the most recent moves higher and returns the move with the
-/// highest weighted score. Ties resolve to the latest move among tied.
-String _predictNextMove(List<String> history) {
-  final scores = <String, int>{for (final m in _moves) m: 0};
-
-  // Walk backward from the most recent move.
-  // Position 0 (latest) = weight 4, position 1 = weight 3,
-  // position 2 = weight 2, everything older = weight 1.
-  for (var i = 0; i < history.length; i++) {
-    final move = history[history.length - 1 - i]; // i=0 is latest
-    final weight = switch (i) {
-      0 => 4,
-      1 => 3,
-      2 => 2,
-      _ => 1,
-    };
-    scores[move] = (scores[move] ?? 0) + weight;
-  }
-
-  final maxScore = scores.values.reduce(max);
-  final tied = scores.entries
-      .where((e) => e.value == maxScore)
-      .map((e) => e.key)
-      .toSet();
-
-  if (tied.length == 1) {
-    return tied.first;
-  }
-
-  // Tie: latest move among tied, scanning history from the end.
-  for (var i = history.length - 1; i >= 0; i--) {
-    if (tied.contains(history[i])) {
-      return history[i];
+  /// Hard AI: predicts the player's next move using weighted recent history.
+  /// - No recorded moves yet -> equal random.
+  /// - Weight 4 to latest move, 3 to second-latest, 2 to third-latest,
+  ///   1 to every older move.
+  /// - Predicted move = highest weighted score; ties use latest move among tied.
+  /// - Counter probability: 60%, remaining two moves: 20% each.
+  String _hardMove() {
+    if (_playerMoveHistory.isEmpty) {
+      return _easyMove();
     }
+    final predicted = _predictNextMove(_playerMoveHistory);
+    final counter = _counterTo(predicted);
+    final roll = _random.nextDouble();
+    if (roll < 0.6) {
+      return counter;
+    }
+    final others = _moves.where((m) => m != counter).toList();
+    return others[_random.nextInt(others.length)];
   }
-  return tied.first;
+
+  /// Weights the most recent moves higher and returns the move with the
+  /// highest weighted score. Ties resolve to the latest move among tied.
+  String _predictNextMove(List<String> history) {
+    final scores = <String, int>{for (final m in _moves) m: 0};
+    // Walk backward from the most recent move.
+    // Position 0 (latest) = weight 4, position 1 = weight 3,
+    // position 2 = weight 2, everything older = weight 1.
+    for (var i = 0; i < history.length; i++) {
+      final move = history[history.length - 1 - i]; // i=0 is latest
+      final weight = switch (i) {
+        0 => 4,
+        1 => 3,
+        2 => 2,
+        _ => 1,
+      };
+      scores[move] = (scores[move] ?? 0) + weight;
+    }
+    final maxScore = scores.values.reduce(max);
+    final tied = scores.entries
+        .where((e) => e.value == maxScore)
+        .map((e) => e.key)
+        .toSet();
+    if (tied.length == 1) {
+      return tied.first;
+    }
+    // Tie: latest move among tied, scanning history from the end.
+    for (var i = history.length - 1; i >= 0; i--) {
+      if (tied.contains(history[i])) {
+        return history[i];
+      }
+    }
+    return tied.first;
   }
 
   /// Expert AI: analyzes patterns across multiple dimensions.
@@ -9618,15 +9625,12 @@ String _predictNextMove(List<String> history) {
     if (_playerMoveHistory.isEmpty) {
       return _easyMove();
     }
-
     final predicted = _predictExpertMove(_playerMoveHistory);
     final counter = _counterTo(predicted);
-
     final roll = _random.nextDouble();
     if (roll < 0.75) {
       return counter;
     }
-
     final others = _moves.where((m) => m != counter).toList();
     return others[_random.nextInt(others.length)];
   }
@@ -9641,7 +9645,6 @@ String _predictNextMove(List<String> history) {
       final weight = pow(0.7, i).toDouble(); // Exponential decay
       scores[move] = (scores[move] ?? 0) + weight;
     }
-
     // Pair analysis: if we can predict the next move after the predicted move,
     // we can counter the counter
     if (history.length >= 2) {
@@ -9663,15 +9666,12 @@ String _predictNextMove(List<String> history) {
         scores[counterOfFollowUp] = (scores[counterOfFollowUp] ?? 0) + 0.5;
       }
     }
-
     final maxScore = scores.values.reduce(max);
     final tied = scores.entries
         .where((e) => (e.value - maxScore).abs() < 0.001)
         .map((e) => e.key)
         .toSet();
-
     if (tied.length == 1) return tied.first;
-
     for (var i = history.length - 1; i >= 0; i--) {
       if (tied.contains(history[i])) return history[i];
     }
@@ -9687,15 +9687,12 @@ String _predictNextMove(List<String> history) {
     if (_playerMoveHistory.isEmpty) {
       return _easyMove();
     }
-
     final predicted = _predictAsianMove(_playerMoveHistory);
     final counter = _counterTo(predicted);
-
     final roll = _random.nextDouble();
     if (roll < 0.85) {
       return counter;
     }
-
     // When not countering, use game-theoretic mixed strategy
     // to remain unpredictable
     final others = _moves.where((m) => m != counter).toList();
@@ -9706,14 +9703,12 @@ String _predictNextMove(List<String> history) {
   /// pair chains, streak detection, and anti-pattern recognition.
   String _predictAsianMove(List<String> history) {
     final scores = <String, double>{for (final m in _moves) m: 0.0};
-
     // Layer 1: Exponential decay (strongest weight)
     for (var i = 0; i < history.length; i++) {
       final move = history[history.length - 1 - i];
       final weight = pow(0.6, i).toDouble();
       scores[move] = (scores[move] ?? 0) + weight;
     }
-
     // Layer 2: Streak detection (if player repeats, predict continuation)
     if (history.length >= 3) {
       final last3 = history.sublist(history.length - 3);
@@ -9722,7 +9717,6 @@ String _predictNextMove(List<String> history) {
         scores[last3[0]] = (scores[last3[0]] ?? 0) + 2.0;
       }
     }
-
     // Layer 3: Anti-pattern (detect if player tries to be unpredictable)
     if (history.length >= 4) {
       final last4 = history.sublist(history.length - 4);
@@ -9733,7 +9727,6 @@ String _predictNextMove(List<String> history) {
         scores[predicted] = (scores[predicted] ?? 0) + 1.5;
       }
     }
-
     // Layer 4: Pair chain analysis
     if (history.length >= 2) {
       final lastMove = history.last;
@@ -9752,21 +9745,17 @@ String _predictNextMove(List<String> history) {
         scores[likelyFollowUp] = (scores[likelyFollowUp] ?? 0) + 1.0;
       }
     }
-
     final maxScore = scores.values.reduce(max);
     final tied = scores.entries
         .where((e) => (e.value - maxScore).abs() < 0.001)
         .map((e) => e.key)
         .toSet();
-
     if (tied.length == 1) return tied.first;
-
     for (var i = history.length - 1; i >= 0; i--) {
       if (tied.contains(history[i])) return history[i];
     }
     return tied.first;
   }
-
 }
 
 ================================================================================
@@ -9988,6 +9977,7 @@ enum MatchFormat { bestOf3, bestOf5, bestOf7, bestOf9, custom, unlimited }
 class MatchFormatConfig {
   static const int minCustomWins = 2;
   static const int maxCustomWins = 99;
+
   final MatchFormat format;
   final int winsRequired;
 
@@ -10036,6 +10026,25 @@ class MatchFormatConfig {
   }
 
   bool get isUnlimited => format == MatchFormat.unlimited;
+
+  /// Human-readable match-format label used by the in-game HUD,
+  /// e.g. "Best of 3", "Custom (First to 5)", "Unlimited".
+  String get displayLabel {
+    switch (format) {
+      case MatchFormat.bestOf3:
+        return 'Best of 3';
+      case MatchFormat.bestOf5:
+        return 'Best of 5';
+      case MatchFormat.bestOf7:
+        return 'Best of 7';
+      case MatchFormat.bestOf9:
+        return 'Best of 9';
+      case MatchFormat.custom:
+        return 'Custom (First to $winsRequired)';
+      case MatchFormat.unlimited:
+        return 'Unlimited';
+    }
+  }
 }
 
 ================================================================================
@@ -10485,10 +10494,12 @@ class LocalMatchFlowScreen extends ConsumerStatefulWidget {
 class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
   late final MatchEngine _engine;
   final LocalStatsRepository _statsRepo = LocalStatsRepository();
-
   _LocalFlowStage _stage = _LocalFlowStage.countdown;
   Timer? _countdownTimer;
   bool _victoryAnimationsEnabled = true;
+
+  /// Game-mode label shown on every in-game screen, e.g. "Best of 3".
+  String get _modeLabel => widget.format.displayLabel;
 
   @override
   void initState() {
@@ -10517,23 +10528,18 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
   void _startRound() {
     _engine.startRound();
     _engine.beginCountdown();
-
     setState(() {
       _stage = _LocalFlowStage.countdown;
     });
-
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final finished = _engine.tickCountdown();
-
       if (mounted) {
         setState(() {});
       }
-
       if (finished) {
         timer.cancel();
         _engine.beginSelection();
-
         if (mounted) {
           setState(() {
             _stage = _LocalFlowStage.playerOneMove;
@@ -10545,7 +10551,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
 
   void _onPlayerOneMove(String move) {
     _engine.submitPlayerAMove(move);
-
     setState(() {
       _stage = _LocalFlowStage.passDevice;
     });
@@ -10566,17 +10571,13 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
-
     VibrationService.instance.reveal();
-
     setState(() {
       _stage = _LocalFlowStage.revealing;
     });
-
     if (_engine.playerAMove != null) {
       _statsRepo.recordMoveSelection(_engine.playerAMove!);
     }
-
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
@@ -10593,19 +10594,15 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
       case null:
         break;
     }
-
     final delay = (_isMatchWinningRound && _victoryAnimationsEnabled)
         ? const Duration(seconds: 3)
         : const Duration(seconds: 2);
-
     Future.delayed(delay, _advanceAfterReveal);
   }
 
   void _advanceAfterReveal() {
     if (!mounted) return;
-
     _engine.checkMatchCondition();
-
     if (_engine.matchFinished) {
       if (widget.format.isUnlimited) {
         _statsRepo.recordUnlimitedMatchResult(
@@ -10636,7 +10633,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                   : 'loss',
         );
       }
-
       setState(() {
         _stage = _LocalFlowStage.roundComplete;
       });
@@ -10647,22 +10643,18 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
 
   bool get _isMatchWinningRound {
     if (widget.format.isUnlimited) return false;
-
     if (_engine.lastResult == RoundResult.playerAWin) {
       return widget.format.isMatchWon(_engine.playerAScore);
     }
-
     if (_engine.lastResult == RoundResult.playerBWin) {
       return widget.format.isMatchWon(_engine.playerBScore);
     }
-
     return false;
   }
 
   bool get _canEndMatchNow {
     if (!widget.format.isUnlimited) return false;
     if (_engine.totalRounds == 0) return false;
-
     return _stage == _LocalFlowStage.countdown ||
         _stage == _LocalFlowStage.playerOneMove;
   }
@@ -10709,6 +10701,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                   playerBScore: _engine.playerBScore,
                   roundNumber: _engine.currentRoundNumber,
                   draws: _engine.drawCount,
+                  modeLabel: _modeLabel,
                 ),
                 Expanded(
                   child: Center(
@@ -10732,6 +10725,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           playerBScore: _engine.playerBScore,
           roundNumber: _engine.currentRoundNumber,
           draws: _engine.drawCount,
+          modeLabel: _modeLabel,
         );
 
       case _LocalFlowStage.passDevice:
@@ -10742,6 +10736,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           playerBScore: _engine.playerBScore,
           roundNumber: _engine.currentRoundNumber,
           draws: _engine.drawCount,
+          modeLabel: _modeLabel,
         );
 
       case _LocalFlowStage.playerTwoMove:
@@ -10753,6 +10748,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           playerBScore: _engine.playerBScore,
           roundNumber: _engine.currentRoundNumber,
           draws: _engine.drawCount,
+          modeLabel: _modeLabel,
         );
 
       case _LocalFlowStage.revealing:
@@ -10761,7 +10757,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         final roundKey = ValueKey(
           'local_round_${_engine.currentRoundNumber}_${_engine.lastResult}',
         );
-
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: SafeArea(
@@ -10785,6 +10780,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                       playerBScore: _engine.playerBScore,
                       roundNumber: _engine.currentRoundNumber,
                       draws: _engine.drawCount,
+                      modeLabel: _modeLabel,
                     ),
                     const SizedBox(height: 16),
                     if (_engine.playerAMove != null &&
@@ -10853,7 +10849,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         final playerAWon = _engine.matchWinner == 'A';
         final playerAMove = _engine.playerAMove;
         final playerBMove = _engine.playerBMove;
-
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: Center(
@@ -10876,7 +10871,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         if (widget.format.isUnlimited) {
           final String unlimitedWinnerTitle;
           final Color unlimitedWinnerColor;
-
           if (_engine.matchWinner == 'A') {
             unlimitedWinnerTitle = 'PLAYER 1 WON';
             unlimitedWinnerColor = AppColors.blue;
@@ -10887,7 +10881,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             unlimitedWinnerTitle = 'MATCH DRAW';
             unlimitedWinnerColor = AppColors.orange;
           }
-
           return UnlimitedResultScreen(
             player1Wins: _engine.playerAScore,
             player2Wins: _engine.playerBScore,
@@ -10901,10 +10894,8 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             onMainMenu: () => GoRouter.of(context).go('/main'),
           );
         }
-
         final String standardResultTitle;
         final Color standardResultColor;
-
         if (_engine.matchWinner == 'A') {
           standardResultTitle = 'PLAYER 1 WON';
           standardResultColor = AppColors.blue;
@@ -10915,7 +10906,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           standardResultTitle = 'DRAW';
           standardResultColor = AppColors.orange;
         }
-
         return StandardResultScreen(
           playerWon: _engine.matchWinner == 'A',
           playerScore: _engine.playerAScore,
@@ -10975,14 +10965,11 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-
               _countdownTimer?.cancel();
               _engine.endUnlimitedMatch();
-
               _statsRepo.recordUnlimitedMatchResult(
                 winner: _engine.matchWinner,
               );
-
               _statsRepo.recordLocalMatch(
                 opponentName: 'Player 2',
                 mode: 'local',
@@ -10993,7 +10980,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                         ? 'draw'
                         : 'loss',
               );
-
               if (_engine.matchWinner != null &&
                   _victoryAnimationsEnabled &&
                   _engine.playerAMove != null &&
@@ -11001,10 +10987,8 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                 setState(() {
                   _stage = _LocalFlowStage.finishing;
                 });
-
                 Future.delayed(const Duration(seconds: 3), () {
                   if (!mounted) return;
-
                   setState(() {
                     _stage = _LocalFlowStage.roundComplete;
                   });
@@ -11050,31 +11034,25 @@ class LocalPlayerMoveScreen extends ConsumerStatefulWidget {
   final int playerNumber;
   final void Function(String move) onMoveSelected;
 
-  // Local 2-player scoreboard (score card with internal ROUND line).
   final bool showScoreboard;
-
-  // Single-player style header: standalone ROUND text + score card below it.
-  final bool showRoundHeader;
-
   final int playerAScore;
   final int playerBScore;
   final int roundNumber;
   final int draws;
-  final String playerALabel;
-  final String playerBLabel;
+
+  /// Optional game-mode label, e.g. "Easy - Best of 3" / "Best of 3".
+  final String? modeLabel;
 
   const LocalPlayerMoveScreen({
     super.key,
     required this.playerNumber,
     required this.onMoveSelected,
     this.showScoreboard = false,
-    this.showRoundHeader = false,
     this.playerAScore = 0,
     this.playerBScore = 0,
     this.roundNumber = 1,
     this.draws = 0,
-    this.playerALabel = 'PLAYER 1',
-    this.playerBLabel = 'PLAYER 2',
+    this.modeLabel,
   });
 
   @override
@@ -11104,48 +11082,30 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
         child: Column(
           children: [
             _buildTopNav(),
-            if (widget.showRoundHeader) ...[
+            if (widget.showScoreboard) ...[
               const SizedBox(height: 12),
-              Center(
-                child: Text(
-                  'ROUND ${widget.roundNumber}',
-                  style: const TextStyle(
-                    color: AppColors.primaryText,
+              LocalScoreboard(
+                playerAScore: widget.playerAScore,
+                playerBScore: widget.playerBScore,
+                roundNumber: widget.roundNumber,
+                draws: widget.draws,
+                modeLabel: widget.modeLabel,
+              ),
+              const SizedBox(height: 8),
+            ] else ...[
+              const SizedBox(height: 12),
+              if (widget.modeLabel != null)
+                Text(
+                  widget.modeLabel!,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                    letterSpacing: 1.2,
-                    shadows: [
-                      Shadow(
-                        blurRadius: 4,
-                        color: Colors.black87,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
+                    letterSpacing: 1.0,
                   ),
                 ),
-              ),
               const SizedBox(height: 8),
-              LocalScoreboard(
-                playerAScore: widget.playerAScore,
-                playerBScore: widget.playerBScore,
-                roundNumber: widget.roundNumber,
-                draws: widget.draws,
-                showRoundLine: false,
-                playerALabel: widget.playerALabel,
-                playerBLabel: widget.playerBLabel,
-              ),
-              const SizedBox(height: 8),
-            ] else if (widget.showScoreboard) ...[
-              const SizedBox(height: 12),
-              LocalScoreboard(
-                playerAScore: widget.playerAScore,
-                playerBScore: widget.playerBScore,
-                roundNumber: widget.roundNumber,
-                draws: widget.draws,
-              ),
-              const SizedBox(height: 8),
-            ] else
-              const SizedBox(height: 20),
+            ],
             // ── Hero title ─────────────────────────────────────────
             Text(
               'PLAYER ${widget.playerNumber}',
@@ -11805,6 +11765,9 @@ class PassDeviceScreen extends StatelessWidget {
   final int roundNumber;
   final int draws;
 
+  /// Optional game-mode label, e.g. "Best of 3".
+  final String? modeLabel;
+
   const PassDeviceScreen({
     super.key,
     required this.onReady,
@@ -11813,6 +11776,7 @@ class PassDeviceScreen extends StatelessWidget {
     this.playerBScore = 0,
     this.roundNumber = 1,
     this.draws = 0,
+    this.modeLabel,
   });
 
   @override
@@ -11831,7 +11795,19 @@ class PassDeviceScreen extends StatelessWidget {
                   playerBScore: playerBScore,
                   roundNumber: roundNumber,
                   draws: draws,
+                  modeLabel: modeLabel,
                   margin: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 24),
+              ] else if (modeLabel != null) ...[
+                Text(
+                  modeLabel!,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                  ),
                 ),
                 const SizedBox(height: 24),
               ],
@@ -11909,7 +11885,6 @@ import '../domain/match_format.dart';
 import '../widgets/countdown_animation.dart';
 import '../widgets/draw_animation.dart';
 import '../widgets/final_finish_animation.dart';
-import '../widgets/local_scoreboard.dart';
 import '../widgets/round_victory_animation.dart';
 import '../widgets/theme_background.dart';
 import 'local_player_move_screen.dart';
@@ -11948,6 +11923,17 @@ class _SinglePlayerMatchFlowScreenState
   _SpFlowStage _stage = _SpFlowStage.countdown;
   Timer? _countdownTimer;
   bool _victoryAnimationsEnabled = true;
+
+  /// Game-mode label shown on every in-game screen, e.g. "Easy - Best of 3".
+  String get _modeLabel =>
+      '${widget.difficulty.label} - ${widget.format.displayLabel}';
+
+  TextStyle get _modeTextStyle => TextStyle(
+        color: Colors.white.withValues(alpha: 0.55),
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 1.0,
+      );
 
   @override
   void initState() {
@@ -12103,41 +12089,6 @@ class _SinglePlayerMatchFlowScreenState
         _stage == _SpFlowStage.playerMove;
   }
 
-  /// Consistent in-game header: ROUND number on top, scoreboard below it.
-  Widget _buildRoundHeader() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'ROUND ${_engine.currentRoundNumber}',
-          style: const TextStyle(
-            color: AppColors.primaryText,
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
-            letterSpacing: 1.2,
-            shadows: [
-              Shadow(
-                blurRadius: 4,
-                color: Colors.black87,
-                offset: Offset(0, 2),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        LocalScoreboard(
-          playerAScore: _engine.playerAScore,
-          playerBScore: _engine.playerBScore,
-          roundNumber: _engine.currentRoundNumber,
-          draws: _engine.drawCount,
-          showRoundLine: false,
-          playerALabel: 'YOU',
-          playerBLabel: 'AI',
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return ThemeBackground(
@@ -12145,11 +12096,42 @@ class _SinglePlayerMatchFlowScreenState
       child: Stack(
         children: [
           _buildStageContent(),
-          // END MATCH kept at bottom-right so it never collides with the
-          // round header / scoreboard above.
+          // ── Round number + game-mode label at the top center ──
+          if (_stage != _SpFlowStage.roundComplete &&
+              _stage != _SpFlowStage.finishing)
+            Positioned(
+              top: 50,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'ROUND ${_engine.currentRoundNumber}',
+                      style: const TextStyle(
+                        color: AppColors.primaryText,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                        letterSpacing: 1.2,
+                        shadows: [
+                          Shadow(
+                            blurRadius: 4,
+                            color: Colors.black87,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(_modeLabel, style: _modeTextStyle),
+                  ],
+                ),
+              ),
+            ),
           if (_canEndMatchNow)
             Positioned(
-              bottom: 8,
+              top: 48,
               right: 16,
               child: SafeArea(
                 child: TextButton(
@@ -12175,20 +12157,10 @@ class _SinglePlayerMatchFlowScreenState
       case _SpFlowStage.countdown:
         return Scaffold(
           backgroundColor: Colors.transparent,
-          body: SafeArea(
-            child: Column(
-              children: [
-                const SizedBox(height: 8),
-                _buildRoundHeader(),
-                Expanded(
-                  child: Center(
-                    child: CountdownAnimation(
-                      value: _engine.countdownValue,
-                      theme: ref.watch(gameThemeProvider),
-                    ),
-                  ),
-                ),
-              ],
+          body: Center(
+            child: CountdownAnimation(
+              value: _engine.countdownValue,
+              theme: ref.watch(gameThemeProvider),
             ),
           ),
         );
@@ -12197,31 +12169,15 @@ class _SinglePlayerMatchFlowScreenState
         return LocalPlayerMoveScreen(
           playerNumber: 1,
           onMoveSelected: _onPlayerMove,
-          showRoundHeader: true,
-          playerAScore: _engine.playerAScore,
-          playerBScore: _engine.playerBScore,
-          roundNumber: _engine.currentRoundNumber,
-          draws: _engine.drawCount,
-          playerALabel: 'YOU',
-          playerBLabel: 'AI',
+          modeLabel: _modeLabel,
         );
 
       case _SpFlowStage.aiThinking:
-        return Scaffold(
+        return const Scaffold(
           backgroundColor: Colors.transparent,
-          body: SafeArea(
-            child: Column(
-              children: [
-                const SizedBox(height: 8),
-                _buildRoundHeader(),
-                const Expanded(
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.defaultAccent,
-                    ),
-                  ),
-                ),
-              ],
+          body: Center(
+            child: CircularProgressIndicator(
+              color: AppColors.defaultAccent,
             ),
           ),
         );
@@ -12234,64 +12190,76 @@ class _SinglePlayerMatchFlowScreenState
         );
         return Scaffold(
           backgroundColor: Colors.transparent,
-          body: SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildRoundHeader(),
-                    const SizedBox(height: 16),
-                    if (_isMatchWinningRound &&
-                        _victoryAnimationsEnabled &&
-                        _engine.playerAMove != null &&
-                        _engine.playerBMove != null)
-                      FinalFinishAnimation(
-                        key: roundKey,
-                        playerAMove: _engine.playerAMove!,
-                        playerBMove: _engine.playerBMove!,
-                        playerAWon: playerAWon,
-                        theme: ref.watch(gameThemeProvider),
-                        handAssetFor: themeController.handAssetFor,
-                      )
-                    else if (_isMatchWinningRound && !_victoryAnimationsEnabled)
-                      const SizedBox.shrink()
-                    else if ((_engine.lastResult == RoundResult.playerAWin ||
-                            _engine.lastResult == RoundResult.playerBWin) &&
-                        _engine.playerAMove != null &&
-                        _engine.playerBMove != null)
-                      RoundVictoryAnimation(
-                        key: roundKey,
-                        playerAMove: _engine.playerAMove!,
-                        playerBMove: _engine.playerBMove!,
-                        playerAWon: playerAWon,
-                        playerALabel: 'YOU',
-                        playerBLabel: 'AI',
-                        theme: ref.watch(gameThemeProvider),
-                        handAssetFor: themeController.handAssetFor,
-                      )
-                    else if (_engine.lastResult == RoundResult.draw &&
-                        _engine.playerAMove != null &&
-                        _engine.playerBMove != null)
-                      DrawAnimation(
-                        key: roundKey,
-                        playerAMove: _engine.playerAMove!,
-                        playerBMove: _engine.playerBMove!,
-                        theme: ref.watch(gameThemeProvider),
-                      )
-                    else
-                      Text(
-                        _resultLabel(),
-                        style: const TextStyle(
-                          color: AppColors.defaultAccent,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'ROUND ${_engine.currentRoundNumber}',
+                  style: const TextStyle(
+                    color: AppColors.primaryText,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    letterSpacing: 1.2,
+                    shadows: [
+                      Shadow(
+                        blurRadius: 4,
+                        color: Colors.black87,
+                        offset: Offset(0, 2),
                       ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 2),
+                Text(_modeLabel, style: _modeTextStyle),
+                const SizedBox(height: 16),
+                if (_isMatchWinningRound &&
+                    _victoryAnimationsEnabled &&
+                    _engine.playerAMove != null &&
+                    _engine.playerBMove != null)
+                  FinalFinishAnimation(
+                    key: roundKey,
+                    playerAMove: _engine.playerAMove!,
+                    playerBMove: _engine.playerBMove!,
+                    playerAWon: playerAWon,
+                    theme: ref.watch(gameThemeProvider),
+                    handAssetFor: themeController.handAssetFor,
+                  )
+                else if (_isMatchWinningRound && !_victoryAnimationsEnabled)
+                  const SizedBox.shrink()
+                else if ((_engine.lastResult == RoundResult.playerAWin ||
+                        _engine.lastResult == RoundResult.playerBWin) &&
+                    _engine.playerAMove != null &&
+                    _engine.playerBMove != null)
+                  RoundVictoryAnimation(
+                    key: roundKey,
+                    playerAMove: _engine.playerAMove!,
+                    playerBMove: _engine.playerBMove!,
+                    playerAWon: playerAWon,
+                    playerALabel: 'YOU',
+                    playerBLabel: 'AI',
+                    theme: ref.watch(gameThemeProvider),
+                    handAssetFor: themeController.handAssetFor,
+                  )
+                else if (_engine.lastResult == RoundResult.draw &&
+                    _engine.playerAMove != null &&
+                    _engine.playerBMove != null)
+                  DrawAnimation(
+                    key: roundKey,
+                    playerAMove: _engine.playerAMove!,
+                    playerBMove: _engine.playerBMove!,
+                    theme: ref.watch(gameThemeProvider),
+                  )
+                else
+                  Text(
+                    _resultLabel(),
+                    style: const TextStyle(
+                      color: AppColors.defaultAccent,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+              ],
             ),
           ),
         );
@@ -14747,20 +14715,21 @@ FILE: lib/features/match/widgets/local_scoreboard.dart
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 
-/// Reusable scoreboard for in-game screens.
+/// Reusable scoreboard for local 2-player matches.
 ///
 /// Shows:
-/// - Player A score / Player B score (labels configurable)
-/// - Current round + draw count (can be hidden with [showRoundLine])
+/// - Optional game-mode label (e.g. "Best of 3")
+/// - Player 1 score
+/// - Player 2 score
+/// - Current round
+/// - Draw count when greater than zero
 class LocalScoreboard extends StatelessWidget {
   final int playerAScore;
   final int playerBScore;
   final int roundNumber;
   final int draws;
   final EdgeInsetsGeometry margin;
-  final String playerALabel;
-  final String playerBLabel;
-  final bool showRoundLine;
+  final String? modeLabel;
 
   const LocalScoreboard({
     super.key,
@@ -14769,9 +14738,7 @@ class LocalScoreboard extends StatelessWidget {
     this.roundNumber = 1,
     this.draws = 0,
     this.margin = const EdgeInsets.symmetric(horizontal: 24),
-    this.playerALabel = 'PLAYER 1',
-    this.playerBLabel = 'PLAYER 2',
-    this.showRoundLine = true,
+    this.modeLabel,
   });
 
   @override
@@ -14797,11 +14764,23 @@ class LocalScoreboard extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (modeLabel != null) ...[
+            Text(
+              modeLabel!,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.55),
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
           Row(
             children: [
               Expanded(
                 child: _scoreSide(
-                  label: playerALabel,
+                  label: 'PLAYER 1',
                   score: playerAScore,
                   color: AppColors.blue,
                 ),
@@ -14819,7 +14798,7 @@ class LocalScoreboard extends StatelessWidget {
               ),
               Expanded(
                 child: _scoreSide(
-                  label: playerBLabel,
+                  label: 'PLAYER 2',
                   score: playerBScore,
                   color: AppColors.purple,
                   alignRight: true,
@@ -14827,13 +14806,31 @@ class LocalScoreboard extends StatelessWidget {
               ),
             ],
           ),
-          if (showRoundLine) ...[
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'ROUND $roundNumber',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.55),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              if (draws > 0) ...[
+                const SizedBox(width: 8),
                 Text(
-                  'ROUND $roundNumber',
+                  '•',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.35),
+                    fontSize: 10,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'DRAWS $draws',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.55),
                     fontSize: 10,
@@ -14841,29 +14838,9 @@ class LocalScoreboard extends StatelessWidget {
                     letterSpacing: 1.0,
                   ),
                 ),
-                if (draws > 0) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    '•',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      fontSize: 10,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'DRAWS $draws',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.55),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ],
               ],
-            ),
-          ],
+            ],
+          ),
         ],
       ),
     );

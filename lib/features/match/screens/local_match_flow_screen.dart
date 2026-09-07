@@ -105,12 +105,16 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
 
   void _onPlayerOneMove(String move) {
     _engine.submitPlayerAMove(move);
+    // Link the transition mp3 to the hand-off transition.
+    AudioService.instance.playTransition();
     setState(() {
       _stage = _LocalFlowStage.passDevice;
     });
   }
 
   void _onReady() {
+    // Link the transition mp3 to the hand-off transition.
+    AudioService.instance.playTransition();
     setState(() {
       _stage = _LocalFlowStage.playerTwoMove;
     });
@@ -125,6 +129,8 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
+    // Link the reveal mp3 to the reveal stage.
+    AudioService.instance.playReveal();
     VibrationService.instance.reveal();
     setState(() {
       _stage = _LocalFlowStage.revealing;
@@ -132,16 +138,20 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     if (_engine.playerAMove != null) {
       _statsRepo.recordMoveSelection(_engine.playerAMove!);
     }
+    // Link outcome mp3s (victory / draw) to the round result.
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
+        AudioService.instance.playVictory();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
         VibrationService.instance.victory();
         break;
       case RoundResult.playerBWin:
+        AudioService.instance.playVictory();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
-        VibrationService.instance.defeat();
+        VibrationService.instance.victory();
         break;
       case RoundResult.draw:
+        AudioService.instance.playDraw();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
         VibrationService.instance.draw();
         break;
@@ -269,7 +279,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             ),
           ),
         );
-
       case _LocalFlowStage.playerOneMove:
         return LocalPlayerMoveScreen(
           playerNumber: 1,
@@ -281,7 +290,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           draws: _engine.drawCount,
           modeLabel: _modeLabel,
         );
-
       case _LocalFlowStage.passDevice:
         return PassDeviceScreen(
           onReady: _onReady,
@@ -292,7 +300,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           draws: _engine.drawCount,
           modeLabel: _modeLabel,
         );
-
       case _LocalFlowStage.playerTwoMove:
         return LocalPlayerMoveScreen(
           playerNumber: 2,
@@ -304,7 +311,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
           draws: _engine.drawCount,
           modeLabel: _modeLabel,
         );
-
       case _LocalFlowStage.revealing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.lastResult == RoundResult.playerAWin;
@@ -397,7 +403,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
             ),
           ),
         );
-
       case _LocalFlowStage.finishing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.matchWinner == 'A';
@@ -420,7 +425,6 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
                 : const SizedBox.shrink(),
           ),
         );
-
       case _LocalFlowStage.roundComplete:
         if (widget.format.isUnlimited) {
           final String unlimitedWinnerTitle;

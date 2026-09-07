@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/services/audio_service.dart';
 import 'theme_background.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/animation_speed_controller.dart';
@@ -19,7 +20,7 @@ class CountdownAnimation extends ConsumerStatefulWidget {
 }
 
 class _CountdownAnimationState extends ConsumerState<CountdownAnimation>
-  with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   late Animation<double> _opacityAnimation;
@@ -36,6 +37,8 @@ class _CountdownAnimationState extends ConsumerState<CountdownAnimation>
     );
     _setupAnimation();
     _controller.forward();
+    // Link the countdown mp3 to each countdown tick.
+    AudioService.instance.playCountdown();
   }
 
   void _setupAnimation() {
@@ -51,7 +54,6 @@ class _CountdownAnimationState extends ConsumerState<CountdownAnimation>
         weight: 40,
       ),
     ]).animate(_controller);
-
     _opacityAnimation = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.0), weight: 70),
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 30),
@@ -64,6 +66,8 @@ class _CountdownAnimationState extends ConsumerState<CountdownAnimation>
     if (oldWidget.value != widget.value) {
       _controller.reset();
       _controller.forward();
+      // Play the countdown sound on every value change (3, 2, 1, GO!).
+      AudioService.instance.playCountdown();
     }
   }
 

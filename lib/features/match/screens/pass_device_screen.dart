@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/services/audio_service.dart';
 import '../widgets/local_scoreboard.dart';
 
 class PassDeviceScreen extends StatelessWidget {
   final VoidCallback onReady;
-
   final bool showScoreboard;
   final int playerAScore;
   final int playerBScore;
   final int roundNumber;
   final int draws;
-
-  /// Optional game-mode label, e.g. "Best of 3".
   final String? modeLabel;
 
   const PassDeviceScreen({
@@ -86,7 +84,11 @@ class PassDeviceScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: onReady,
+                  onPressed: () {
+                    // Link the click mp3 to the READY button.
+                    AudioService.instance.playClick();
+                    onReady();
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.defaultAccent,
                     padding: const EdgeInsets.symmetric(vertical: 16),

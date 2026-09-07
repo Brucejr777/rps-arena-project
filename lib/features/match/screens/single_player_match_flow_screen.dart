@@ -114,6 +114,8 @@ class _SinglePlayerMatchFlowScreenState
 
   void _onPlayerMove(String move) {
     _engine.submitPlayerAMove(move);
+    // Link the transition mp3 to the stage change (selection -> AI thinking).
+    AudioService.instance.playTransition();
     setState(() {
       _stage = _SpFlowStage.aiThinking;
     });
@@ -130,6 +132,8 @@ class _SinglePlayerMatchFlowScreenState
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
+    // Link the reveal mp3 to the reveal stage.
+    AudioService.instance.playReveal();
     VibrationService.instance.reveal();
     setState(() {
       _stage = _SpFlowStage.revealing;
@@ -137,16 +141,20 @@ class _SinglePlayerMatchFlowScreenState
     if (_engine.playerAMove != null) {
       _statsRepo.recordMoveSelection(_engine.playerAMove!);
     }
+    // Link outcome mp3s (victory / defeat / draw) to the round result.
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
+        AudioService.instance.playVictory();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
         VibrationService.instance.victory();
         break;
       case RoundResult.playerBWin:
+        AudioService.instance.playDefeat();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
         VibrationService.instance.defeat();
         break;
       case RoundResult.draw:
+        AudioService.instance.playDraw();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
         VibrationService.instance.draw();
         break;
@@ -225,7 +233,6 @@ class _SinglePlayerMatchFlowScreenState
       child: Stack(
         children: [
           _buildStageContent(),
-          // ── Round number + game-mode label at the top center ──
           if (_stage != _SpFlowStage.roundComplete &&
               _stage != _SpFlowStage.finishing)
             Positioned(
@@ -293,14 +300,12 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
-
       case _SpFlowStage.playerMove:
         return LocalPlayerMoveScreen(
           playerNumber: 1,
           onMoveSelected: _onPlayerMove,
           modeLabel: _modeLabel,
         );
-
       case _SpFlowStage.aiThinking:
         return const Scaffold(
           backgroundColor: Colors.transparent,
@@ -310,7 +315,6 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
-
       case _SpFlowStage.revealing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.lastResult == RoundResult.playerAWin;
@@ -323,25 +327,6 @@ class _SinglePlayerMatchFlowScreenState
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  'ROUND ${_engine.currentRoundNumber}',
-                  style: const TextStyle(
-                    color: AppColors.primaryText,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                    letterSpacing: 1.2,
-                    shadows: [
-                      Shadow(
-                        blurRadius: 4,
-                        color: Colors.black87,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(_modeLabel, style: _modeTextStyle),
-                const SizedBox(height: 16),
                 if (_isMatchWinningRound &&
                     _victoryAnimationsEnabled &&
                     _engine.playerAMove != null &&
@@ -392,7 +377,6 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
-
       case _SpFlowStage.finishing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.matchWinner == 'A';
@@ -415,7 +399,6 @@ class _SinglePlayerMatchFlowScreenState
                 : const SizedBox.shrink(),
           ),
         );
-
       case _SpFlowStage.roundComplete:
         if (widget.format.isUnlimited) {
           return UnlimitedResultScreen(

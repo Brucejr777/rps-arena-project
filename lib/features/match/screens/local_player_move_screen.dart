@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/game_theme_controller.dart';
+import '../../../core/services/audio_service.dart';
 import '../widgets/local_scoreboard.dart';
 
 /// Colors per gesture card, taken from wireframes 09A/09B:
@@ -16,14 +17,11 @@ const _scissorsDark = Color(0xFF831843);
 class LocalPlayerMoveScreen extends ConsumerStatefulWidget {
   final int playerNumber;
   final void Function(String move) onMoveSelected;
-
   final bool showScoreboard;
   final int playerAScore;
   final int playerBScore;
   final int roundNumber;
   final int draws;
-
-  /// Optional game-mode label, e.g. "Easy - Best of 3" / "Best of 3".
   final String? modeLabel;
 
   const LocalPlayerMoveScreen({
@@ -48,6 +46,8 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
 
   void _select(String move) {
     if (_selectedMove != null) return;
+    // Link the select mp3 to the gesture selection.
+    AudioService.instance.playSelect();
     setState(() => _selectedMove = move);
     // Brief pause so the lock/scale animation and hand image are
     // actually visible before advancing to the next stage.
@@ -196,7 +196,6 @@ class _LocalPlayerMoveScreenState extends ConsumerState<LocalPlayerMoveScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
-          // Rounded back button matching the wireframe top nav
           GestureDetector(
             onTap: () => Navigator.of(context).maybePop(),
             child: Container(
@@ -297,7 +296,6 @@ class _GestureCard extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Circular hand image area
                 Container(
                   width: 68,
                   height: 68,

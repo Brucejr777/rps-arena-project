@@ -26,7 +26,8 @@ class MoveButton extends ConsumerWidget {
 
   void _handleTap() {
     if (isDisabled) return;
-    AudioService.instance.playSound('select');
+    // Link the select mp3 to the move-selection action.
+    AudioService.instance.playSelect();
     VibrationService.instance.selection();
     onSelected();
   }
@@ -34,7 +35,6 @@ class MoveButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final accent = ref.watch(appAccentColorProvider);
-
     return GestureDetector(
       onTap: _handleTap,
       child: AnimatedScale(
