@@ -18,13 +18,10 @@ import 'reveal_animation.dart';
 import '../screens/standard_result_screen.dart';
 import '../screens/unlimited_result_screen.dart';
 import '../../online/screens/connection_lost_screen.dart';
+// ── NEW IMPORT: needed for pushAndRemoveUntil navigation ──
+import '../../online/screens/online_match_loader_screen.dart';
 
 /// Online gameplay screen (T99).
-///
-/// Connects to the server-authoritative match endpoint:
-/// - Sends moves via POST /matches/{matchId}/move
-/// - Waits for WebSocket round_result event
-/// - Hides opponent selection until server reveals
 class OnlineGameplayScreen extends ConsumerStatefulWidget {
   final int matchId;
   final int playerId;
@@ -33,9 +30,6 @@ class OnlineGameplayScreen extends ConsumerStatefulWidget {
   final String opponentName;
   final String formatType;
   final int winsRequired;
-
-  /// Whether the local player is player A in the match record.
-  /// Passed explicitly — player ids carry no ordering guarantee.
   final bool isPlayerA;
 
   const OnlineGameplayScreen({
@@ -74,28 +68,15 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   bool _isPaused = false;
   bool _opponentConnected = false;
 
-  // Safety net: if the server doesn't respond within 3 seconds,
-  // poll the match state endpoint and either resolve the round or
-  // let the player retry.
   Timer? _waitingTimeout;
 
-  // Server-revealed data
   String? _serverPlayerAMove;
   String? _serverPlayerBMove;
   bool _serverPlayerAAuto = false;
   bool _serverPlayerBAuto = false;
 
-  // Guards against handling the same round_result twice (once from the
-  // POST response, once from the WebSocket broadcast).
   bool _roundResolved = false;
-
-  // Set after a round's reveal ends — the client waits for the server's
-  // round_start event before beginning the next round.  This prevents
-  // Player 2 (who gets the HTTP response first) from racing ahead.
   bool _waitingForNextRound = false;
-
-  // ── Pick lock (role-agnostic) ─────────────────────────────
-  // Set synchronously on tap to prevent double-submit for BOTH players.
   bool _hasPicked = false;
 
   // ── Rematch state ──────────────────────────────────────────
@@ -106,13 +87,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   String? _rematchRequesterName;
   Timer? _rematchCountdown;
   Timer? _rematchPollTimer;
-
-  // ── FIX #3: re-entrancy guard for ACCEPT ──────────────────
   bool _isAcceptingRematch = false;
-
-  // ── FIX #2: single-navigation guard ───────────────────────
-  // Prevents the HTTP response AND the WebSocket event from both
-  // triggering a route change.
   bool _hasNavigatedToRematch = false;
 
   bool get _isPlayerA => widget.isPlayerA;
@@ -127,8 +102,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _socketClient = MatchSocketClient();
     _connectWebSocket();
 
-    // Safety: if round_start doesn't arrive within 5s (opponent may have
-    // disconnected before we connected), start the round anyway.
     Future.delayed(const Duration(seconds: 5), () {
       if (mounted && !_opponentConnected) {
         _opponentConnected = true;
@@ -157,21 +130,15 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _socketSub?.cancel();
     _socketSub = _socketClient.events.listen(
       _onSocketEvent,
-      onError: (_) {
-        // Socket errors trigger the client's own reconnect loop.
-      },
+      onError: (_) {},
     );
   }
 
-  /// Coerce server numbers defensively (pg COUNT columns arrive as strings).
   int _asInt(dynamic value) =>
       value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 
   void _onSocketEvent(SocketEvent event) {
     if (!mounted) return;
-
-    // The server broadcasts to every connected client — ignore events
-    // belonging to other matches.
     final eventMatchId = event.data['matchId'];
     if (eventMatchId != null && '$eventMatchId' != '${widget.matchId}') return;
 
@@ -258,8 +225,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   void _handleRoundResult(Map<String, dynamic> data) {
     if (_roundResolved) return;
-
-    // Guard against stale events from a previous round.
     final eventRound = _asInt(data['roundNumber']);
     if (eventRound < _currentRound) return;
 
@@ -286,7 +251,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _drawCount = drawCount;
     });
 
-    // Show reveal for 1 second, then advance
     Future.delayed(const Duration(seconds: 1), () {
       if (!mounted) return;
       setState(() {
@@ -532,8 +496,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     }
   }
 
-  // ── Unlimited END MATCH (T103) ──────────────────────────────
-
   void _onEndMatchPressed() {
     showDialog(
       context: context,
@@ -558,8 +520,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
               Navigator.of(context).pop();
               _submitEndMatch();
             },
-            child:
-                const Text('END MATCH', style: TextStyle(color: AppColors.red)),
+            child: const Text('END MATCH',
+                style: TextStyle(color: AppColors.red)),
           ),
         ],
       ),
@@ -571,7 +533,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       setState(() => _isWaitingForServer = true);
       _timer?.cancel();
       await _authClient.post('/matches/${widget.matchId}/end');
-      // Result arrives via WebSocket match_completed event
     } catch (e) {
       if (!mounted) return;
       setState(() => _isWaitingForServer = false);
@@ -579,15 +540,13 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   // ════════════════════════════════════════════════════════════
-  //  REMATCH — corrected logic
+  //  REMATCH
   // ════════════════════════════════════════════════════════════
 
-  /// ── FIX #1 + #2: single, guarded navigation helper ────────
-  /// Uses `context.go()` instead of `pushReplacement()` so the
-  /// route is fully replaced and `OnlineMatchLoaderScreen` is
-  /// guaranteed to rebuild with the new matchId.
-  /// The `_hasNavigatedToRematch` flag ensures this runs at most
-  /// once, eliminating the HTTP-vs-WebSocket race.
+  /// ── FIX: use pushAndRemoveUntil to guarantee a completely new
+  /// widget tree. go_router's go() to the same /online-gameplay
+  /// path can skip rebuilding, which kept the old State (scores,
+  /// _isWaitingForServer, _waitingForNextRound, socket) alive. ──
   void _navigateToRematch(int newMatchId) {
     if (_hasNavigatedToRematch) return;
     _hasNavigatedToRematch = true;
@@ -597,20 +556,28 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
     if (!mounted) return;
 
-    // Clean up overlay state before leaving.
-    setState(() {
-      _showResult = false;
-      _showRematchRequest = false;
-      _isRematchWaiting = false;
-    });
+    final playerName = widget.playerName;
+    final opponentName = widget.opponentName;
 
-    // go() replaces the entire route stack, forcing go_router to
-    // rebuild OnlineMatchLoaderScreen with a fresh ValueKey.
-    GoRouter.of(context).go('/online-gameplay', extra: {
-      'matchId': newMatchId,
-      'playerName': widget.playerName,
-      'opponentName': widget.opponentName,
-    });
+    // Capture the navigator BEFORE this widget is disposed.
+    final navigator = Navigator.of(context);
+
+    // pushAndRemoveUntil removes every existing route and pushes a
+    // brand-new OnlineMatchLoaderScreen. This guarantees:
+    //   • a fresh OnlineMatchLoaderScreen  → fresh _resolve()
+    //   • a fresh OnlineGameplayScreen     → scores = 0, flags = false
+    //   • a fresh MatchSocketClient        → connects to the NEW match
+    navigator.pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => OnlineMatchLoaderScreen(
+          key: ValueKey(newMatchId),
+          matchId: newMatchId,
+          playerName: playerName,
+          opponentName: opponentName,
+        ),
+      ),
+      (route) => false, // remove ALL previous routes
+    );
   }
 
   void _requestRematch() async {
@@ -623,7 +590,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       await _authClient.post('/matches/${widget.matchId}/rematch/request');
       _startRematchPolling();
 
-      // 30-second timeout for rematch request
       _rematchCountdown?.cancel();
       int remaining = 30;
       _rematchCountdown = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -658,9 +624,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     }
   }
 
-  /// ── FIX #3 + #4: guarded, feedback-enabled ACCEPT ─────────
   void _acceptRematch() async {
-    // Prevent double-tap / re-entrant calls.
     if (_isAcceptingRematch || _hasNavigatedToRematch) return;
 
     _rematchCountdown?.cancel();
@@ -683,7 +647,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         return;
       }
 
-      // ── FIX #1: single guarded navigation via go() ──
       _navigateToRematch(newMatchId);
     } catch (e) {
       if (!mounted) return;
@@ -713,13 +676,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     });
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/decline');
-    } catch (_) {
-      // Decline failed — best-effort
-    }
+    } catch (_) {}
   }
 
-  /// ── FIX #2: WebSocket path also funnels through the same
-  /// guarded helper, so it cannot double-navigate. ────────────
   void _handleRematchAccepted(Map<String, dynamic> data) {
     final newMatchId = (data['newMatchId'] as num?)?.toInt();
     if (newMatchId == null) return;
@@ -742,7 +701,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     });
   }
 
-  /// ── FIX #1: polling path also uses the guarded helper ─────
   void _startRematchPolling() {
     _rematchPollTimer?.cancel();
     _rematchPollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
@@ -773,14 +731,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
             );
           }
         }
-      } catch (_) {
-        // Polling failed, will retry on next tick
-      }
+      } catch (_) {}
     });
   }
 
   // ════════════════════════════════════════════════════════════
-  //  UI helpers
+  //  UI
   // ════════════════════════════════════════════════════════════
 
   Widget _handImage(String? move, {required bool isPlayer}) {
@@ -821,7 +777,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
-                    // ── Header ──────────────────────────────────
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -855,7 +810,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    // ── Score ───────────────────────────────────
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -897,7 +851,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    // ── Hands ───────────────────────────────────
                     const Spacer(),
                     if (_isRevealing &&
                         _serverPlayerAMove != null &&
@@ -959,7 +912,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                         ],
                       ),
                     const Spacer(),
-                    // ── Move buttons ────────────────────────────
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
@@ -1029,7 +981,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // ── Victory/Defeat Card ───────────────────────
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
@@ -1077,7 +1028,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 ),
               ),
               const SizedBox(height: 48),
-              // ── REMATCH button ────────────────────────────
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -1100,7 +1050,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              // ── MAIN MENU button ──────────────────────────
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
@@ -1129,8 +1078,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     );
   }
 
-  /// ── FIX #4: ACCEPT button now shows a spinner while the
-  /// POST is in-flight, giving the user immediate feedback. ───
   Widget _buildRematchRequestOverlay() {
     return Container(
       color: Colors.black.withValues(alpha: 0.85),

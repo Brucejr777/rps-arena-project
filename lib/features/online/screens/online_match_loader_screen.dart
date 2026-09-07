@@ -1,3 +1,5 @@
+// lib/features/online/screens/online_match_loader_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,11 +8,6 @@ import '../../auth/controllers/auth_controller.dart';
 import '../../match/widgets/online_gameplay_screen.dart';
 
 /// Resolves match participants before entering online gameplay.
-///
-/// Takes a [matchId] plus optional display names, fetches
-/// GET /matches/:matchId/state to determine the player A/B ids and
-/// format, maps the signed-in user to the correct side, then builds
-/// [OnlineGameplayScreen].
 class OnlineMatchLoaderScreen extends ConsumerStatefulWidget {
   final int matchId;
   final String? playerName;
@@ -37,6 +34,20 @@ class _OnlineMatchLoaderScreenState
   void initState() {
     super.initState();
     _resolve();
+  }
+
+  // ── FIX: if the widget is updated in-place (same element, new matchId)
+  // re-fetch the match state instead of showing stale data. ──
+  @override
+  void didUpdateWidget(covariant OnlineMatchLoaderScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.matchId != widget.matchId) {
+      setState(() {
+        _resolved = null;
+        _error = null;
+      });
+      _resolve();
+    }
   }
 
   Future<void> _resolve() async {
@@ -85,7 +96,8 @@ class _OnlineMatchLoaderScreenState
               children: [
                 Text(
                   _error!,
-                  style: const TextStyle(color: AppColors.red, fontSize: 14),
+                  style:
+                      const TextStyle(color: AppColors.red, fontSize: 14),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
@@ -128,7 +140,12 @@ class _OnlineMatchLoaderScreenState
     }
 
     final r = _resolved!;
+
+    // ── FIX: key forces Flutter to create a brand-new
+    // OnlineGameplayScreen element whenever matchId changes,
+    // guaranteeing fresh State (scores = 0, flags = false). ──
     return OnlineGameplayScreen(
+      key: ValueKey('gameplay_${widget.matchId}'),
       matchId: widget.matchId,
       playerId: r['playerId'] as int,
       playerName: r['playerName'] as String,
