@@ -243,6 +243,34 @@ class _SinglePlayerMatchFlowScreenState
       child: Stack(
         children: [
           _buildStageContent(),
+          
+          // ── FIX: Overlay the current Round Number at the top center ──
+          if (_stage != _SpFlowStage.roundComplete &&
+              _stage != _SpFlowStage.finishing)
+            Positioned(
+              top: 50,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Text(
+                  'ROUND ${_engine.currentRoundNumber}',
+                  style: const TextStyle(
+                    color: AppColors.primaryText,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    letterSpacing: 1.2,
+                    shadows: [
+                      Shadow(
+                        blurRadius: 4,
+                        color: Colors.black87,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            
           if (_canEndMatchNow)
             Positioned(
               top: 48,
@@ -270,7 +298,7 @@ class _SinglePlayerMatchFlowScreenState
     switch (_stage) {
       case _SpFlowStage.countdown:
         return Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: Colors.transparent,
           body: Center(
             child: CountdownAnimation(
               value: _engine.countdownValue,
@@ -287,7 +315,7 @@ class _SinglePlayerMatchFlowScreenState
 
       case _SpFlowStage.aiThinking:
         return const Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: Colors.transparent,
           body: Center(
             child: CircularProgressIndicator(
               color: AppColors.defaultAccent,
@@ -304,7 +332,7 @@ class _SinglePlayerMatchFlowScreenState
         );
 
         return Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: Colors.transparent,
           body: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -367,7 +395,7 @@ class _SinglePlayerMatchFlowScreenState
         final playerBMove = _engine.playerBMove;
 
         return Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: Colors.transparent,
           body: Center(
             child: playerAMove != null && playerBMove != null
                 ? FinalFinishAnimation(

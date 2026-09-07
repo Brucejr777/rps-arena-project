@@ -241,6 +241,34 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
       child: Stack(
         children: [
           _buildStageContent(),
+          
+          // ── FIX: Overlay the current Round Number at the top center ──
+          if (_stage != _LocalFlowStage.roundComplete &&
+              _stage != _LocalFlowStage.finishing)
+            Positioned(
+              top: 50,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Text(
+                  'ROUND ${_engine.currentRoundNumber}',
+                  style: const TextStyle(
+                    color: AppColors.primaryText,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    letterSpacing: 1.2,
+                    shadows: [
+                      Shadow(
+                        blurRadius: 4,
+                        color: Colors.black87,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            
           if (_canEndMatchNow)
             Positioned(
               top: 48,
@@ -268,7 +296,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
     switch (_stage) {
       case _LocalFlowStage.countdown:
         return Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: Colors.transparent,
           body: Center(
             child: CountdownAnimation(
               value: _engine.countdownValue,
@@ -303,7 +331,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         );
 
         return Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: Colors.transparent,
           body: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -386,7 +414,7 @@ class _LocalMatchFlowScreenState extends ConsumerState<LocalMatchFlowScreen> {
         final playerBMove = _engine.playerBMove;
 
         return Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: Colors.transparent,
           body: Center(
             child: playerAMove != null && playerBMove != null
                 ? FinalFinishAnimation(
