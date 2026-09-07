@@ -1,9 +1,7 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
 import '../../../core/services/audio_service.dart';
 import '../../../core/services/vibration_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -16,6 +14,7 @@ import '../domain/match_format.dart';
 import '../widgets/countdown_animation.dart';
 import '../widgets/draw_animation.dart';
 import '../widgets/final_finish_animation.dart';
+import '../widgets/local_scoreboard.dart'; // ← FIX: import LocalScoreboard
 import '../widgets/round_victory_animation.dart';
 import '../widgets/theme_background.dart';
 import 'local_player_move_screen.dart';
@@ -51,13 +50,10 @@ class _SinglePlayerMatchFlowScreenState
   late final MatchEngine _engine;
   final AiService _ai = AiService();
   final LocalStatsRepository _statsRepo = LocalStatsRepository();
-
   _SpFlowStage _stage = _SpFlowStage.countdown;
   Timer? _countdownTimer;
-
   bool _victoryAnimationsEnabled = true;
 
-  /// Game-mode label shown on every in-game screen, e.g. "Easy - Best of 3".
   String get _modeLabel =>
       '${widget.difficulty.label} - ${widget.format.displayLabel}';
 
@@ -71,9 +67,7 @@ class _SinglePlayerMatchFlowScreenState
   @override
   void initState() {
     super.initState();
-
     AudioService.instance.stopMusic();
-
     _engine = MatchEngine(widget.format);
     _startRound();
     _loadVictoryAnimationSetting();
@@ -82,7 +76,6 @@ class _SinglePlayerMatchFlowScreenState
   Future<void> _loadVictoryAnimationSetting() async {
     final settings = await SettingsRepository().load();
     if (!mounted) return;
-
     setState(() {
       _victoryAnimationsEnabled = settings.victoryAnimationsEnabled;
     });
@@ -95,28 +88,21 @@ class _SinglePlayerMatchFlowScreenState
     super.dispose();
   }
 
-  // ── Round lifecycle ──────────────────────────────────────────
-
   void _startRound() {
     _engine.startRound();
     _engine.beginCountdown();
-
     setState(() {
       _stage = _SpFlowStage.countdown;
     });
-
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final finished = _engine.tickCountdown();
-
       if (mounted) {
         setState(() {});
       }
-
       if (finished) {
         timer.cancel();
         _engine.beginSelection();
-
         if (mounted) {
           setState(() {
             _stage = _SpFlowStage.playerMove;
@@ -128,21 +114,15 @@ class _SinglePlayerMatchFlowScreenState
 
   void _onPlayerMove(String move) {
     _engine.submitPlayerAMove(move);
-
-    // Link the transition mp3 to the stage change (selection -> AI thinking).
     AudioService.instance.playTransition();
-
     setState(() {
       _stage = _SpFlowStage.aiThinking;
     });
-
     Future.delayed(const Duration(milliseconds: 500), () {
       if (!mounted) return;
-
       final aiMove = _ai.getMove(widget.difficulty);
       _engine.submitPlayerBMove(aiMove);
       _ai.recordPlayerMove(move);
-
       _reveal();
     });
   }
@@ -151,11 +131,8 @@ class _SinglePlayerMatchFlowScreenState
     _engine.lockSelections();
     _engine.reveal();
     _engine.resolveRound();
-
-    // Link the reveal mp3 to the reveal stage.
     AudioService.instance.playReveal();
     VibrationService.instance.reveal();
-
     setState(() {
       _stage = _SpFlowStage.revealing;
     });
@@ -164,26 +141,22 @@ class _SinglePlayerMatchFlowScreenState
       _statsRepo.recordMoveSelection(_engine.playerAMove!);
     }
 
-    // Link outcome mp3s (victory / defeat / draw) to the round result.
     switch (_engine.lastResult) {
       case RoundResult.playerAWin:
         AudioService.instance.playVictory();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.won);
         VibrationService.instance.victory();
         break;
-
       case RoundResult.playerBWin:
         AudioService.instance.playDefeat();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.lost);
         VibrationService.instance.defeat();
         break;
-
       case RoundResult.draw:
         AudioService.instance.playDraw();
         _statsRepo.recordRoundOutcome(RoundOutcomeForStats.drew);
         VibrationService.instance.draw();
         break;
-
       case null:
         break;
     }
@@ -191,21 +164,17 @@ class _SinglePlayerMatchFlowScreenState
     final delay = (_isMatchWinningRound && _victoryAnimationsEnabled)
         ? const Duration(seconds: 3)
         : const Duration(seconds: 2);
-
     Future.delayed(delay, _advanceAfterReveal);
   }
 
   void _advanceAfterReveal() {
     if (!mounted) return;
-
     _engine.checkMatchCondition();
-
     if (_engine.matchFinished) {
       if (widget.format.isUnlimited) {
         _statsRepo.recordUnlimitedMatchResult(
           winner: _engine.matchWinner,
         );
-
         _statsRepo.recordLocalMatch(
           opponentName: 'AI Bot',
           mode: 'single_player',
@@ -220,7 +189,6 @@ class _SinglePlayerMatchFlowScreenState
         _statsRepo.recordStandardMatchResult(
           playerWon: _engine.matchWinner == 'A',
         );
-
         _statsRepo.recordLocalMatch(
           opponentName: 'AI Bot',
           mode: 'single_player',
@@ -232,7 +200,6 @@ class _SinglePlayerMatchFlowScreenState
                   : 'loss',
         );
       }
-
       setState(() {
         _stage = _SpFlowStage.roundComplete;
       });
@@ -243,27 +210,21 @@ class _SinglePlayerMatchFlowScreenState
 
   bool get _isMatchWinningRound {
     if (widget.format.isUnlimited) return false;
-
     if (_engine.lastResult == RoundResult.playerAWin) {
       return widget.format.isMatchWon(_engine.playerAScore);
     }
-
     if (_engine.lastResult == RoundResult.playerBWin) {
       return widget.format.isMatchWon(_engine.playerBScore);
     }
-
     return false;
   }
 
   bool get _canEndMatchNow {
     if (!widget.format.isUnlimited) return false;
     if (_engine.totalRounds == 0) return false;
-
     return _stage == _SpFlowStage.countdown ||
         _stage == _SpFlowStage.playerMove;
   }
-
-  // ── Safe header widgets ─────────────────────────────────────
 
   Widget _buildRoundHeader() {
     return Column(
@@ -360,6 +321,15 @@ class _SinglePlayerMatchFlowScreenState
             child: Column(
               children: [
                 _buildTopBar(showEndMatch: _canEndMatchNow),
+                // ── FIX: add scoreboard with draws below round header ──
+                const SizedBox(height: 8),
+                LocalScoreboard(
+                  playerAScore: _engine.playerAScore,
+                  playerBScore: _engine.playerBScore,
+                  roundNumber: _engine.currentRoundNumber,
+                  draws: _engine.drawCount,
+                  modeLabel: _modeLabel,
+                ),
                 Expanded(
                   child: Center(
                     child: CountdownAnimation(
@@ -372,7 +342,6 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
-
       case _SpFlowStage.playerMove:
         return LocalPlayerMoveScreen(
           playerNumber: 1,
@@ -382,7 +351,6 @@ class _SinglePlayerMatchFlowScreenState
           showRoundLabel: true,
           onEndMatch: _canEndMatchNow ? _onEndMatchPressed : null,
         );
-
       case _SpFlowStage.aiThinking:
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -401,20 +369,27 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
-
       case _SpFlowStage.revealing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.lastResult == RoundResult.playerAWin;
         final roundKey = ValueKey(
           'sp_round_${_engine.currentRoundNumber}_${_engine.lastResult}',
         );
-
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: SafeArea(
             child: Column(
               children: [
                 _buildTopBar(),
+                // ── FIX: add scoreboard with draws below round header ──
+                const SizedBox(height: 8),
+                LocalScoreboard(
+                  playerAScore: _engine.playerAScore,
+                  playerBScore: _engine.playerBScore,
+                  roundNumber: _engine.currentRoundNumber,
+                  draws: _engine.drawCount,
+                  modeLabel: _modeLabel,
+                ),
                 Expanded(
                   child: Center(
                     child: SingleChildScrollView(
@@ -489,13 +464,11 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
-
       case _SpFlowStage.finishing:
         final themeController = ref.read(gameThemeProvider.notifier);
         final playerAWon = _engine.matchWinner == 'A';
         final playerAMove = _engine.playerAMove;
         final playerBMove = _engine.playerBMove;
-
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: SafeArea(
@@ -515,7 +488,6 @@ class _SinglePlayerMatchFlowScreenState
             ),
           ),
         );
-
       case _SpFlowStage.roundComplete:
         if (widget.format.isUnlimited) {
           return UnlimitedResultScreen(
@@ -529,9 +501,7 @@ class _SinglePlayerMatchFlowScreenState
             onMainMenu: () => GoRouter.of(context).go('/main'),
           );
         }
-
         final playerWon = _engine.matchWinner == 'A';
-
         return StandardResultScreen(
           playerWon: playerWon,
           playerScore: _engine.playerAScore,
@@ -588,14 +558,11 @@ class _SinglePlayerMatchFlowScreenState
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-
               _countdownTimer?.cancel();
               _engine.endUnlimitedMatch();
-
               _statsRepo.recordUnlimitedMatchResult(
                 winner: _engine.matchWinner,
               );
-
               _statsRepo.recordLocalMatch(
                 opponentName: 'AI Bot',
                 mode: 'single_player',
@@ -606,7 +573,6 @@ class _SinglePlayerMatchFlowScreenState
                         ? 'draw'
                         : 'loss',
               );
-
               if (_engine.matchWinner != null &&
                   _victoryAnimationsEnabled &&
                   _engine.playerAMove != null &&
@@ -614,10 +580,8 @@ class _SinglePlayerMatchFlowScreenState
                 setState(() {
                   _stage = _SpFlowStage.finishing;
                 });
-
                 Future.delayed(const Duration(seconds: 3), () {
                   if (!mounted) return;
-
                   setState(() {
                     _stage = _SpFlowStage.roundComplete;
                   });

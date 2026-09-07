@@ -58,6 +58,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   int _drawCount = 0;
   int _selectionTimer = 10;
   Timer? _timer;
+
   String? _selectedMove;
   bool _isAutoMove = false;
   bool _isWaitingForServer = false;
@@ -74,15 +75,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   bool _waitingForNextRound = false;
   bool _hasPicked = false;
 
-  // ── FIX: Store round result from server ──
-  String? _roundResult; // 'player_a_wins', 'player_b_wins', 'draw'
+  String? _roundResult;
   bool _showRoundResult = false;
 
-  // ── FIX: Store match-level result from server ──
   bool _matchDraw = false;
   int? _matchWinnerId;
 
-  // ── Rematch state ──
   bool _showResult = false;
   bool _showRematchRequest = false;
   bool _isRematchWaiting = false;
@@ -98,7 +96,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   bool get _canEndMatch =>
       _isUnlimited && _drawCount + _playerScore + _opponentScore > 0;
 
-  // ── FIX: Helper to determine if local player won the round ──
   bool get _localPlayerWonRound {
     if (_roundResult == null) return false;
     if (_roundResult == 'player_a_wins') return _isPlayerA;
@@ -108,7 +105,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   bool get _roundIsDraw => _roundResult == 'draw';
 
-  // ── FIX: Helper to get round result display text ──
   String get _roundResultText {
     if (_roundIsDraw) return 'DRAW';
     if (_localPlayerWonRound) return 'YOU WIN THE ROUND';
@@ -127,12 +123,14 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _authClient = ref.read(authControllerProvider.notifier).client;
     _socketClient = MatchSocketClient();
     _connectWebSocket();
+
     Future.delayed(const Duration(seconds: 5), () {
       if (mounted && !_opponentConnected) {
         _opponentConnected = true;
         _startRound();
       }
     });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(matchControllerProvider.notifier).setMode(MatchMode.online);
     });
@@ -253,8 +251,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     final drawCount = _asInt(data['drawCount']);
     final totalRounds = _asInt(data['totalRounds']);
     final matchFinished = data['matchFinished'] as bool? ?? false;
-
-    // ── FIX: Store the round result from the server ──
     final result = data['result'] as String?;
 
     setState(() {
@@ -271,7 +267,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _drawCount = drawCount;
     });
 
-    // ── FIX: Extended delay to show round result text (1.5s instead of 1s) ──
     Future.delayed(const Duration(milliseconds: 1500), () {
       if (!mounted) return;
       setState(() {
@@ -283,10 +278,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         _serverPlayerAAuto = false;
         _serverPlayerBAuto = false;
       });
-
       if (matchFinished) {
         _timer?.cancel();
-        // ── FIX: Store match winner from round_result event ──
         final winnerId = data['winnerId'];
         if (winnerId != null) {
           _matchWinnerId = _asInt(winnerId);
@@ -311,10 +304,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   void _handleMatchCompleted(Map<String, dynamic> data) {
-    // ── FIX: Store winnerId and matchDraw from server ──
     final winnerId = data['winnerId'];
     final matchDraw = data['matchDraw'] as bool? ?? false;
-
     setState(() {
       _playerScore = _isPlayerA
           ? _asInt(data['playerAScore'])
@@ -345,7 +336,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _roundResult = null;
       _showRoundResult = false;
     });
-
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_selectionTimer <= 1) {
@@ -380,12 +370,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _timer?.cancel();
     _waitingTimeout?.cancel();
     _pollRetries = 0;
-
     _waitingTimeout = Timer(const Duration(seconds: 3), () {
       if (!mounted || !_isWaitingForServer) return;
       _pollRoundState();
     });
-
     try {
       final res = await _authClient.post(
         '/matches/${widget.matchId}/move',
@@ -429,7 +417,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       final rounds = data['rounds'] as List<dynamic>? ?? [];
       final matchFinished = data['winnerId'] != null ||
           (data['matchDraw'] as bool? ?? false);
-
       for (final r in rounds) {
         if (r is Map<String, dynamic> && r['roundNumber'] == _currentRound) {
           final result = r['result'] as String?;
@@ -455,7 +442,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           }
         }
       }
-
       if (_pollRetries < _maxPollRetries) {
         _waitingTimeout = Timer(const Duration(seconds: 2), () {
           if (!mounted || !_isWaitingForServer) return;
@@ -579,11 +565,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
     if (!mounted) return;
-
     final playerName = widget.playerName;
     final opponentName = widget.opponentName;
     final navigator = Navigator.of(context);
-
     navigator.pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => OnlineMatchLoaderScreen(
@@ -724,7 +708,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         final data = res.data as Map<String, dynamic>;
         final status = data['rematchStatus'] as String?;
         final newMatchId = (data['newMatchId'] as num?)?.toInt();
-
         if (status == 'accepted' && newMatchId != null) {
           _rematchPollTimer?.cancel();
           if (!mounted) return;
@@ -834,6 +817,21 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
+                            // ── FIX: display draw count below timer ──
+                            if (_drawCount > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  'DRAWS $_drawCount',
+                                  style: TextStyle(
+                                    color: Colors.white
+                                        .withValues(alpha: 0.55),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                              ),
                             if (_isWaitingForServer)
                               const Text(
                                 'WAITING...',
@@ -881,7 +879,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                             playerBAuto:
                                 _isPlayerA ? _serverPlayerBAuto : _serverPlayerAAuto,
                           ),
-                          // ── FIX: Display round winner text ──
                           if (_showRoundResult && _roundResult != null) ...[
                             const SizedBox(height: 16),
                             Container(
@@ -1010,10 +1007,8 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   }
 
   Widget _buildResultOverlay() {
-    // ── FIX: Use server-authoritative winner instead of score comparison ──
     final bool playerWon;
     final bool isDraw;
-
     if (_matchDraw) {
       playerWon = false;
       isDraw = true;
@@ -1021,13 +1016,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       playerWon = _matchWinnerId == widget.playerId;
       isDraw = false;
     } else {
-      // Fallback: score comparison (should not normally reach here)
       playerWon = _playerScore > _opponentScore;
       isDraw = _playerScore == _opponentScore;
     }
-
     final total = _playerScore + _opponentScore + _drawCount;
-
     final String resultTitle;
     final Color resultColor;
     if (isDraw) {
