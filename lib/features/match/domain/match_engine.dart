@@ -71,6 +71,7 @@ class MatchEngine {
   playerASelectionLocked = false;
   playerBSelectionLocked = false;
   lastResult = null;
+  currentRoundNumber;
 }
 
   void beginCountdown() {
