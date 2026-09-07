@@ -1,7 +1,6 @@
 import 'match_format.dart';
 import 'dart:math';
 import 'resolution.dart';
-// no new import needed yet — dart:core covers int/bool
 
 enum RoundPhase {
   scoreDisplay,
@@ -19,7 +18,6 @@ enum RoundResult { playerAWin, playerBWin, draw }
 
 class MatchEngine {
   final MatchFormatConfig config;
-
   int playerAScore = 0;
   int playerBScore = 0;
   int currentRoundNumber = 1;
@@ -30,207 +28,154 @@ class MatchEngine {
   int selectionSecondsRemaining = 10;
   bool playerAAutoSelected = false;
   bool playerBAutoSelected = false;
+  
+  String? playerAMove;
+  String? playerBMove;
+  
   RoundPhase phase = RoundPhase.scoreDisplay;
-
-  /// Total rounds played so far (wins + losses + draws) — used for
-  /// Unlimited match summaries.
+  RoundResult? lastResult;
+  bool matchFinished = false;
+  String? matchWinner;
+  
+  MatchEngine(this.config);
+  
   int get totalRounds => playerAScore + playerBScore + drawCount;
-
-  /// Total Rounds = Player A wins + Player B wins + Draws (already exists
-  /// as `totalRounds` from T27).
-
-  /// Player 1 Win Rate = Player 1 wins ÷ Total Rounds × 100
-  /// Returns 0.0 when totalRounds is 0 (no division by zero).
+  
   double get playerAWinRate {
     if (totalRounds == 0) return 0.0;
     return (playerAScore / totalRounds) * 100;
   }
-
-  /// Player 2 Win Rate = Player 2 wins ÷ Total Rounds × 100
+  
   double get playerBWinRate {
     if (totalRounds == 0) return 0.0;
     return (playerBScore / totalRounds) * 100;
   }
-
-  String? playerAMove;
-  String? playerBMove;
-  RoundResult? lastResult;
-
-  bool matchFinished = false;
-  String? matchWinner; // 'A', 'B', or null if unfinished/draw
-
-  MatchEngine(this.config);
-
-  /// Advances through the fixed sequence for a round.
-  /// Countdown/timer durations (T14/T16) and draw handling (T13)
-  /// get layered onto this in the next tasks.
+  
   void startRound() {
-  phase = RoundPhase.scoreDisplay;
-  playerAMove = null;
-  playerBMove = null;
-  playerASelectionLocked = false;
-  playerBSelectionLocked = false;
-  lastResult = null;
-  currentRoundNumber;
-}
-
+    phase = RoundPhase.scoreDisplay;
+    playerAMove = null;
+    playerBMove = null;
+    playerASelectionLocked = false;
+    playerBSelectionLocked = false;
+    lastResult = null;
+  }
+  
   void beginCountdown() {
-  phase = RoundPhase.countdown;
-  countdownValue = 3;
-}
-
-  /// Call once per second while phase == RoundPhase.countdown.
-  /// Returns true when the countdown has finished (i.e. GO! has been shown
-  /// and it's time to move to selection).
+    phase = RoundPhase.countdown;
+    countdownValue = 3;
+  }
+  
   bool tickCountdown() {
-    if (phase != RoundPhase.countdown) return false;
-
-    if (countdownValue > 1) {
-      countdownValue--; // 3 -> 2 -> 1
-      return false;
+    countdownValue--;
+    if (countdownValue < 0) {
+      phase = RoundPhase.go;
+      return true;
     }
-
-    if (countdownValue == 1) {
-      countdownValue = 0; // 0 represents "GO!" being shown
-      return false;
-    }
-
-    // countdownValue == 0 means GO! has already been displayed for its
-    // one second — countdown is complete.
-    return true;
+    return false;
+  }
+  
+  void beginSelection() {
+    phase = RoundPhase.selecting;
+    selectionSecondsRemaining = 10;
+    playerAAutoSelected = false;
+    playerBAutoSelected = false;
   }
 
-  /// Call once per second while phase == RoundPhase.selecting.
-  /// Returns true when the timer has hit zero and auto-selection should occur.
+  /// Ticks the selection timer down by one second.
+  /// Returns `true` if the timer has reached zero (time's up).
   bool tickSelectionTimer() {
-  if (phase != RoundPhase.selecting) return false;
-
-  if (selectionSecondsRemaining > 0) {
-    selectionSecondsRemaining--;
+    if (selectionSecondsRemaining > 0) {
+      selectionSecondsRemaining--;
+    }
+    return selectionSecondsRemaining <= 0;
   }
 
-  if (selectionSecondsRemaining <= 0) {
-    _autoSelectIfNeeded();
-    return true;
-  }
-  return false;
-}
-
-bool get isTimerWarning => selectionSecondsRemaining <= 5;
-
-void _autoSelectIfNeeded() {
-  const moves = ['rock', 'paper', 'scissors'];
-  final rand = Random();
-
-  if (playerAMove == null) {
-    playerAMove = moves[rand.nextInt(3)];
-    playerAAutoSelected = true;
+  /// True when the selection timer is at 5 seconds or less,
+  /// indicating the UI should show a warning state (e.g., red text).
+  bool get isTimerWarning => selectionSecondsRemaining <= 5;
+  
+  void submitPlayerAMove(String move) {
+    if (playerASelectionLocked) return;
+    playerAMove = move;
     playerASelectionLocked = true;
   }
-  if (playerBMove == null) {
-    playerBMove = moves[rand.nextInt(3)];
-    playerBAutoSelected = true;
+  
+  void submitPlayerBMove(String move) {
+    if (playerBSelectionLocked) return;
+    playerBMove = move;
     playerBSelectionLocked = true;
   }
-}
-
-  void beginSelection() {
-  phase = RoundPhase.selecting;
-  selectionSecondsRemaining = 10;
-  playerAAutoSelected = false;
-  playerBAutoSelected = false;
-}
-
   
-
-  void submitPlayerAMove(String move) {
-  if (playerASelectionLocked) return; // selection cannot change
-  playerAMove = move;
-  playerASelectionLocked = true;
-}
-
-void submitPlayerBMove(String move) {
-  if (playerBSelectionLocked) return;
-  playerBMove = move;
-  playerBSelectionLocked = true;
-}
-
   void lockSelections() {
     phase = RoundPhase.locked;
+    final moves = ['rock', 'paper', 'scissors'];
+    final rand = Random();
+    if (playerAMove == null) {
+      playerAMove = moves[rand.nextInt(3)];
+      playerAAutoSelected = true;
+      playerASelectionLocked = true;
+    }
+    if (playerBMove == null) {
+      playerBMove = moves[rand.nextInt(3)];
+      playerBAutoSelected = true;
+      playerBSelectionLocked = true;
+    }
   }
-
+  
   void reveal() {
     phase = RoundPhase.revealing;
   }
-
-  /// Resolves the round using both submitted moves.
-  /// Placeholder resolution logic here — T17 formalizes this into a
-  /// dedicated resolution.dart table; this will be swapped to call that.
-  void resolveRound() {
-  phase = RoundPhase.result;
-
-  final a = playerAMove;
-  final b = playerBMove;
-  if (a == null || b == null) return;
-
-  final outcome = Resolution.resolve(a, b);
-  lastResult = switch (outcome) {
-    RoundOutcome.draw => RoundResult.draw,
-    RoundOutcome.playerAWins => RoundResult.playerAWin,
-    RoundOutcome.playerBWins => RoundResult.playerBWin,
-  };
-
-  _applyScore();
-  phase = RoundPhase.resultAnimation;
-}
-
-  void _applyScore() {
-  if (lastResult == RoundResult.playerAWin) {
-    playerAScore++;
-  } else if (lastResult == RoundResult.playerBWin) {
-    playerBScore++;
-  } else if (lastResult == RoundResult.draw) {
-    drawCount++;
-  }
-}
-
-  /// Checks whether the match is complete after this round, and advances
-  /// to the next round otherwise.
-  void checkMatchCondition() {
-  phase = RoundPhase.roundComplete;
-
-  // A draw never ends the match and never counts toward winsRequired —
-  // it just replays (standard) or accumulates (Unlimited) at the same
-  // round number logic below.
-  if (lastResult == RoundResult.draw) {
-    if (config.isUnlimited) {
-      // Unlimited: draw count already incremented, next round begins
-      // automatically — no cap on draw count.
-      currentRoundNumber++;
-    } else {
-      // Standard formats: drawn round replays immediately.
-      // We don't increment currentRoundNumber, so the same round replays.
+  
+  RoundOutcome _resolve(String moveA, String moveB) {
+    if (moveA == moveB) return RoundOutcome.draw;
+    const beats = {
+      'rock': 'scissors',
+      'paper': 'rock',
+      'scissors': 'paper',
+    };
+    if (beats[moveA] == moveB) {
+      return RoundOutcome.playerAWins;
     }
-    return;
+    return RoundOutcome.playerBWins;
   }
-
-  if (config.isUnlimited) {
-    currentRoundNumber++;
-    return;
+  
+  void resolveRound() {
+    final outcome = _resolve(playerAMove!, playerBMove!);
+    
+    lastResult = switch (outcome) {
+      RoundOutcome.draw => RoundResult.draw,
+      RoundOutcome.playerAWins => RoundResult.playerAWin,
+      RoundOutcome.playerBWins => RoundResult.playerBWin,
+    };
+    _applyScore();
+    phase = RoundPhase.resultAnimation;
   }
-
-  if (config.isMatchWon(playerAScore)) {
-    matchFinished = true;
-    matchWinner = 'A';
-  } else if (config.isMatchWon(playerBScore)) {
-    matchFinished = true;
-    matchWinner = 'B';
-  } else {
-    currentRoundNumber++;
+  
+  void _applyScore() {
+    if (lastResult == RoundResult.playerAWin) {
+      playerAScore++;
+    } else if (lastResult == RoundResult.playerBWin) {
+      playerBScore++;
+    } else if (lastResult == RoundResult.draw) {
+      drawCount++;
+    }
   }
-}
-
-  /// Manual end for Unlimited matches (T27 wires this to the UI).
+  
+  void checkMatchCondition() {
+    phase = RoundPhase.roundComplete;
+    if (config.isUnlimited) return;
+    
+    if (playerAScore >= config.winsRequired) {
+      matchFinished = true;
+      matchWinner = 'A';
+    } else if (playerBScore >= config.winsRequired) {
+      matchFinished = true;
+      matchWinner = 'B';
+    } else {
+      currentRoundNumber++;
+    }
+  }
+  
   void endUnlimitedMatch() {
     matchFinished = true;
     if (playerAScore > playerBScore) {
@@ -238,7 +183,7 @@ void submitPlayerBMove(String move) {
     } else if (playerBScore > playerAScore) {
       matchWinner = 'B';
     } else {
-      matchWinner = null; // Match Draw
+      matchWinner = null;
     }
   }
 }
