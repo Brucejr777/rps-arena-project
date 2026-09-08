@@ -160,6 +160,7 @@ final GoRouter appRouter = GoRouter(
       path: '/quick-match-setup',
       builder: (context, state) => const QuickMatchSetupScreen(),
     ),
+    // ── FIX: Use pop() instead of go() so the navigation stack remains correct ──
     GoRoute(
       path: '/quick-match-create',
       builder: (context, state) {
@@ -168,7 +169,7 @@ final GoRouter appRouter = GoRouter(
           formatType: args['formatType'] as String? ?? 'bestOf3',
           formatLabel: args['formatLabel'] as String? ?? 'BEST OF 3',
           winsRequired: args['winsRequired'] as int? ?? 2,
-          onCancel: () => context.go('/quick-match-setup'),
+          onCancel: () => Navigator.of(context).pop(),
         );
       },
     ),
@@ -181,7 +182,7 @@ final GoRouter appRouter = GoRouter(
           formatLabel: args['formatLabel'] as String? ?? 'BEST OF 3',
           winsRequired: args['winsRequired'] as int? ?? 2,
           rating: args['rating'] as int? ?? 1000,
-          onCancel: () => context.go('/quick-match-setup'),
+          onCancel: () => Navigator.of(context).pop(),
         );
       },
     ),

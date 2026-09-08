@@ -14027,6 +14027,7 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
     'Titan',
     'Nova'
   ];
+
   late List<String> _bracket;
   late List<String> _nextRound;
   int _currentRound = 0; // 0=QF, 1=SF, 2=F
@@ -14122,7 +14123,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
     Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
       _currentMatch++;
-
       // Check if round is complete
       if (_currentMatch >= _bracket.length ~/ 2) {
         _advanceRound();
@@ -14401,7 +14401,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
                 children: [
                   MoveButton(
                     move: 'rock',
-                    iconAsset: 'assets/icons/icon_rock.svg',
                     isSelected: _selectedMove == 'rock',
                     isDisabled: !_isMatchActive,
                     onSelected: () => _selectMove('rock'),
@@ -14409,7 +14408,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
                   ),
                   MoveButton(
                     move: 'paper',
-                    iconAsset: 'assets/icons/icon_paper.svg',
                     isSelected: _selectedMove == 'paper',
                     isDisabled: !_isMatchActive,
                     onSelected: () => _selectMove('paper'),
@@ -14417,7 +14415,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
                   ),
                   MoveButton(
                     move: 'scissors',
-                    iconAsset: 'assets/icons/icon_scissors.svg',
                     isSelected: _selectedMove == 'scissors',
                     isDisabled: !_isMatchActive,
                     onSelected: () => _selectMove('scissors'),
@@ -14435,7 +14432,6 @@ class _TournamentScreenState extends ConsumerState<TournamentScreen> {
 
   Widget _buildResultScreen(Color accent) {
     final won = _tournamentWinner == 'You';
-
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -15363,15 +15359,25 @@ FILE: lib/features/match/widgets/move_button.dart
 ================================================================================
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme_controller.dart';
+import '../../../core/theme/game_theme_controller.dart';
 import '../../../core/services/audio_service.dart';
 import '../../../core/services/vibration_service.dart';
 
+/// Move selection button used across all game modes.
+///
+/// Displays the themed hand image (PNG) matching the active Game Theme
+/// (Normal / Space), consistent with LocalPlayerMoveScreen and all
+/// single-player / local flows.
 class MoveButton extends ConsumerWidget {
   final String move; // 'rock', 'paper', 'scissors'
-  final String iconAsset;
+
+  /// Kept for backward compatibility but no longer used for rendering.
+  /// The themed PNG hand asset is resolved automatically via
+  /// [gameThemeProvider].
+  final String? iconAsset;
+
   final bool isSelected;
   final bool isDisabled;
   final VoidCallback onSelected;
@@ -15380,7 +15386,7 @@ class MoveButton extends ConsumerWidget {
   const MoveButton({
     super.key,
     required this.move,
-    required this.iconAsset,
+    this.iconAsset, // deprecated — kept so existing call-sites compile
     required this.isSelected,
     required this.isDisabled,
     required this.onSelected,
@@ -15389,7 +15395,6 @@ class MoveButton extends ConsumerWidget {
 
   void _handleTap() {
     if (isDisabled) return;
-    // Link the select mp3 to the move-selection action.
     AudioService.instance.playSelect();
     VibrationService.instance.selection();
     onSelected();
@@ -15398,6 +15403,11 @@ class MoveButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final accent = ref.watch(appAccentColorProvider);
+    // Resolve the themed hand image (PNG) for the active Game Theme,
+    // exactly matching LocalPlayerMoveScreen / SinglePlayerMatchFlowScreen.
+    final themeController = ref.watch(gameThemeProvider.notifier);
+    final handAsset = themeController.handAssetFor(move);
+
     return GestureDetector(
       onTap: _handleTap,
       child: AnimatedScale(
@@ -15426,6 +15436,12 @@ class MoveButton extends ConsumerWidget {
                         : null,
                     color: isSelected ? null : AppColors.surface,
                     shape: BoxShape.circle,
+                    border: Border.all(
+                      width: 1.5,
+                      color: isSelected
+                          ? AppColors.green
+                          : (frameColor ?? Colors.white24),
+                    ),
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
@@ -15436,18 +15452,19 @@ class MoveButton extends ConsumerWidget {
                           ]
                         : [],
                   ),
-                  child: SvgPicture.asset(
-                    iconAsset,
-                    width: 32,
-                    height: 32,
-                    colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                  padding: const EdgeInsets.all(8),
+                  child: Image.asset(
+                    handAsset,
+                    fit: BoxFit.contain,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   move.toUpperCase(),
                   style: TextStyle(
-                    color: frameColor ?? Colors.white70,
+                    color: isSelected
+                        ? AppColors.green
+                        : (frameColor ?? Colors.white70),
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1.0,
@@ -15544,11 +15561,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   String? _roundResult;
   bool _showRoundResult = false;
-
   bool _matchDraw = false;
   int? _matchWinnerId;
-
   bool _showResult = false;
+
   bool _showRematchRequest = false;
   bool _isRematchWaiting = false;
   int? _rematchRequesterId;
@@ -15560,6 +15576,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   bool get _isPlayerA => widget.isPlayerA;
   bool get _isUnlimited => widget.formatType == 'unlimited';
+
   bool get _canEndMatch =>
       _isUnlimited && _drawCount + _playerScore + _opponentScore > 0;
 
@@ -15706,8 +15723,10 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
 
   void _handleRoundResult(Map<String, dynamic> data) {
     if (_roundResolved) return;
+
     final eventRound = _asInt(data['roundNumber']);
     if (eventRound < _currentRound) return;
+
     _roundResolved = true;
     _waitingTimeout?.cancel();
 
@@ -15729,6 +15748,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _serverPlayerBMove = playerBMove;
       _serverPlayerAAuto = data['playerAAuto'] as bool? ?? false;
       _serverPlayerBAuto = data['playerBAuto'] as bool? ?? false;
+
       _playerScore = _isPlayerA ? playerAScore : playerBScore;
       _opponentScore = _isPlayerA ? playerBScore : playerAScore;
       _drawCount = drawCount;
@@ -15745,6 +15765,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         _serverPlayerAAuto = false;
         _serverPlayerBAuto = false;
       });
+
       if (matchFinished) {
         _timer?.cancel();
         final winnerId = data['winnerId'];
@@ -15773,6 +15794,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
   void _handleMatchCompleted(Map<String, dynamic> data) {
     final winnerId = data['winnerId'];
     final matchDraw = data['matchDraw'] as bool? ?? false;
+
     setState(() {
       _playerScore = _isPlayerA
           ? _asInt(data['playerAScore'])
@@ -15803,6 +15825,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _roundResult = null;
       _showRoundResult = false;
     });
+
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_selectionTimer <= 1) {
@@ -15837,10 +15860,12 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _timer?.cancel();
     _waitingTimeout?.cancel();
     _pollRetries = 0;
+
     _waitingTimeout = Timer(const Duration(seconds: 3), () {
       if (!mounted || !_isWaitingForServer) return;
       _pollRoundState();
     });
+
     try {
       final res = await _authClient.post(
         '/matches/${widget.matchId}/move',
@@ -15881,9 +15906,11 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         _resetWaiting();
         return;
       }
+
       final rounds = data['rounds'] as List<dynamic>? ?? [];
       final matchFinished = data['winnerId'] != null ||
           (data['matchDraw'] as bool? ?? false);
+
       for (final r in rounds) {
         if (r is Map<String, dynamic> && r['roundNumber'] == _currentRound) {
           final result = r['result'] as String?;
@@ -15909,6 +15936,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
           }
         }
       }
+
       if (_pollRetries < _maxPollRetries) {
         _waitingTimeout = Timer(const Duration(seconds: 2), () {
           if (!mounted || !_isWaitingForServer) return;
@@ -16032,9 +16060,11 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
     if (!mounted) return;
+
     final playerName = widget.playerName;
     final opponentName = widget.opponentName;
     final navigator = Navigator.of(context);
+
     navigator.pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => OnlineMatchLoaderScreen(
@@ -16053,9 +16083,11 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       _isRematchWaiting = true;
       _showRematchRequest = false;
     });
+
     try {
       await _authClient.post('/matches/${widget.matchId}/rematch/request');
       _startRematchPolling();
+
       _rematchCountdown?.cancel();
       int remaining = 30;
       _rematchCountdown = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -16095,12 +16127,14 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
     _rematchCountdown?.cancel();
     _rematchPollTimer?.cancel();
     setState(() => _isAcceptingRematch = true);
+
     try {
       final res =
           await _authClient.post('/matches/${widget.matchId}/rematch/accept');
       final data = res.data as Map<String, dynamic>;
       final newMatchId = (data['newMatchId'] as num?)?.toInt();
       if (!mounted) return;
+
       if (newMatchId == null) {
         setState(() => _isAcceptingRematch = false);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -16175,6 +16209,7 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
         final data = res.data as Map<String, dynamic>;
         final status = data['rematchStatus'] as String?;
         final newMatchId = (data['newMatchId'] as num?)?.toInt();
+
         if (status == 'accepted' && newMatchId != null) {
           _rematchPollTimer?.cancel();
           if (!mounted) return;
@@ -16421,7 +16456,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                       children: [
                         MoveButton(
                           move: 'rock',
-                          iconAsset: 'assets/icons/icon_rock.svg',
                           isSelected: _selectedMove == 'rock',
                           isDisabled: _hasPicked ||
                               _selectedMove != null ||
@@ -16432,7 +16466,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                         ),
                         MoveButton(
                           move: 'paper',
-                          iconAsset: 'assets/icons/icon_paper.svg',
                           isSelected: _selectedMove == 'paper',
                           isDisabled: _hasPicked ||
                               _selectedMove != null ||
@@ -16443,7 +16476,6 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
                         ),
                         MoveButton(
                           move: 'scissors',
-                          iconAsset: 'assets/icons/icon_scissors.svg',
                           isSelected: _selectedMove == 'scissors',
                           isDisabled: _hasPicked ||
                               _selectedMove != null ||
@@ -16486,7 +16518,9 @@ class _OnlineGameplayScreenState extends ConsumerState<OnlineGameplayScreen> {
       playerWon = _playerScore > _opponentScore;
       isDraw = _playerScore == _opponentScore;
     }
+
     final total = _playerScore + _opponentScore + _drawCount;
+
     final String resultTitle;
     final Color resultColor;
     if (isDraw) {
@@ -17480,7 +17514,6 @@ class _StandardGameplayScreenState
                         children: [
                           MoveButton(
                             move: 'rock',
-                            iconAsset: 'assets/icons/icon_rock.svg',
                             isSelected: selectedMove == 'rock',
                             isDisabled: selectedMove != null,
                             onSelected: () => _selectMove('rock'),
@@ -17488,7 +17521,6 @@ class _StandardGameplayScreenState
                           ),
                           MoveButton(
                             move: 'paper',
-                            iconAsset: 'assets/icons/icon_paper.svg',
                             isSelected: selectedMove == 'paper',
                             isDisabled: selectedMove != null,
                             onSelected: () => _selectMove('paper'),
@@ -17496,7 +17528,6 @@ class _StandardGameplayScreenState
                           ),
                           MoveButton(
                             move: 'scissors',
-                            iconAsset: 'assets/icons/icon_scissors.svg',
                             isSelected: selectedMove == 'scissors',
                             isDisabled: selectedMove != null,
                             onSelected: () => _selectMove('scissors'),
@@ -17667,9 +17698,8 @@ class UnlimitedGameplayScreen extends ConsumerStatefulWidget {
 }
 
 class _UnlimitedGameplayScreenState
-  extends ConsumerState<UnlimitedGameplayScreen> {
+    extends ConsumerState<UnlimitedGameplayScreen> {
   final MatchMode mode = MatchMode.offline; // TODO: pass in from setup screen
-
   late final MatchEngine _engine;
   int selectionTimer = 10;
   String? selectedMove;
@@ -17716,8 +17746,8 @@ class _UnlimitedGameplayScreenState
   Widget _handImage(String? move) {
     final themeController = ref.read(gameThemeProvider.notifier);
     final asset = move == null
-      ? themeController.handAssetFor('rock') // neutral placeholder while hidden
-      : themeController.handAssetFor(move);
+        ? themeController.handAssetFor('rock') // neutral placeholder while hidden
+        : themeController.handAssetFor(move);
     return Container(
       width: 100,
       height: 100,
@@ -17737,7 +17767,6 @@ class _UnlimitedGameplayScreenState
     );
   }
 
-
   void _onExitPressed() {
     ref.read(matchControllerProvider.notifier).pause();
     setState(() => isPaused = true);
@@ -17751,7 +17780,6 @@ class _UnlimitedGameplayScreenState
   void _onExitConfirmed() {
     final outcome = ref.read(matchControllerProvider.notifier).attemptExit();
     setState(() => isPaused = false);
-
     switch (outcome) {
       case ExitOutcome.connectionLost:
         Navigator.of(context).push(
@@ -17808,136 +17836,133 @@ class _UnlimitedGameplayScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: ThemeBackground(
-        theme: ref.watch(gameThemeProvider),
-        child: SafeArea(
-        child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        backgroundColor: AppColors.background,
+        body: ThemeBackground(
+          theme: ref.watch(gameThemeProvider),
+          child: SafeArea(
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white70),
-                        onPressed: _onExitPressed,
-                      ),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Text(
-                              'ROUNDS PLAYED: ${_engine.totalRounds}',
-                              style: const TextStyle(
-                                color: AppColors.primaryText,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white70),
+                            onPressed: _onExitPressed,
+                          ),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text(
+                                  'ROUNDS PLAYED: ${_engine.totalRounds}',
+                                  style: const TextStyle(
+                                    color: AppColors.primaryText,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    letterSpacing: 1.0,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                Text(
+                                  'DRAWS: ${_engine.drawCount}',
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 11,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _engine.totalRounds > 0 ? _onEndMatchPressed : null,
+                            child: Text(
+                              'END MATCH',
+                              style: TextStyle(
+                                color: _engine.totalRounds > 0
+                                    ? AppColors.red
+                                    : Colors.white24,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12,
-                                letterSpacing: 1.0,
                               ),
-                              textAlign: TextAlign.center,
                             ),
-                            Text(
-                              'DRAWS: ${_engine.drawCount}',
-                              style: const TextStyle(
-                                color: Colors.white54,
-                                fontSize: 11,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _engine.totalRounds > 0 ? _onEndMatchPressed : null,
-                        child: Text(
-                          'END MATCH',
-                          style: TextStyle(
-                            color: _engine.totalRounds > 0
-                                ? AppColors.red
-                                : Colors.white24,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
                           ),
-                        ),
+                        ],
                       ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _playerScoreCard('Player 1', _engine.playerAScore),
+                          Text(
+                            '$selectionTimer',
+                            style: TextStyle(
+                              color: selectionTimer <= 5
+                                  ? AppColors.red
+                                  : AppColors.primaryText,
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          _playerScoreCard('Player 2', _engine.playerBScore),
+                        ],
+                      ),
+                      const Spacer(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _handImage(selectedMove),
+                          Text(
+                            'VS',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.4),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                          _handImage(null),
+                        ],
+                      ),
+                      const Spacer(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          MoveButton(
+                            move: 'rock',
+                            isSelected: selectedMove == 'rock',
+                            isDisabled: selectedMove != null,
+                            onSelected: () => _selectMove('rock'),
+                            frameColor: const Color(0xFFF97316),
+                          ),
+                          MoveButton(
+                            move: 'paper',
+                            isSelected: selectedMove == 'paper',
+                            isDisabled: selectedMove != null,
+                            onSelected: () => _selectMove('paper'),
+                            frameColor: const Color(0xFF06B6D4),
+                          ),
+                          MoveButton(
+                            move: 'scissors',
+                            isSelected: selectedMove == 'scissors',
+                            isDisabled: selectedMove != null,
+                            onSelected: () => _selectMove('scissors'),
+                            frameColor: const Color(0xFFEC4899),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _playerScoreCard('Player 1', _engine.playerAScore),
-                      Text(
-                        '$selectionTimer',
-                        style: TextStyle(
-                          color: selectionTimer <= 5
-                              ? AppColors.red
-                              : AppColors.primaryText,
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      _playerScoreCard('Player 2', _engine.playerBScore),
-                    ],
-                  ),
-                  const Spacer(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _handImage(selectedMove),
-                      Text(
-                        'VS',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.4),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      _handImage(null),
-                    ],
-                  ),
-                  const Spacer(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      MoveButton(
-                        move: 'rock',
-                        iconAsset: 'assets/icons/icon_rock.svg',
-                        isSelected: selectedMove == 'rock',
-                        isDisabled: selectedMove != null,
-                        onSelected: () => _selectMove('rock'),
-                        frameColor: const Color(0xFFF97316),
-                      ),
-                      MoveButton(
-                        move: 'paper',
-                        iconAsset: 'assets/icons/icon_paper.svg',
-                        isSelected: selectedMove == 'paper',
-                        isDisabled: selectedMove != null,
-                        onSelected: () => _selectMove('paper'),
-                        frameColor: const Color(0xFF06B6D4),
-                      ),
-                      MoveButton(
-                        move: 'scissors',
-                        iconAsset: 'assets/icons/icon_scissors.svg',
-                        isSelected: selectedMove == 'scissors',
-                        isDisabled: selectedMove != null,
-                        onSelected: () => _selectMove('scissors'),
-                        frameColor: const Color(0xFFEC4899),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                ],
-              ),
+                ),
+                if (isPaused)
+                  PauseExitOverlay(onResume: _onResume, onExit: _onExitConfirmed),
+              ],
             ),
-            if (isPaused)
-              PauseExitOverlay(onResume: _onResume, onExit: _onExitConfirmed),
-          ],
-        ),
-      ),
-    ));
+          ),
+        ));
   }
 
   Widget _playerScoreCard(String name, int score) {
