@@ -1,25 +1,18 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
-import 'theme_background.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/animation_speed_controller.dart';
+import 'theme_background.dart'; // ADDED – defines GameTheme
 
 class RoundVictoryAnimation extends ConsumerStatefulWidget {
-  /// Player 1 / Player A's move — always displayed on the LEFT.
   final String playerAMove;
-
-  /// Player 2 / Player B's move — always displayed on the RIGHT.
   final String playerBMove;
-
-  /// Whether Player A won this round.
   final bool playerAWon;
-
-  /// Optional labels shown under each hand.
   final String playerALabel;
   final String playerBLabel;
-
   final GameTheme theme;
   final String Function(String move) handAssetFor;
+  final String? resultText; // custom result text
 
   const RoundVictoryAnimation({
     super.key,
@@ -30,6 +23,7 @@ class RoundVictoryAnimation extends ConsumerStatefulWidget {
     this.playerBLabel = 'PLAYER 2',
     required this.theme,
     required this.handAssetFor,
+    this.resultText,
   });
 
   @override
@@ -52,10 +46,9 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
       vsync: this,
       duration: Duration(
         milliseconds: (2000 * speedMultiplier).round(),
-      ), // maximum duration two seconds
+      ),
     );
 
-    // Winning hand performs a themed "impact" — a confident pop/pulse.
     _winnerScale = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween(begin: 1.0, end: 1.3)
@@ -69,7 +62,6 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
       ),
     ]).animate(_controller);
 
-    // Losing hand gets knocked away and fades.
     _loserSlide = Tween<double>(begin: 0, end: 40).animate(CurvedAnimation(
       parent: _controller,
       curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
@@ -98,8 +90,6 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
   String get _winnerLabel =>
       widget.playerAWon ? widget.playerALabel : widget.playerBLabel;
 
-  /// Builds a single hand container.
-  /// [isWinner] controls whether it gets victory glow/scale or defeat slide/fade.
   Widget _buildHand({
     required String move,
     required bool isWinner,
@@ -146,9 +136,6 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
         ),
       );
     } else {
-      // Loser slides AWAY from centre:
-      //   left-side loser  → negative X (slides left)
-      //   right-side loser → positive X (slides right)
       final slideDirection = isLeftSide ? -1.0 : 1.0;
       return Opacity(
         opacity: _loserOpacity.value,
@@ -198,14 +185,12 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
             return Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // LEFT slot — always Player A / Player 1
                 _buildHand(
                   move: widget.playerAMove,
                   isWinner: widget.playerAWon,
                   label: widget.playerALabel,
                   isLeftSide: true,
                 ),
-                // RIGHT slot — always Player B / Player 2
                 _buildHand(
                   move: widget.playerBMove,
                   isWinner: !widget.playerAWon,
@@ -218,15 +203,14 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
         ),
         const SizedBox(height: 20),
         Text(
-          '$_winnerLabel WINS THE ROUND',
+          widget.resultText ?? '$_winnerLabel WINS THE ROUND',
           style: TextStyle(
             color: _glowColor,
             fontSize: 20,
             fontWeight: FontWeight.w900,
             letterSpacing: 1.5,
             shadows: [
-              Shadow(
-                  color: _glowColor.withValues(alpha: 0.6), blurRadius: 16),
+              Shadow(color: _glowColor.withValues(alpha: 0.6), blurRadius: 16),
             ],
           ),
         ),

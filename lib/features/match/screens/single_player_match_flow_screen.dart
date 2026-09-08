@@ -99,7 +99,6 @@ class _SinglePlayerMatchFlowScreenState
     _startRound();
   }
 
-  // ── Round lifecycle ──────────────────────────────────────────
   void _startRound() {
     _engine.startRound();
     _engine.beginCountdown();
@@ -139,7 +138,6 @@ class _SinglePlayerMatchFlowScreenState
     });
   }
 
-  // ── FIX: made async; all stats calls are awaited ──────────────
   Future<void> _reveal() async {
     _engine.lockSelections();
     _engine.reveal();
@@ -150,8 +148,6 @@ class _SinglePlayerMatchFlowScreenState
       _stage = _SpFlowStage.revealing;
     });
 
-    // Await move-selection recording so it completes before the
-    // round-outcome write begins (prevents overwrite).
     if (_engine.playerAMove != null) {
       await _statsRepo.recordMoveSelection(_engine.playerAMove!);
     }
@@ -182,7 +178,6 @@ class _SinglePlayerMatchFlowScreenState
     Future.delayed(delay, _advanceAfterReveal);
   }
 
-  // ── FIX: made async; all stats calls are awaited ──────────────
   Future<void> _advanceAfterReveal() async {
     if (!mounted) return;
     _engine.checkMatchCondition();
@@ -395,6 +390,14 @@ class _SinglePlayerMatchFlowScreenState
         final roundKey = ValueKey(
           'sp_round_${_engine.currentRoundNumber}_${_engine.lastResult}',
         );
+
+        // Compute the correct result text for single‑player.
+        final resultText = _engine.lastResult == RoundResult.playerAWin
+            ? 'YOU WIN THE ROUND'
+            : _engine.lastResult == RoundResult.playerBWin
+                ? 'AI WINS THE ROUND'
+                : null;
+
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: SafeArea(
@@ -446,6 +449,7 @@ class _SinglePlayerMatchFlowScreenState
                               playerBLabel: 'AI',
                               theme: ref.watch(gameThemeProvider),
                               handAssetFor: themeController.handAssetFor,
+                              resultText: resultText, // FIX: pass custom text
                             )
                           else if (_engine.lastResult == RoundResult.draw &&
                               _engine.playerAMove != null &&

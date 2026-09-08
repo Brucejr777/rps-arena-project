@@ -19,10 +19,6 @@ import '../widgets/theme_background.dart';
 import 'local_player_move_screen.dart';
 import 'standard_result_screen.dart';
 
-/// Time Attack mode: 10 rounds, 3 seconds per move, random CPU.
-///
-/// Uses the same animation pipeline and themed hand assets as
-/// Single Player and Local 2 Players for visual consistency.
 enum _TaFlowStage {
   countdown,
   playerMove,
@@ -56,7 +52,6 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
 
   String? _playerMove;
   String? _aiMove;
-  /// 'player', 'ai', or 'draw'
   String? _lastResult;
 
   Timer? _countdownTimer;
@@ -78,8 +73,6 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     AudioService.instance.playMusic();
     super.dispose();
   }
-
-  // ── Round lifecycle ──────────────────────────────────────────
 
   void _startRound() {
     _playerMove = null;
@@ -204,8 +197,6 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     _startRound();
   }
 
-  // ── Helpers ──────────────────────────────────────────────────
-
   String _randomMove() =>
       ['rock', 'paper', 'scissors'][_random.nextInt(3)];
 
@@ -218,8 +209,6 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     };
     return beats[a] == b ? 'player' : 'ai';
   }
-
-  // ── Build ────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -260,10 +249,6 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
         );
 
       case _TaFlowStage.playerMove:
-        // ── FIX: Timer is passed as centerWidget so it sits in the
-        // flexible space between text and gesture cards — no overlap.
-        // Exit button uses showBackButton: true (built-in) instead of
-        // a separate Positioned overlay with SafeArea inside.
         return LocalPlayerMoveScreen(
           playerNumber: 1,
           onMoveSelected: _onPlayerMove,
@@ -300,6 +285,13 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
         final roundKey = ValueKey(
           'ta_round_${_currentRound}_$_lastResult',
         );
+
+        // Compute the correct result text for time‑attack.
+        final resultText = _lastResult == 'player'
+            ? 'YOU WIN THE ROUND'
+            : _lastResult == 'ai'
+                ? 'CPU WINS THE ROUND'
+                : null;
 
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -343,6 +335,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
                               theme: ref.watch(gameThemeProvider),
                               handAssetFor:
                                   themeController.handAssetFor,
+                              resultText: resultText, // FIX: pass custom text
                             )
                           else
                             const SizedBox.shrink(),
@@ -378,8 +371,6 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
         );
     }
   }
-
-  // ── Shared widgets ───────────────────────────────────────────
 
   Widget _buildTopBar() {
     return Padding(

@@ -6581,6 +6581,7 @@ final GoRouter appRouter = GoRouter(
       path: '/quick-match-setup',
       builder: (context, state) => const QuickMatchSetupScreen(),
     ),
+    // ── FIX: Use pop() instead of go() so the navigation stack remains correct ──
     GoRoute(
       path: '/quick-match-create',
       builder: (context, state) {
@@ -6589,7 +6590,7 @@ final GoRouter appRouter = GoRouter(
           formatType: args['formatType'] as String? ?? 'bestOf3',
           formatLabel: args['formatLabel'] as String? ?? 'BEST OF 3',
           winsRequired: args['winsRequired'] as int? ?? 2,
-          onCancel: () => context.go('/quick-match-setup'),
+          onCancel: () => Navigator.of(context).pop(),
         );
       },
     ),
@@ -6602,7 +6603,7 @@ final GoRouter appRouter = GoRouter(
           formatLabel: args['formatLabel'] as String? ?? 'BEST OF 3',
           winsRequired: args['winsRequired'] as int? ?? 2,
           rating: args['rating'] as int? ?? 1000,
-          onCancel: () => context.go('/quick-match-setup'),
+          onCancel: () => Navigator.of(context).pop(),
         );
       },
     ),
@@ -12333,7 +12334,6 @@ class _SinglePlayerMatchFlowScreenState
     _startRound();
   }
 
-  // ── Round lifecycle ──────────────────────────────────────────
   void _startRound() {
     _engine.startRound();
     _engine.beginCountdown();
@@ -12373,7 +12373,6 @@ class _SinglePlayerMatchFlowScreenState
     });
   }
 
-  // ── FIX: made async; all stats calls are awaited ──────────────
   Future<void> _reveal() async {
     _engine.lockSelections();
     _engine.reveal();
@@ -12384,8 +12383,6 @@ class _SinglePlayerMatchFlowScreenState
       _stage = _SpFlowStage.revealing;
     });
 
-    // Await move-selection recording so it completes before the
-    // round-outcome write begins (prevents overwrite).
     if (_engine.playerAMove != null) {
       await _statsRepo.recordMoveSelection(_engine.playerAMove!);
     }
@@ -12416,7 +12413,6 @@ class _SinglePlayerMatchFlowScreenState
     Future.delayed(delay, _advanceAfterReveal);
   }
 
-  // ── FIX: made async; all stats calls are awaited ──────────────
   Future<void> _advanceAfterReveal() async {
     if (!mounted) return;
     _engine.checkMatchCondition();
@@ -12629,6 +12625,14 @@ class _SinglePlayerMatchFlowScreenState
         final roundKey = ValueKey(
           'sp_round_${_engine.currentRoundNumber}_${_engine.lastResult}',
         );
+
+        // Compute the correct result text for single‑player.
+        final resultText = _engine.lastResult == RoundResult.playerAWin
+            ? 'YOU WIN THE ROUND'
+            : _engine.lastResult == RoundResult.playerBWin
+                ? 'AI WINS THE ROUND'
+                : null;
+
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: SafeArea(
@@ -12680,6 +12684,7 @@ class _SinglePlayerMatchFlowScreenState
                               playerBLabel: 'AI',
                               theme: ref.watch(gameThemeProvider),
                               handAssetFor: themeController.handAssetFor,
+                              resultText: resultText, // FIX: pass custom text
                             )
                           else if (_engine.lastResult == RoundResult.draw &&
                               _engine.playerAMove != null &&
@@ -13505,10 +13510,6 @@ import '../widgets/theme_background.dart';
 import 'local_player_move_screen.dart';
 import 'standard_result_screen.dart';
 
-/// Time Attack mode: 10 rounds, 3 seconds per move, random CPU.
-///
-/// Uses the same animation pipeline and themed hand assets as
-/// Single Player and Local 2 Players for visual consistency.
 enum _TaFlowStage {
   countdown,
   playerMove,
@@ -13542,7 +13543,6 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
 
   String? _playerMove;
   String? _aiMove;
-  /// 'player', 'ai', or 'draw'
   String? _lastResult;
 
   Timer? _countdownTimer;
@@ -13564,8 +13564,6 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     AudioService.instance.playMusic();
     super.dispose();
   }
-
-  // ── Round lifecycle ──────────────────────────────────────────
 
   void _startRound() {
     _playerMove = null;
@@ -13690,8 +13688,6 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     _startRound();
   }
 
-  // ── Helpers ──────────────────────────────────────────────────
-
   String _randomMove() =>
       ['rock', 'paper', 'scissors'][_random.nextInt(3)];
 
@@ -13704,8 +13700,6 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
     };
     return beats[a] == b ? 'player' : 'ai';
   }
-
-  // ── Build ────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -13746,10 +13740,6 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
         );
 
       case _TaFlowStage.playerMove:
-        // ── FIX: Timer is passed as centerWidget so it sits in the
-        // flexible space between text and gesture cards — no overlap.
-        // Exit button uses showBackButton: true (built-in) instead of
-        // a separate Positioned overlay with SafeArea inside.
         return LocalPlayerMoveScreen(
           playerNumber: 1,
           onMoveSelected: _onPlayerMove,
@@ -13786,6 +13776,13 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
         final roundKey = ValueKey(
           'ta_round_${_currentRound}_$_lastResult',
         );
+
+        // Compute the correct result text for time‑attack.
+        final resultText = _lastResult == 'player'
+            ? 'YOU WIN THE ROUND'
+            : _lastResult == 'ai'
+                ? 'CPU WINS THE ROUND'
+                : null;
 
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -13829,6 +13826,7 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
                               theme: ref.watch(gameThemeProvider),
                               handAssetFor:
                                   themeController.handAssetFor,
+                              resultText: resultText, // FIX: pass custom text
                             )
                           else
                             const SizedBox.shrink(),
@@ -13864,8 +13862,6 @@ class _TimeAttackScreenState extends ConsumerState<TimeAttackScreen> {
         );
     }
   }
-
-  // ── Shared widgets ───────────────────────────────────────────
 
   Widget _buildTopBar() {
     return Padding(
@@ -17055,27 +17051,19 @@ class _RevealAnimationState extends ConsumerState<RevealAnimation>
 FILE: lib/features/match/widgets/round_victory_animation.dart
 ================================================================================
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
-import 'theme_background.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/animation_speed_controller.dart';
 
 class RoundVictoryAnimation extends ConsumerStatefulWidget {
-  /// Player 1 / Player A's move — always displayed on the LEFT.
   final String playerAMove;
-
-  /// Player 2 / Player B's move — always displayed on the RIGHT.
   final String playerBMove;
-
-  /// Whether Player A won this round.
   final bool playerAWon;
-
-  /// Optional labels shown under each hand.
   final String playerALabel;
   final String playerBLabel;
-
   final GameTheme theme;
   final String Function(String move) handAssetFor;
+  final String? resultText; // NEW: optional custom result text
 
   const RoundVictoryAnimation({
     super.key,
@@ -17086,6 +17074,7 @@ class RoundVictoryAnimation extends ConsumerStatefulWidget {
     this.playerBLabel = 'PLAYER 2',
     required this.theme,
     required this.handAssetFor,
+    this.resultText,
   });
 
   @override
@@ -17108,10 +17097,9 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
       vsync: this,
       duration: Duration(
         milliseconds: (2000 * speedMultiplier).round(),
-      ), // maximum duration two seconds
+      ),
     );
 
-    // Winning hand performs a themed "impact" — a confident pop/pulse.
     _winnerScale = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween(begin: 1.0, end: 1.3)
@@ -17125,7 +17113,6 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
       ),
     ]).animate(_controller);
 
-    // Losing hand gets knocked away and fades.
     _loserSlide = Tween<double>(begin: 0, end: 40).animate(CurvedAnimation(
       parent: _controller,
       curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
@@ -17154,8 +17141,6 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
   String get _winnerLabel =>
       widget.playerAWon ? widget.playerALabel : widget.playerBLabel;
 
-  /// Builds a single hand container.
-  /// [isWinner] controls whether it gets victory glow/scale or defeat slide/fade.
   Widget _buildHand({
     required String move,
     required bool isWinner,
@@ -17202,9 +17187,6 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
         ),
       );
     } else {
-      // Loser slides AWAY from centre:
-      //   left-side loser  → negative X (slides left)
-      //   right-side loser → positive X (slides right)
       final slideDirection = isLeftSide ? -1.0 : 1.0;
       return Opacity(
         opacity: _loserOpacity.value,
@@ -17254,14 +17236,12 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
             return Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // LEFT slot — always Player A / Player 1
                 _buildHand(
                   move: widget.playerAMove,
                   isWinner: widget.playerAWon,
                   label: widget.playerALabel,
                   isLeftSide: true,
                 ),
-                // RIGHT slot — always Player B / Player 2
                 _buildHand(
                   move: widget.playerBMove,
                   isWinner: !widget.playerAWon,
@@ -17274,15 +17254,15 @@ class _RoundVictoryAnimationState extends ConsumerState<RoundVictoryAnimation>
         ),
         const SizedBox(height: 20),
         Text(
-          '$_winnerLabel WINS THE ROUND',
+          // Use custom result text if provided, otherwise fallback to label + "WINS"
+          widget.resultText ?? '$_winnerLabel WINS THE ROUND',
           style: TextStyle(
             color: _glowColor,
             fontSize: 20,
             fontWeight: FontWeight.w900,
             letterSpacing: 1.5,
             shadows: [
-              Shadow(
-                  color: _glowColor.withValues(alpha: 0.6), blurRadius: 16),
+              Shadow(color: _glowColor.withValues(alpha: 0.6), blurRadius: 16),
             ],
           ),
         ),
